@@ -1,31 +1,56 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useUserStore } from '@/stores/userStore.js'
 
 const routes = [
   {
     path: '/',
     name: 'ReportCenter',
-    component: () => import('@/views/ReportCenter/index.vue')
+    component: () => import('@/views/ReportCenter/index.vue'),
+    meta: { perm: 'menu:reportCenter' }
   },
   {
     path: '/report/:templateId',
     name: 'ReportFill',
     component: () => import('@/views/ReportFill/index.vue'),
-    props: true
+    props: true,
+    meta: { perm: 'menu:reportFill' }
   },
   {
     path: '/designer',
     name: 'ReportDesigner',
-    component: () => import('@/views/ReportDesigner/index.vue')
+    component: () => import('@/views/ReportDesigner/index.vue'),
+    meta: { perm: 'template:create' }
+  },
+  {
+    path: '/designer/:code',
+    name: 'DesignerEdit',
+    component: () => import('@/views/ReportDesigner/index.vue'),
+    meta: { perm: 'template:edit' }
   },
   {
     path: '/audit',
     name: 'AuditCenter',
-    component: () => import('@/views/AuditCenter/index.vue')
+    component: () => import('@/views/AuditCenter/index.vue'),
+    meta: { perm: 'menu:auditCenter' }
   },
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/Login/index.vue')
+  },
+  // ⭐ 管理后台
+  {
+    path: '/admin',
+    component: () => import('@/layouts/AdminLayout.vue'),
+    meta: { perm: 'menu:admin' },
+    children: [
+      { path: 'users',     name: 'UserManage',     component: () => import('@/views/Admin/UserManage.vue'),     meta: { perm: 'menu:userManage' } },
+      { path: 'roles',     name: 'RoleManage',     component: () => import('@/views/Admin/RoleManage.vue'),     meta: { perm: 'menu:roleManage' } },
+      { path: 'orgs',      name: 'OrgManage',      component: () => import('@/views/Admin/OrgManage.vue'),      meta: { perm: 'menu:orgManage' } },
+      { path: 'workflows', name: 'WorkflowManage', component: () => import('@/views/Admin/WorkflowManage.vue'), meta: { perm: 'menu:workflow' } },
+      { path: 'logs',      name: 'LogView',        component: () => import('@/views/Admin/LogView.vue'),        meta: { perm: 'menu:logView' } },
+      { path: '', redirect: '/admin/users' }
+    ]
   }
 ]
 
@@ -42,28 +67,31 @@ const router = createRouter({
 const whiteList = ['/login']
 
 router.beforeEach((to, from, next) => {
-  // 获取 token（优先从 sessionStorage，其次 localStorage）
   const token = sessionStorage.getItem('rpt_token') || localStorage.getItem('rpt_token')
   
   if (token) {
-    // 已登录状态
     if (to.path === '/login') {
-      // 已登录用户访问登录页，重定向到首页
       next({ path: '/' })
-    } else {
-      next()
+      return
     }
+    // ⭐ 管理后台权限检查 — 开发模式暂时绕过，由页面内 v-permission 控制
+    // 正式环境取消注释下面代码即可启用路由级权限校验
+    /*
+    if (to.path.startsWith('/admin')) {
+      const userStore = useUserStore()
+      if (!userStore.hasPermission('menu:admin')) {
+        console.warn('[Router] 无管理后台权限')
+        next(false)
+        return
+      }
+    }
+    */
+    next()
   } else {
-    // 未登录状态
     if (whiteList.includes(to.path)) {
-      // 白名单页面，直接放行
       next()
     } else {
-      // 非白名单页面，重定向到登录页，并记录目标地址
-      next({
-        path: '/login',
-        query: { redirect: to.fullPath }
-      })
+      next({ path: '/login', query: { redirect: to.fullPath } })
     }
   }
 })

@@ -361,7 +361,10 @@ const TEMPLATES_V2 = {
 
 }
 
-import { getTemplateById } from '@/api/reportDesigner.js'
+// ✅ 导出内置模板常量（供其他模块使用）
+export { TEMPLATES_V2 }
+
+import { loadTemplate } from '@/api/reportDesigner.js'
 
 /**
  * 导出所有V2模板（内置 + 自定义）
@@ -369,42 +372,72 @@ import { getTemplateById } from '@/api/reportDesigner.js'
 export async function getV2Template(code) {
   console.log('[getV2Template] 查询模板:', code)
 
-  // 1. 先查内置模板
+  // 1. 先查内置模板（按 code 或 id 匹配）
   if (TEMPLATES_V2[code]) {
-    console.log('[getV2Template] ✅ 内置模板找到')
+    console.log('[getV2Template] ✅ 内置模板找到（code匹配）')
     return TEMPLATES_V2[code]
+  }
+  // 也按模板 id 字段查找内置模板
+  const byId = Object.values(TEMPLATES_V2).find(t => t.id === code)
+  if (byId) {
+    console.log('[getV2Template] ✅ 内置模板找到（id匹配）:', byId.name)
+    return byId
   }
 
   // 2. 再查自定义模板（全局缓存）
   if (typeof window === 'undefined') return null
   const custom = window.__V2_TEMPLATES?.[code]
-  if (custom) {
-    console.log('[getV2Template] ✅ 全局缓存找到')
-    return custom
-  }
-
+  
   // 提取原始code（去掉 CUSTOM- 前缀）
   const originalCode = code.startsWith('CUSTOM-') ? code.replace('CUSTOM-', '') : code
+  
+  // ✅ 检查缓存数据是否完整（必须同时有 rowTree 和 columnTree）
+  if (custom) {
+    const hasRow = (custom.rowTree?.length > 0) || (custom._rawData?.rowTree?.length > 0)
+    const hasCol = (custom.columnTree?.length > 0) || (custom._rawData?.columnTree?.length > 0)
+    const isComplete = hasRow && hasCol
+    
+    if (isComplete) {
+      console.log('[getV2Template] ✅ 全局缓存找到（完整）')
+      
+      // ✅ 如果当前数据不完整但 _rawData 有完整数据，使用 _rawData
+      if (!custom.rowTree?.length && custom._rawData?.rowTree?.length) {
+        console.log('[getV2Template] 使用 _rawData 完整数据')
+        return { ...custom, ...custom._rawData, rowTree: custom._rawData.rowTree, columnTree: custom._rawData.columnTree }
+      }
+      if (!custom.columnTree?.length && custom._rawData?.columnTree?.length) {
+        console.log('[getV2Template] 使用 _rawData 补全列数据')
+        return { ...custom, columnTree: custom._rawData.columnTree }
+      }
+      return custom
+    } else {
+      console.log(`[getV2Template] ⚠️ 全局缓存不完整（row:${hasRow}, col:${hasCol}），需从API加载详情`)
+      // 不完整时不走 RAW 数据兜底，直接回退到 API 获取完整模板
+    }
+  }
 
   // 3. 尝试从 API 加载（使用原始code）
   try {
     console.log('[getV2Template] 正在从API加载模板:', originalCode)
-    const res = await getTemplateById(originalCode)
+    const res = await loadTemplate(originalCode)
     console.log('[getV2Template] API响应:', res)
 
-    if (res && (res.id || res.code || res.name)) {
+    // ✅ 解包 API 响应，兼容 { code, message, data } 包装格式
+    const tpl = res?.data || res
+
+    if (tpl && (tpl.id || tpl.code || tpl.name)) {
       // 缓存到全局（同时缓存多种格式）
       window.__V2_TEMPLATES = window.__V2_TEMPLATES || {}
-      const cacheKey1 = `CUSTOM-${res.code || res.id}`
-      const cacheKey2 = res.code
-      const cacheKey3 = res.id
+      const cacheKey1 = `CUSTOM-${tpl.code || tpl.id}`
+      const cacheKey2 = tpl.code
+      const cacheKey3 = tpl.id
 
-      window.__V2_TEMPLATES[cacheKey1] = res
-      if (cacheKey2) window.__V2_TEMPLATES[cacheKey2] = res
-      if (cacheKey3) window.__V2_TEMPLATES[cacheKey3] = res
+      window.__V2_TEMPLATES[cacheKey1] = tpl
+      if (cacheKey2) window.__V2_TEMPLATES[cacheKey2] = tpl
+      if (cacheKey3) window.__V2_TEMPLATES[cacheKey3] = tpl
 
-      console.log('[getV2Template] ✅ API加载成功:', res.name, '| 缓存key:', [cacheKey1, cacheKey2, cacheKey3].filter(Boolean))
-      return res
+      console.log('[getV2Template] ✅ API加载成功:', tpl.name, '| 缓存key:', [cacheKey1, cacheKey2, cacheKey3].filter(Boolean))
+      return tpl
     } else {
       console.warn('[getV2Template] API返回空数据或格式异常')
     }

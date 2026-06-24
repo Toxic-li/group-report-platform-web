@@ -5,6 +5,7 @@ import 'element-plus/dist/index.css'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import router from './router'
+import permissionDirective from './directives/permission.js'
 import App from './App.vue'
 import '@univerjs/design/lib/index.css'
 import '@univerjs/ui/lib/index.css'
@@ -18,6 +19,9 @@ const app = createApp(App)
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
   app.component(key, component)
 }
+
+// ⭐ 注册 v-permission 指令
+app.directive('permission', permissionDirective)
 
 app.use(createPinia())
 app.use(router)

@@ -319,7 +319,7 @@ import { ReportFactory } from '@/services/ReportFactory.js'
 import { TemplateManager } from '@/services/TemplateManager.js'
 import { initTemplates } from '@/mock/templates.js'
 // V2 JSON模板支持
-import { getV2Template, getAllV2Templates } from '@/data/templates-v2.js'
+import { getV2Template, getAllV2Templates, TEMPLATES_V2 } from '@/data/templates-v2.js'
 import { ReportTemplateParser } from '@/services/TemplateParser.js'
 import FormulaEditor from '@/components/FormulaEditor.vue'
 import { getOrgTree } from '@/api/reportDesigner.js'
@@ -332,7 +332,7 @@ const props = defineProps({
 const store = useReportStore()
 
 // ==================== 核心实例 ====================
-let config = null
+const config = ref(null)
 let formulaEngine = null
 let aggregateEngine = null
 let validationEngine = null
@@ -543,19 +543,23 @@ const VALIDATION_RULES = {
 // ==================== 计算属性 ====================
 
 const flatRows = computed(() => {
+  // V2 模式：使用解析器的扁平行数据
+  if (useV2.value && v2Parser.value) {
+    return v2Parser.value.getFlatRows()
+  }
   if (!currentTemplate.value?.getFlatRows) return []
   return currentTemplate.value.getFlatRows()
 })
 
 const headerRows = computed(() => {
-  console.log('config', config)
-  if (!config) return []
+  console.log('config', config.value)
+  if (!config.value) return []
   const rows = []
-  const maxLevel = config.frozenRowCount || 4
+  const maxLevel = config.value.frozenRowCount || 4
   for (let l = 0; l < maxLevel; l++) {
     const cells = []
-    for (let c = 2; c < (config.columnData || []).length; c++) {
-      const cell = config.cellData[`${l}-${c}`]
+    for (let c = 2; c < (config.value.columnData || []).length; c++) {
+      const cell = config.value.cellData[`${l}-${c}`]
       if (cell && cell.v) cells.push({
         text: cell.v, level: cell.headerLevel || Math.min(l + 1, 4),
         colIdx: c, colspan: 1, rowspan: 1, hint: getMetricHint(cell.v)
@@ -566,7 +570,7 @@ const headerRows = computed(() => {
   return rows
 })
 
-const dataColumns = computed(() => config ? config.columnData?.slice(2) || [] : [])
+const dataColumns = computed(() => config.value ? config.value.columnData?.slice(2) || [] : [])
 const visibleColCount = computed(() => dataColumns.value.filter((_, i) => !isColHidden(i)).length)
 const anomalyCount = computed(() => displayRows.value.filter(r => r.isAnomaly).length)
 
@@ -676,10 +680,31 @@ async function loadReport(templateId) {
         currentTemplate.value = parser.getTemplate()
 
         // 构建兼容的config结构
-        config = buildConfigFromV2(parser)
+        config.value = buildConfigFromV2(parser)
 
         console.log('[ReportFill] V2模板加载完成:', parser.getSummary())
-        console.log('[ReportFill] Config结构:', config)
+        console.log('[ReportFill] Config结构:', config.value)
+        
+        // ✅ 验证解析结果是否有效
+        if (!config.value?.rows?.length || !config.value?.columnData?.length) {
+          console.warn('[ReportFill] ⚠️ V2模板解析后数据为空，可能模板结构不完整')
+          console.warn('[ReportFill] 原始模板数据:', JSON.stringify(v2Tpl, null, 2).substring(0, 500))
+          
+          // 如果是 API 模板且数据不完整，尝试使用内置模板作为后备
+          if (templateId.startsWith('CUSTOM-')) {
+            console.log('[ReportFill] 尝试使用内置模板作为后备...')
+            const builtinCode = templateId.replace('CUSTOM-', '')
+            const builtinTpl = TEMPLATES_V2[builtinCode]
+            if (builtinTpl) {
+              console.log('[ReportFill] ✅ 找到内置模板:', builtinCode)
+              const fallbackParser = new ReportTemplateParser()
+              fallbackParser.load(builtinTpl).parse()
+              v2Parser.value = fallbackParser
+              currentTemplate.value = fallbackParser.getTemplate()
+              config.value = buildConfigFromV2(fallbackParser)
+            }
+          }
+        }
       } catch (parseErr) {
         console.error('[ReportFill] V2模板解析失败:', parseErr)
         throw new Error(`V2模板解析错误: ${parseErr.message}`)
@@ -737,17 +762,17 @@ async function loadReport(templateId) {
  * 在表格末尾动态添加一行
  */
 function addNewRow() {
-  if (!config) {
+  if (!config.value) {
     showToast('请先加载报表模板', 'warning')
     return
   }
 
-  const columns = config.columnData || []
+  const columns = config.value.columnData || []
   const dataCols = columns.slice(2) // 排除 # 和 指标列
 
   // 生成新行的唯一ID
   const newId = `row_${Date.now()}`
-  const rowCount = (config.rows || []).length + 1
+  const rowCount = (config.value.rows || []).length + 1
 
   // 创建新行数据
   const newRow = {
@@ -768,17 +793,17 @@ function addNewRow() {
   }
 
   // 添加到 config.rows
-  if (!config.rows) config.rows = []
-  config.rows.push(newRow)
+  if (!config.value.rows) config.value.rows = []
+  config.value.rows.push(newRow)
 
   // 计算实际行号（跳过冻结行）
-  const frozenRows = config.frozenRowCount || 4
-  const actualRowIdx = frozenRows + config.rows.length - 1
+  const frozenRows = config.value.frozenRowCount || 4
+  const actualRowIdx = frozenRows + config.value.rows.length - 1
 
   // 添加到 cellData
   newRow.values.forEach((val, vi) => {
     const actualColIdx = vi + 2
-    config.cellData[`${actualRowIdx}-${actualColIdx}`] = {
+    config.value.cellData[`${actualRowIdx}-${actualColIdx}`] = {
       v: '',
       raw: '',
       readOnly: false,
@@ -789,7 +814,7 @@ function addNewRow() {
   console.log('[addNewRow] 新增行成功:', {
     id: newId,
     name: newRow.name,
-    totalRows: config.rows.length,
+    totalRows: config.value.rows.length,
     actualRowIndex: actualRowIdx
   })
 
@@ -907,14 +932,14 @@ function buildConfigFromV2(parser) {
 
 function parseAndRender(tpl) {
   try {
-    config = new TemplateParser(tpl).parse()
+    config.value = new TemplateParser(tpl).parse()
   } catch (parseErr) {
     console.error('[ReportFill] 模板解析失败:', parseErr)
     console.error('[ReportFill] 模板对象:', JSON.stringify(tpl, (k, v) => typeof v === 'function' ? '[Function]' : v, 2))
     throw new Error(`模板解析错误: ${parseErr.message}\n堆栈: ${parseErr.stack}`)
   }
-  formulaEngine = new FormulaEngine(config.cellData)
-  aggregateEngine = new AggregateEngine(tpl, config.cellData)
+  formulaEngine = new FormulaEngine(config.value.cellData)
+  aggregateEngine = new AggregateEngine(tpl, config.value.cellData)
   formulaEngine.calculateAll()
   aggregateEngine.calculateAll()
   restoreTreeState()
@@ -923,11 +948,11 @@ function parseAndRender(tpl) {
 
 function initEngines(tpl) {
   // 校验引擎
-  validationEngine = new ValidationEngine({ template: tpl, cellData: config.cellData })
+  validationEngine = new ValidationEngine({ template: tpl, cellData: config.value.cellData })
   validationEngine.validateAll()
 
   // 条件格式引擎
-  conditionalFormatEngine = new ConditionalFormatEngine({ template: tpl, cellData: config.cellData })
+  conditionalFormatEngine = new ConditionalFormatEngine({ template: tpl, cellData: config.value.cellData })
 
   // 权限引擎
   permissionEngine = new PermissionEngine({ template: tpl, currentRole: 'filler' })
@@ -960,15 +985,15 @@ function measureVP() {
 function buildAllRows() {
   // 获取模板原始行
   const templateRows = flatRows.value
-  if (!templateRows.length && (!config?.rows || !config.rows.length)) return []
+  if (!templateRows.length && (!config.value?.rows || !config.value.rows.length)) return []
 
   const result = []
-  const startRow = config?.frozenRowCount || 4
+  const startRow = config.value?.frozenRowCount || 4
   let displayIndex = 1
 
   // ✅ 合并策略：优先使用 config.rows（包含新增的行），否则使用 flatRows
-  const sourceRows = (config?.rows && config.rows.length > 0)
-    ? config.rows
+  const sourceRows = (config.value?.rows && config.value.rows.length > 0)
+    ? config.value.rows
     : templateRows
 
   sourceRows.forEach((raw, idx) => {
@@ -999,9 +1024,9 @@ function shouldHideRow(raw) {
 }
 function buildRowValues(rowIndex) {
   const values = []
-  const cols = config?.columnData || []
+  const cols = config.value?.columnData || []
   for (let c = 2; c < cols.length; c++) {
-    const cell = config?.cellData[`${rowIndex}-${c}`]
+    const cell = config.value?.cellData?.[`${rowIndex}-${c}`]
     if (cell) {
       values.push({
         v: cell.v, raw: cell.v,
@@ -1027,7 +1052,7 @@ function detectSummaryType(name) {
   if (/平均|均值/.test(name)) return '平均'
   return '汇总'
 }
-function getColTitle(colIdx) { return config?.cellData[`0-${colIdx}`]?.v || '' }
+function getColTitle(colIdx) { return config.value?.cellData?.[`0-${colIdx}`]?.v || '' }
 function colWidth(col) { return col.w || 90 }
 
 // ========================================
@@ -1048,8 +1073,8 @@ function conditionalFormatClass(val, row) {
   }
   
   // 2. ✅ 使用后端加载的条件格式规则
-  const frozenRows = config?.frozenRowCount || 4
-  const rowIdx = config?.rows?.indexOf(row)
+  const frozenRows = config.value?.frozenRowCount || 4
+  const rowIdx = config.value?.rows?.indexOf(row)
   if (rowIdx >= 0) {
     const actualRowIdx = frozenRows + rowIdx
     const formatKey = `${actualRowIdx}-${val.colIdx}`
@@ -1084,9 +1109,9 @@ function conditionalFormatStyle(val, row) {
     }
   }
   
-  // 2. ✅ 使用后端加载的条件格式规则
-  const frozenRows = config?.frozenRowCount || 4
-  const rowIdx = config?.rows?.indexOf(row)
+  // 2. ✅ 使用后端加载的条件格式规则（样式版本）
+  const frozenRows = config.value?.frozenRowCount || 4
+  const rowIdx = config.value?.rows?.indexOf(row)
   if (rowIdx >= 0) {
     const actualRowIdx = frozenRows + rowIdx
     const formatKey = `${actualRowIdx}-${val.colIdx}`
@@ -1282,9 +1307,9 @@ function onFormulaApply(formulaData) {
   const cellKey = `${target.rowIdx}-${target.colIdx}`
 
   // 1. 更新 cellData（结构化存储）
-  if (config.cellData[cellKey]) {
-    config.cellData[cellKey] = {
-      ...config.cellData[cellKey],
+  if (config.value.cellData[cellKey]) {
+    config.value.cellData[cellKey] = {
+      ...config.value.cellData[cellKey],
       v: expr,
       readOnly: true,
       f: expr.replace(/^=/, ''),
@@ -1472,7 +1497,7 @@ function onGlobalKeydown(event) {
  * 更新 store 中的保存数据（在数据变更时调用）
  */
 function updateSaveData() {
-  if (!config) return
+  if (!config.value) return
   
   store.setSaveData({
     templateId: props.templateId,
@@ -1480,8 +1505,8 @@ function updateSaveData() {
     period: selectedPeriod.value,          // ✅ 填报周期
     templateCode: v2TemplateCode.value,
     templateName: currentTemplate.value?.name || '',
-    rows: config.rows || [],
-    cellData: config.cellData || {},
+    rows: config.value.rows || [],
+    cellData: config.value.cellData || {},
     formulas: savedFormulas
   })
 }
@@ -1549,9 +1574,9 @@ async function loadExistingData() {
  * @param {Array} cells - 后端返回的 CellDataDTO 列表
  */
 function backfillCellsToTable(cells) {
-  if (!config) return
+  if (!config.value) return
   
-  const frozenRows = config.frozenRowCount || 4
+  const frozenRows = config.value.frozenRowCount || 4
   
   cells.forEach(cell => {
     // 根据 rowId 和 colId 找到对应的行和列索引
@@ -1559,8 +1584,8 @@ function backfillCellsToTable(cells) {
     let colIdx = -1
     
     // 查找行索引（通过 rowId 或 rowName 匹配）
-    if (config.rows && Array.isArray(config.rows)) {
-      rowIdx = config.rows.findIndex(r => 
+    if (config.value.rows && Array.isArray(config.value.rows)) {
+      rowIdx = config.value.rows.findIndex(r => 
         r.id === cell.rowId || 
         r.name === cell.rowName ||
         r.id === String(cell.rowId)
@@ -1571,8 +1596,8 @@ function backfillCellsToTable(cells) {
     }
     
     // 查找列索引（通过 colId 或 colTitle 匹配）
-    if (config.columnData && Array.isArray(config.columnData)) {
-      colIdx = config.columnData.findIndex(c => 
+    if (config.value.columnData && Array.isArray(config.value.columnData)) {
+      colIdx = config.value.columnData.findIndex(c => 
         c.id === cell.colId || 
         c.title === cell.colTitle ||
         c.id === String(cell.colId)
@@ -1583,7 +1608,7 @@ function backfillCellsToTable(cells) {
       const key = `${rowIdx}-${colIdx}`
       
       // 更新 cellData
-      config.cellData[key] = {
+      config.value.cellData[key] = {
         v: cell.value ?? '',
         raw: cell.rawValue ?? cell.value ?? '',
         readOnly: false,
@@ -1593,8 +1618,8 @@ function backfillCellsToTable(cells) {
       }
       
       // 同步更新 rows 中的 values
-      if (config.rows && config.rows[rowIdx - frozenRows]?.values) {
-        const valueObj = config.rows[rowIdx - frozenRows].values[colIdx]
+      if (config.value.rows && config.value.rows[rowIdx - frozenRows]?.values) {
+        const valueObj = config.value.rows[rowIdx - frozenRows].values[colIdx]
         if (valueObj) {
           valueObj.v = cell.value ?? ''
           valueObj.raw = cell.rawValue ?? cell.value ?? ''
@@ -1606,7 +1631,7 @@ function backfillCellsToTable(cells) {
   })
   
   // 触发响应式更新
-  dataVersion++
+  dataVersion.value++
   
   console.log(`[Backfill] 已回填 ${cells.length} 个单元格`)
 }
@@ -1620,7 +1645,7 @@ function backfillCellsToTable(cells) {
  */
 async function loadConditionalFormats(templateId) {
   try {
-    const { getConditionalFormatsByTemplate } = await import('@/api/reportDesigner.js')
+    const { getConditionalFormatsByTemplate } = await import('@/api/reportEngine.js')
     const formats = await getConditionalFormatsByTemplate(templateId)
     
     if (Array.isArray(formats) && formats.length > 0) {
@@ -1639,16 +1664,16 @@ async function loadConditionalFormats(templateId) {
  * ✅ 应用条件格式规则到当前数据
  */
 function applyConditionalFormats() {
-  if (!config || !conditionalFormats.value.length) return
+  if (!config.value || !conditionalFormats.value.length) return
   
   // 清除旧的应用结果
   Object.keys(appliedFormats).forEach(key => delete appliedFormats[key])
   
-  const frozenRows = config.frozenRowCount || 4
+  const frozenRows = config.value.frozenRowCount || 4
   
   conditionalFormats.value.forEach(rule => {
     // 遍历所有单元格，检查是否满足条件
-    config.rows?.forEach((row, rIdx) => {
+    config.value.rows?.forEach((row, rIdx) => {
       row.values?.forEach((val, cIdx) => {
         const actualRowIdx = frozenRows + rIdx
         const key = `${actualRowIdx}-${cIdx}`
@@ -1668,7 +1693,7 @@ function applyConditionalFormats() {
     })
   })
   
-  dataVersion++  // 触发重新渲染
+  dataVersion.value++  // 触发重新渲染
 }
 
 /**
@@ -1714,7 +1739,7 @@ function getCellFormatStyle(rowIdx, colIdx) {
  */
 async function loadValidationRules(templateId) {
   try {
-    const { getValidatorsByTemplate } = await import('@/api/reportDesigner.js')
+    const { getValidatorsByTemplate } = await import('@/api/reportEngine.js')
     const rules = await getValidatorsByTemplate(templateId)
     
     if (Array.isArray(rules) && rules.length > 0) {
@@ -1785,12 +1810,12 @@ function validateCell(rowIdx, colIdx, value) {
  * ✅ 执行全部校验（保存前调用）
  */
 async function validateAllData() {
-  if (!config || !validationRules.value.length) return { valid: true, errors: [] }
+  if (!config.value || !validationRules.value.length) return { valid: true, errors: [] }
   
   const errors = []
-  const frozenRows = config.frozenRowCount || 4
+  const frozenRows = config.value.frozenRowCount || 4
   
-  config.rows?.forEach((row, rIdx) => {
+  config.value.rows?.forEach((row, rIdx) => {
     row.values?.forEach((val, cIdx) => {
       const actualRowIdx = frozenRows + rIdx
       const cellValue = val.v ?? val.raw ?? ''
@@ -1801,7 +1826,7 @@ async function validateAllData() {
       if (validationErrors[key]) {
         errors.push({
           row: row.name || `行${rIdx + 1}`,
-          col: config.columnData[cIdx]?.title || `列${cIdx + 1}`,
+          col: config.value.columnData[cIdx]?.title || `列${cIdx + 1}`,
           message: validationErrors[key].message
         })
       }
@@ -1887,7 +1912,7 @@ async function forceSave() {
  */
 async function onBeforeUnload(event) {
   // 检查是否有未保存的数据
-  if (store.dirtyCells.size > 0 || config?.rows?.length > 0) {
+  if (store.dirtyCells.size > 0 || config.value?.rows?.length > 0) {
     // 更新数据并立即保存到 localStorage
     updateSaveData()
     
@@ -1896,8 +1921,8 @@ async function onBeforeUnload(event) {
       const draftKey = `rpt_draft_${v2TemplateCode.value || props.templateId}`
       const draftData = {
         ...store.saveData,
-        rows: config?.rows || [],
-        cellData: config?.cellData || {},
+        rows: config.value?.rows || [],
+        cellData: config.value?.cellData || {},
         formulas: savedFormulas,
         savedAt: new Date().toISOString(),
         source: 'unload'
@@ -2163,7 +2188,7 @@ onBeforeUnmount(() => {
   store.cancelAutoSave()
   
   // 离开时立即保存（组件卸载前）
-  if (config?.rows?.length > 0) {
+  if (config.value?.rows?.length > 0) {
     onBeforeUnload({ preventDefault: () => {}, returnValue: '' })
   }
 })

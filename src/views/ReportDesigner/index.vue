@@ -12,6 +12,12 @@
       <div class="dh-center">
         <input v-model="tpl.name" class="dh-name-input" placeholder="报表名称" />
         <input v-model="tpl.code" class="dh-code-input" placeholder="模板代码 如 RPT-XXX-001" />
+        <select v-model="tpl.templateType" class="dh-cat-select">
+          <option :value="0">选择类型</option>
+          <option :value="1">统计报表</option>
+          <option :value="2">填报报表</option>
+          <option :value="3">汇总报表</option>
+        </select>
         <select v-model="tpl.category" class="dh-cat-select">
           <option value="">选择分类</option>
           <option value="production">生产报表</option>
@@ -20,6 +26,14 @@
           <option value="energy">能源报表</option>
           <option value="cost">成本报表</option>
         </select>
+        <select v-model="tpl.status" class="dh-cat-select">
+          <option value="designing">设计中</option>
+          <option value="pending">待审批</option>
+          <option value="published">已发布</option>
+          <option value="changed">已变更</option>
+          <option value="archived">已归档</option>
+          <option value="disabled">已停用</option>
+        </select>
       </div>
 
       <div class="dh-right">
@@ -27,7 +41,8 @@
           {{ showJSON ? '隐藏JSON' : '预览JSON' }}
         </button>
         <button class="dh-btn dh-btn-outline" @click="exportTemplate">导出</button>
-        <button class="dh-btn dh-btn-primary" @click="saveTemplate" :disabled="saving || !isValid">
+        <button v-if="tpl.id" class="dh-btn dh-btn-outline" @click="handlePublishTemplate" :disabled="saving">{{ publishing ? '发布中...' : '发布' }}</button>
+        <button class="dh-btn dh-btn-primary" @click="handleSaveTemplate" :disabled="saving || !isValid">
           {{ saving ? '保存中...' : (tpl.id ? '保存' : '创建报表') }}
         </button>
       </div>
@@ -63,6 +78,28 @@
               <label>模板代码 *</label>
               <input v-model="tpl.code" placeholder="如：RPT-COAL-001" />
             </div>
+            <div class="dp-row">
+              <div class="dp-field">
+                <label>模板类型 *</label>
+                <select v-model="tpl.templateType">
+                  <option :value="0">请选择类型</option>
+                  <option :value="1">统计报表</option>
+                  <option :value="2">填报报表</option>
+                  <option :value="3">汇总报表</option>
+                </select>
+              </div>
+              <div class="dp-field">
+                 <label>状态</label>
+                 <select v-model="tpl.status">
+                   <option value="designing">设计中</option>
+                   <option value="pending">待审批</option>
+                   <option value="published">已发布</option>
+                   <option value="changed">已变更</option>
+                   <option value="archived">已归档</option>
+                   <option value="disabled">已停用</option>
+                 </select>
+               </div>
+            </div>
             <div class="dp-field">
               <label>描述</label>
               <textarea v-model="tpl.description" rows="3" placeholder="报表用途说明..."></textarea>
@@ -80,11 +117,8 @@
                 </select>
               </div>
               <div class="dp-field">
-                <label>状态</label>
-                <select v-model="tpl.status">
-                  <option value="draft">草稿</option>
-                  <option value="published">已发布</option>
-                </select>
+                <label>版本</label>
+                <input type="number" v-model.number="tpl.version" min="1" max="99" />
               </div>
             </div>
             <div class="dp-row">
@@ -332,6 +366,7 @@
           <dl class="dgp-info">
             <dt>名称</dt><dd>{{ tpl.name || '-' }}</dd>
             <dt>代码</dt><dd><code>{{ tpl.code || '-' }}</code></dd>
+            <dt>类型</dt><dd>{{ templateTypeLabel }}</dd>
             <dt>分类</dt><dd>{{ tpl.category || '未分类' }}</dd>
             <dt>行节点</dt><dd>{{ rowCount }} 个</dd>
             <dt>列节点</dt><dd>{{ colCount }} 个</dd>
@@ -360,7 +395,7 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import TreeNodeEditor from './TreeNodeEditor.vue'
-import { getTemplateById, createTemplate, updateTemplate } from '@/api/reportDesigner.js'
+import { loadTemplate, saveTemplate, updateTemplate, publishTemplate } from '@/api/reportDesigner.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -384,7 +419,8 @@ const tpl = reactive({
   name: '',
   code: '',
   version: 2,
-  status: 'draft',
+  templateType: 2,     // 默认填报报表
+   status: 'designing',  // 默认设计中
   description: '',
   category: '',
   tags: [],
@@ -434,7 +470,11 @@ const colCount = computed(() => countNodes(tpl.columnTree))
 const isValid = computed(() => {
   return tpl.name.trim() && tpl.code.trim() && tpl.rowTree.length > 0 && tpl.columnTree.length > 0
 })
-const statusLabel = computed(() => ({ draft: '草稿', published: '已发布', archived: '已归档' }[tpl.status] || tpl.status))
+const statusLabel = computed(() => ({
+  designing: '设计中', pending: '待审批', published: '已发布',
+  changed: '已变更', archived: '已归档', disabled: '已停用'
+}[tpl.status] || tpl.status))
+const templateTypeLabel = computed(() => ({ 1: '统计报表', 2: '填报报表', 3: '汇总报表' }[tpl.templateType] || '未设置'))
 
 function countNodes(nodes) {
   let c = 0
@@ -452,6 +492,7 @@ const jsonOutput = computed(() => {
     name: tpl.name,
     code: tpl.code,
     version: tpl.version,
+    templateType: tpl.templateType,
     status: tpl.status,
     description: tpl.description,
     category: tpl.category,
@@ -665,6 +706,7 @@ function moveUpDown(nodes, path, direction) {
 // ==================== 加载和保存 ====================
 const loading = ref(false)
 const saving = ref(false)
+const publishing = ref(false)
 
 onMounted(async () => {
   loading.value = true
@@ -673,7 +715,7 @@ onMounted(async () => {
     if (route.query.code) {
       // 尝试从 API 加载模板（优先）
       try {
-        const res = await getTemplateById(route.query.code)
+        const res = await loadTemplate(route.query.code)
         Object.assign(tpl, res)
         // 同步到全局缓存
         window.__V2_TEMPLATES = window.__V2_TEMPLATES || {}
@@ -712,7 +754,7 @@ function localStorageFallback(code = null) {
 }
 
 // ==================== 保存模板 ====================
-async function saveTemplate() {
+async function handleSaveTemplate() {
   if (!isValid.value) {
     showToast('请完善基本信息和行列配置', 'error')
     return
@@ -735,7 +777,7 @@ async function saveTemplate() {
       Object.assign(tpl, result)
     } else {
       // 创建新模板
-      result = await createTemplate(output)
+      result = await saveTemplate(output)
       Object.assign(tpl, result)
       
       // 同步到全局缓存
@@ -757,6 +799,27 @@ async function saveTemplate() {
     console.error('保存失败:', err)
   } finally {
     saving.value = false
+  }
+}
+
+// ==================== 发布模板 ====================
+async function handlePublishTemplate() {
+  if (!tpl.id || !confirm(`确定要发布报表 "${tpl.name}" 吗？\n发布后报表将出现在模板列表中。`)) return
+
+  publishing.value = true
+  try {
+    // 先保存最新内容
+    await handleSaveTemplate()
+
+    // 调用发布接口
+    await publishTemplate(tpl.id)
+    tpl.status = 'published'
+    showToast(`报表 "${tpl.name}" 已发布`, 'success')
+  } catch (err) {
+    showToast('发布失败: ' + err.message, 'error')
+    console.error('发布失败:', err)
+  } finally {
+    publishing.value = false
   }
 }
 </script>

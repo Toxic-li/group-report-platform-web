@@ -167,7 +167,7 @@ export function buildTemplate_1001() {
   return new ReportTemplate({
     id: '1001', code: 'RPT-COAL-001', name: '煤炭生产销售与库存统计表',
     description: '集团煤炭生产、销售、库存全口径统计，含火车/公路分渠道明细',
-    version: '2.0.0', status: 'published', category: 'production', periodType: 'monthly',
+    version: '2.0.0', status: 'published', templateType: 2, category: 'production', periodType: 'monthly',
     rowTree: [rowRawCoal],
     columnTree: [colMonth, colYTD],
     formulas, validators, aggregates, conditionalFormats
@@ -225,7 +225,7 @@ export function buildTemplate_1002() {
   return new ReportTemplate({
     id: '1002', code: 'RPT-FIN-001', name: '经营指标月报',
     description: '集团核心经营指标跟踪，含收入/成本/利润/资产负债/现金流',
-    version: '1.5.0', status: 'published', category: 'finance', periodType: 'monthly',
+    version: '1.5.0', status: 'published', templateType: 2, category: 'finance', periodType: 'monthly',
     rowTree: rows, columnTree: cols, formulas, validators, aggregates
   })
 }
@@ -279,7 +279,7 @@ export function buildTemplate_1003() {
   return new ReportTemplate({
     id: '1003', code: 'RPT-SAFE-001', name: '安全生产统计表',
     description: '集团安全生产核心指标统计与考核',
-    version: '1.2.0', status: 'published', category: 'safety', periodType: 'monthly',
+    version: '1.2.0', status: 'published', templateType: 1, category: 'safety', periodType: 'monthly',
     rowTree: rows, columnTree: cols, formulas, validators
   })
 }
@@ -324,7 +324,7 @@ export function buildTemplate_1004() {
   return new ReportTemplate({
     id: '1004', code: 'RPT-ENERGY-001', name: '能源消耗统计表',
     description: '集团各类能源消耗统计与节能分析',
-    version: '1.0.0', status: 'published', category: 'energy', periodType: 'monthly',
+    version: '1.0.0', status: 'published', templateType: 3, category: 'energy', periodType: 'monthly',
     rowTree: rows, columnTree: cols, formulas
   })
 }
@@ -376,7 +376,7 @@ export function buildTemplate_1005() {
   return new ReportTemplate({
     id: '1005', code: 'RPT-COST-001', name: '成本费用分析表',
     description: '集团成本构成分析、预算执行对比',
-    version: '1.0.0', status: 'draft', category: 'cost', periodType: 'monthly',
+    version: '1.0.0', status: 'draft', templateType: 2, category: 'cost', periodType: 'monthly',
     rowTree: rows, columnTree: cols, formulas
   })
 }
@@ -410,10 +410,10 @@ export function initTemplates(templateManager) {
  */
 export function getTemplateList() {
   return [
-    { id: '1001', name: '煤炭生产销售与库存统计表', code: 'RPT-COAL-001', category: 'production', icon: '📊' },
-    { id: '1002', name: '经营指标月报', code: 'RPT-FIN-001', category: 'finance', icon: '💰' },
-    { id: '1003', name: '安全生产统计表', code: 'RPT-SAFE-001', category: 'safety', icon: '🛡️' },
-    { id: '1004', name: '能源消耗统计表', code: 'RPT-ENERGY-001', category: 'energy', icon: '⚡' },
-    { id: '1005', name: '成本费用分析表', code: 'RPT-COST-001', category: 'cost', icon: '📋' }
+    { id: '1001', name: '煤炭生产销售与库存统计表', code: 'RPT-COAL-001', category: 'production', icon: '📊', templateType: 2, status: 'published' },
+    { id: '1002', name: '经营指标月报', code: 'RPT-FIN-001', category: 'finance', icon: '💰', templateType: 2, status: 'published' },
+    { id: '1003', name: '安全生产统计表', code: 'RPT-SAFE-001', category: 'safety', icon: '🛡️', templateType: 1, status: 'published' },
+    { id: '1004', name: '能源消耗统计表', code: 'RPT-ENERGY-001', category: 'energy', icon: '⚡', templateType: 3, status: 'published' },
+    { id: '1005', name: '成本费用分析表', code: 'RPT-COST-001', category: 'cost', icon: '📋', templateType: 2, status: 'draft' }
   ]
 }

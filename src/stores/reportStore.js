@@ -9,11 +9,10 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { ReportTemplate, Subsidiary, REPORT_STATUS } from '@/types/report.js'
 import {
-  generateSubsidiaries,
   buildFullReportTemplate,
   generateGroupConsolidation
 } from '@/mock/dataGenerator.js'
-import { saveReportData } from '@/api/reportDesigner.js'
+import { saveReportData, getOrgTree } from '@/api/reportDesigner.js'
 
 // localStorage key 前缀
 const DRAFT_PREFIX = 'rpt_draft_'
@@ -24,8 +23,11 @@ export const useReportStore = defineStore('report', () => {
   /** 当前选中的子公司ID */
   const currentSubsidiaryId = ref(null)
   
-  /** 所有子公司列表 */
-  const subsidiaries = ref(generateSubsidiaries(10))
+  /** 所有子公司/组织列表（从API加载） */
+  const subsidiaries = ref([])
+  
+  /** 组织数据加载状态 */
+  const orgLoading = ref(false)
   
   /** 报表模板 */
   const template = ref(buildFullReportTemplate())
@@ -160,6 +162,86 @@ export const useReportStore = defineStore('report', () => {
       template.value = buildFullReportTemplate()
       loading.value = false
     }, 300)
+  }
+
+  /**
+   * ✅ 从API加载组织机构列表（替换mock数据）
+   */
+  async function loadOrganizations() {
+    if (orgLoading.value) return
+    
+    orgLoading.value = true
+    
+    try {
+      console.log('[Store] 正在从API加载组织机构...')
+      const res = await getOrgTree()
+      
+      console.log('[Store] 组织API响应:', res)
+      
+      // 兼容多种返回格式：数组 / {data: []} / {list: []}
+      let orgList = []
+      if (Array.isArray(res)) {
+        orgList = res
+      } else if (res?.data && Array.isArray(res.data)) {
+        orgList = res.data
+      } else if (res?.list && Array.isArray(res.list)) {
+        orgList = res.list
+      }
+      
+      // 转换为前端标准格式（扁平化树形结构）
+      const flatList = flattenOrgTree(orgList)
+      
+      subsidiaries.value = flatList.map(org => ({
+        id: String(org.id),
+        name: org.name || '未命名单位',
+        code: org.code || '',
+        status: org.status || 'draft',
+        parentId: org.parentId ? String(org.parentId) : null,
+        level: org.level ?? 0,
+        children: org.children || []
+      }))
+      
+      console.log(`[Store] ✅ 已加载 ${subsidiaries.value.length} 个组织/单位`)
+      
+      // 自动选中第一个
+      if (subsidiaries.value.length > 0 && !currentSubsidiaryId.value) {
+        currentSubsidiaryId.value = subsidiaries.value[0].id
+      }
+      
+      return subsidiaries.value
+      
+    } catch (err) {
+      console.warn('[Store] ⚠️ 组织API加载失败，使用空列表:', err.message)
+      subsidiaries.value = []
+      return []
+    } finally {
+      orgLoading.value = false
+    }
+  }
+
+  /**
+   * ✅ 扁平化组织树结构
+   * @param {Array} tree - 树形组织数据
+   * @param {Number} level - 当前层级
+   * @returns {Array} 扁平化的组织列表
+   */
+  function flattenOrgTree(tree, level = 0) {
+    const result = []
+    
+    for (const node of tree) {
+      result.push({
+        ...node,
+        level,
+        name: node.name || (level === 0 ? `${node.id}集团` : `${node.id}公司`)
+      })
+      
+      // 递归处理子节点
+      if (node.children && Array.isArray(node.children) && node.children.length > 0) {
+        result.push(...flattenOrgTree(node.children, level + 1))
+      }
+    }
+    
+    return result
   }
 
   /**
@@ -495,6 +577,7 @@ export const useReportStore = defineStore('report', () => {
     // 状态
     currentSubsidiaryId,
     subsidiaries,
+    orgLoading,
     template,
     groupTemplate,
     viewMode,
@@ -516,6 +599,7 @@ export const useReportStore = defineStore('report', () => {
     // 方法
     selectSubsidiary,
     loadSubsidiaryData,
+    loadOrganizations,      // ✅ 新增：从API加载组织列表
     switchToSingleView,
     switchToGroupView,
     setSaveData,

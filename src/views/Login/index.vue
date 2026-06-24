@@ -118,6 +118,7 @@
 <script setup>
 import { reactive, ref, computed, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useUserStore } from '@/stores/userStore.js'
 import { login as apiLogin, getCurrentUser } from '@/api/reportDesigner.js'
 
 const router = useRouter()
