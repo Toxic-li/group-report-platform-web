@@ -871,57 +871,88 @@ function countNodes(nodes) {
 }
 
 // ==================== 表格数据 ====================
-const columnHeaders = ref([
-  { label: '指标', width: 120, isFormula: false },
-  { label: '1月', width: 90, isFormula: false },
-  { label: '2月', width: 90, isFormula: false },
-  { label: '3月', width: 90, isFormula: false },
-  { label: '4月', width: 90, isFormula: false },
-  { label: '合计', width: 90, isFormula: true },
-])
+const columnHeaders = ref([])
+const rows = ref([])
 
-const rows = ref([
-  { label: '煤炭', isSummary: false, summaryType: '', cells: [
-    { value: '', isFormula: false, readOnly: false },
-    { value: '100', isFormula: false, readOnly: false },
-    { value: '120', isFormula: false, readOnly: false },
-    { value: '110', isFormula: false, readOnly: false },
-    { value: '130', isFormula: false, readOnly: false },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(B2:E2)' },
-  ]},
-  { label: '电力', isSummary: false, summaryType: '', cells: [
-    { value: '', isFormula: false, readOnly: false },
-    { value: '200', isFormula: false, readOnly: false },
-    { value: '220', isFormula: false, readOnly: false },
-    { value: '210', isFormula: false, readOnly: false },
-    { value: '230', isFormula: false, readOnly: false },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(B3:E3)' },
-  ]},
-  { label: '钢铁', isSummary: false, summaryType: '', cells: [
-    { value: '', isFormula: false, readOnly: false },
-    { value: '150', isFormula: false, readOnly: false },
-    { value: '160', isFormula: false, readOnly: false },
-    { value: '155', isFormula: false, readOnly: false },
-    { value: '165', isFormula: false, readOnly: false },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(B4:E4)' },
-  ]},
-  { label: '水泥', isSummary: false, summaryType: '', cells: [
-    { value: '', isFormula: false, readOnly: false },
-    { value: '80', isFormula: false, readOnly: false },
-    { value: '85', isFormula: false, readOnly: false },
-    { value: '82', isFormula: false, readOnly: false },
-    { value: '88', isFormula: false, readOnly: false },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(B5:E5)' },
-  ]},
-  { label: '汇总', isSummary: true, summaryType: '合计', cells: [
-    { value: '', isFormula: false, readOnly: false },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(B2:B5)' },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(C2:C5)' },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(D2:D5)' },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(E2:E5)' },
-    { value: '', isFormula: true, readOnly: true, formula: '=SUM(F2:F5)' },
-  ]},
-])
+function buildColumnHeaders() {
+  const headers = [{ label: '指标', width: 120, isFormula: false }]
+  const flattenCols = []
+  
+  function walkCols(cols) {
+    for (const col of cols) {
+      if (col.children?.length) {
+        walkCols(col.children)
+      } else {
+        flattenCols.push(col)
+        headers.push({ 
+          label: col.label || col.title || '', 
+          width: col.width || 90, 
+          isFormula: false 
+        })
+      }
+    }
+  }
+  
+  walkCols(tpl.columnTree)
+  
+  headers.push({ label: '合计', width: 90, isFormula: true })
+  columnHeaders.value = headers
+}
+
+function buildRows() {
+  const result = []
+  const colCount = columnHeaders.value.length
+  
+  function walkRows(rowTree, indent = 0) {
+    for (const row of rowTree) {
+      const label = row.label || row.name || ''
+      const cells = Array(colCount).fill(null).map(() => ({
+        value: '',
+        isFormula: false,
+        readOnly: false,
+        formula: ''
+      }))
+      
+      result.push({
+        label: ' '.repeat(indent * 2) + label,
+        isSummary: !!row.isSummary,
+        summaryType: row.summaryType || '',
+        cells
+      })
+      
+      if (row.children?.length) {
+        walkRows(row.children, indent + 1)
+      }
+    }
+  }
+  
+  walkRows(tpl.rowTree)
+  
+  const summaryCells = Array(colCount).fill(null).map((_, ci) => ({
+    value: '',
+    isFormula: ci > 0,
+    readOnly: ci > 0,
+    formula: ci > 0 ? `=SUM(${String.fromCharCode(65 + ci)}2:${String.fromCharCode(65 + ci)}${result.length + 1})` : ''
+  }))
+  
+  result.push({
+    label: '汇总',
+    isSummary: true,
+    summaryType: '合计',
+    cells: summaryCells
+  })
+  
+  rows.value = result
+}
+
+function rebuildTable() {
+  buildColumnHeaders()
+  buildRows()
+}
+
+watch(() => [tpl.rowTree, tpl.columnTree], () => {
+  rebuildTable()
+}, { deep: true })
 
 // ==================== 编辑状态 ====================
 const selectedCell = reactive({ row: null, col: null })
@@ -1604,7 +1635,8 @@ onMounted(async () => {
     loading.value = false
   }
   
-  // 快捷键监听
+  rebuildTable()
+  
   window.addEventListener('keydown', onKeydown)
 })
 
