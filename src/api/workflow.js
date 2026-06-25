@@ -4,7 +4,7 @@
  */
 import { get, post } from '@/utils/http.js'
 
-const WF_BASE = '/api/workflow'
+const WF_BASE = '/workflow'
 
 /** 流程定义列表 */
 export async function getProcessList(params = {}) {

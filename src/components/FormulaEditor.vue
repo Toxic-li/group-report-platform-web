@@ -232,9 +232,9 @@ function validate(expr) {
   }
   if (depth > 0) { validationError.value = `括号不匹配：缺少 ${depth} 个 )`; return }
 
-  // 2. 非法字符检测（允许 = 开头，其余仅允许字母数字下划线、运算符、括号、逗号、点、空格）
-  const checkExpr = e.replace(/^=/, '') // 去掉开头的 = 再校验
-  const validPattern = new RegExp('^[a-zA-Z0-9_+\\-*/().,<>=!&| \\u4e00-\\u9fa5]*$')
+  // 2. 非法字符检测（允许 = 开头，其余仅允许字母数字下划线、运算符、括号、逗号、点、空格、$、{、}）
+  const checkExpr = e.replace(/^=/, '')
+  const validPattern = new RegExp('^[a-zA-Z0-9_+\\-*/().,<>=!&| \\u4e00-\\u9fa5${}]*$')
   if (!validPattern.test(checkExpr)) {
     const invalid = checkExpr.replace(validPattern, '').charAt(0)
     validationError.value = `非法字符: "${invalid}"，仅支持字母、数字、运算符和括号`
@@ -253,10 +253,11 @@ function validate(expr) {
     }
   }
 
-  // 4. 未定义字段检测
+  // 4. 未定义字段检测（忽略 ${...} 占位符）
   const fieldIds = new Set(props.validFieldIds.length ? props.validFieldIds : [...fieldList.value.map(f => f.id), ...rowFieldList.value.map(f => f.id)])
   const usedFields = extractFieldRefs(checkExpr)
   for (const field of usedFields) {
+    if (field.startsWith('${') && field.endsWith('}')) continue
     if (!fieldIds.has(field)) {
       validationError.value = `未定义的字段: "${field}"`
       return

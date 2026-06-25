@@ -1,8 +1,8 @@
 /**
  * 报表提交审核 API
  * 后端: ReportSubmitController + ReportAuditController
- * 代理: /api/report-designer/submit/* → localhost:8080/report-designer/submit/*
- *       /api/report-designer/audit/* → localhost:8080/report-designer/audit/*
+ * 代理: /report-designer/submit/* → localhost:8080/report-designer/submit/*
+ *       /report-designer/audit/* → localhost:8080/report-designer/audit/*
  */
 import { get, post, put } from '@/utils/http.js'
 

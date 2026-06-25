@@ -1,7 +1,7 @@
 /**
  * 报表数据 API
  * 后端: ReportDataController
- * 代理: /api/report-designer/data/* → localhost:8080/report-designer/data/*
+ * 代理: /report-designer/data/* → localhost:8080/report-designer/data/*
  */
 import { get, post, del } from '@/utils/http.js'
 

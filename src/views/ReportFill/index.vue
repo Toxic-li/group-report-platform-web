@@ -31,17 +31,17 @@
             <strong v-if="useV2" class="fr-v2-badge" title="JSON驱动模板">JSON</strong>
           </span>
 
-          <!-- ✅ 组织选择器 -->
-          <select class="fr-select" v-model="selectedOrgId" @change="onOrgChange" :disabled="orgLoading || orgList.length === 0">
-            <option value="">{{ orgLoading ? '加载中...' : (orgList.length === 0 ? '无组织' : '请选择组织') }}</option>
-            <option v-for="org in orgList" :key="org.id" :value="org.id">{{ org.name }}</option>
-          </select>
+          <!-- ✅ 组织选择器（只读展示） -->
+          <div class="fr-readonly-field">
+            <label class="fr-readonly-label">组织：</label>
+            <span class="fr-readonly-value">{{ selectedOrgName || '未选择' }}</span>
+          </div>
 
-          <!-- ✅ 填报周期选择器 -->
-          <select class="fr-select" v-model="selectedPeriod" @change="onPeriodChange">
-            <option value="">请选择周期</option>
-            <option v-for="p in periodList" :key="p.value" :value="p.value">{{ p.label }}</option>
-          </select>
+          <!-- ✅ 填报周期选择器（只读展示） -->
+          <div class="fr-readonly-field">
+            <label class="fr-readonly-label">周期：</label>
+            <span class="fr-readonly-value">{{ selectedPeriodLabel || '未选择' }}</span>
+          </div>
 
           <span class="fr-divider"></span>
 
@@ -166,7 +166,7 @@
                     :style="conditionalFormatStyle(val, row)"
                     @dblclick="startEdit(val, row, vi, $event)" @contextmenu.prevent="openDetail(val, row, $event)">
                     {{ fmtVal(val) }}
-                    <button class="fr-cell-fx" title="添加公式" @click.stop="openFormulaEditor(val, row, vi)">fx</button>
+                    <button v-if="!row.isSummary" class="fr-cell-fx" title="添加公式" @click.stop="openFormulaEditor(val, row, vi)">fx</button>
                   </td>
                 </tr>
 
@@ -343,9 +343,22 @@ let reportFactory = null
 // ✅ 数据版本号 - 用于触发响应式更新（新增行等操作时递增）
 const dataVersion = ref(0)
 
-// ✅ 组织和周期选择器（适配 /report/data/save 接口必填参数）
+// ✅ 组织和周期选择器（从路由参数获取，只读展示）
 const selectedOrgId = ref('')              // 当前选中的组织ID
 const selectedPeriod = ref('')             // 当前选中的填报周期
+
+// ✅ 组织和周期的显示名称（计算属性）
+const selectedOrgName = computed(() => {
+  if (!selectedOrgId.value) return ''
+  const org = orgList.value.find(o => o.id === selectedOrgId.value)
+  return org ? org.name.trim() : ''
+})
+
+const selectedPeriodLabel = computed(() => {
+  if (!selectedPeriod.value) return ''
+  const period = periodList.value.find(p => p.value === selectedPeriod.value)
+  return period ? period.label : ''
+})
 
 // 组织列表（从API获取）
 const orgList = ref([])
@@ -377,8 +390,11 @@ async function loadOrgList() {
       for (const node of nodes || []) {
         if (node.id !== undefined && node.id !== null) {
           list.push({
-            id: node.id,
-            name: `${'　'.repeat(level)}${node.orgName || '未命名'}`
+            id: String(node.id),
+            name: `${'　'.repeat(level)}${node.orgName || node.name || '未命名'}`,
+            code: node.orgCode || node.code || '',
+            level,
+            orgType: node.orgType || 0
           })
         }
         // 递归处理子节点
@@ -392,16 +408,52 @@ async function loadOrgList() {
     orgList.value = flattenTree(treeData)
     console.log(`[Org] ✅ 加载完成: ${orgList.value.length} 个组织`)
     
-    // 如果只有一个组织，自动选中
-    if (orgList.value.length === 1) {
-      selectedOrgId.value = orgList.value[0].id
-      onOrgChange()
+    // ✅ 从路由参数获取组织和周期值
+    const routeOrgId = route.query.orgId
+    const routePeriod = route.query.period
+    
+    if (routeOrgId) {
+      selectedOrgId.value = routeOrgId
+      console.log(`[Org] ✅ 从路由参数获取组织: ${routeOrgId}`)
+    } else {
+      console.warn('[Org] ⚠️ 路由参数中未找到组织ID，使用默认值')
+      // 如果没有路由参数，使用第一个子公司作为默认值
+      if (orgList.value.length > 0) {
+        const firstSubsidiary = orgList.value.find(org => org.orgType === 2)
+        if (firstSubsidiary) {
+          selectedOrgId.value = firstSubsidiary.id
+          console.log(`[Org] ✅ 自动选中第一个子公司: ${firstSubsidiary.name}`)
+        } else {
+          selectedOrgId.value = orgList.value[0].id
+          console.log(`[Org] ✅ 自动选中第一个组织: ${orgList.value[0].name}`)
+        }
+      }
+    }
+    
+    if (routePeriod) {
+      selectedPeriod.value = routePeriod
+      console.log(`[Period] ✅ 从路由参数获取周期: ${routePeriod}`)
+    } else {
+      console.warn('[Period] ⚠️ 路由参数中未找到周期，使用当前月份')
+      // 如果没有路由参数，使用当前月份作为默认值
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = now.getMonth() + 1
+      selectedPeriod.value = `${year}${String(month).padStart(2, '0')}`
+      console.log(`[Period] ✅ 自动选中当前月份: ${year}年${month}月`)
+    }
+    
+    // ✅ 验证组织和周期是否有效
+    if (!selectedOrgId.value || !selectedPeriod.value) {
+      console.error('[Init] ❌ 组织或周期未设置，无法加载报表数据')
+    } else {
+      console.log(`[Init] ✅ 组织和周期已设置: 组织=${selectedOrgId.value}, 周期=${selectedPeriod.value}`)
     }
   } catch (err) {
     console.warn('[Org] ⚠️ 加载失败:', err.message)
     // 使用默认组织作为兜底
     orgList.value = [
-      { id: 0, name: '默认组织' }
+      { id: '0', name: '默认组织' }
     ]
   } finally {
     orgLoading.value = false
@@ -556,24 +608,36 @@ const headerRows = computed(() => {
   if (!config.value) return []
   const rows = []
   const maxLevel = config.value.frozenRowCount || 4
+
   for (let l = 0; l < maxLevel; l++) {
     const cells = []
     for (let c = 2; c < (config.value.columnData || []).length; c++) {
       const cell = config.value.cellData[`${l}-${c}`]
-      if (cell && cell.v) cells.push({
-        text: cell.v, level: cell.headerLevel || Math.min(l + 1, 4),
-        colIdx: c, colspan: 1, rowspan: 1, hint: getMetricHint(cell.v)
-      })
+
+      // ✅ 只处理起始位置的单元格，跳过被合并的单元格
+      if (cell && cell.isHeaderStart) {
+        cells.push({
+          text: cell.v,
+          level: cell.headerLevel || Math.min(l + 1, 4),
+          colIdx: c,
+          colspan: cell.colSpan || 1,
+          rowspan: cell.rowSpan || 1,
+          hint: getMetricHint(cell.v)
+        })
+      }
+      // ✅ 被合并的单元格不添加到 cells 数组中（由浏览器自动处理）
     }
+
     if (cells.length > 0) rows.push({ level: l, cells })
   }
+
   return rows
 })
 
 const dataColumns = computed(() => config.value ? config.value.columnData?.slice(2) || [] : [])
+console.log('dataColumns', config.value)
 const visibleColCount = computed(() => dataColumns.value.filter((_, i) => !isColHidden(i)).length)
 const anomalyCount = computed(() => displayRows.value.filter(r => r.isAnomaly).length)
-
 /** 可见行列表 */
 const visibleRows = computed(() => {
   // ✅ 依赖 dataVersion - 当新增行等操作递增版本号时触发重新计算
@@ -682,33 +746,15 @@ async function loadReport(templateId) {
         // 构建兼容的config结构
         config.value = buildConfigFromV2(parser)
 
-        console.log('[ReportFill] V2模板加载完成:', parser.getSummary())
-        console.log('[ReportFill] Config结构:', config.value)
-        
-        // ✅ 验证解析结果是否有效
-        if (!config.value?.rows?.length || !config.value?.columnData?.length) {
-          console.warn('[ReportFill] ⚠️ V2模板解析后数据为空，可能模板结构不完整')
-          console.warn('[ReportFill] 原始模板数据:', JSON.stringify(v2Tpl, null, 2).substring(0, 500))
-          
-          // 如果是 API 模板且数据不完整，尝试使用内置模板作为后备
-          if (templateId.startsWith('CUSTOM-')) {
-            console.log('[ReportFill] 尝试使用内置模板作为后备...')
-            const builtinCode = templateId.replace('CUSTOM-', '')
-            const builtinTpl = TEMPLATES_V2[builtinCode]
-            if (builtinTpl) {
-              console.log('[ReportFill] ✅ 找到内置模板:', builtinCode)
-              const fallbackParser = new ReportTemplateParser()
-              fallbackParser.load(builtinTpl).parse()
-              v2Parser.value = fallbackParser
-              currentTemplate.value = fallbackParser.getTemplate()
-              config.value = buildConfigFromV2(fallbackParser)
-            }
-          }
+        // ✅ 填充API返回的 cellData（之前填报的数据）
+        if (v2Tpl.cellData) {
+          populateCellDataFromApi(v2Tpl.cellData)
         }
       } catch (parseErr) {
         console.error('[ReportFill] V2模板解析失败:', parseErr)
         throw new Error(`V2模板解析错误: ${parseErr.message}`)
       }
+
 
     } else {
       // ========== V1 代码模板模式（原有逻辑） ==========
@@ -835,6 +881,11 @@ function addNewRow() {
 /**
  * 从V2解析器构建兼容的config结构
  * 使V2模板能复用现有的渲染和编辑逻辑
+ * 
+ * ✅ 改造要点：
+ * - 直接使用接口返回的真实业务ID（BIGINT），不再自己生成临时ID
+ * - 如果接口返回的数据中没有 code，才生成业务编码（VARCHAR）
+ * - 确保数据可以直接入库，符合数据库表结构要求
  */
 function buildConfigFromV2(parser) {
   const template = parser.getTemplate()
@@ -842,53 +893,173 @@ function buildConfigFromV2(parser) {
   const leafCols = parser.getLeafColumns()
 
   console.log('[ReportFill] 行数:', flatRows.length, '列数:', leafCols.length)
+  console.log('[ReportFill] flatRows数据:', flatRows.slice(0, 3))
+  console.log('[ReportFill] leafCols数据:', leafCols.slice(0, 3))
+  console.log('[ReportFill] columnTree数据:', template.columnTree)
 
-  // 构建行数据
-  const rows = flatRows.map((row, ri) => ({
-    id: row.id,
-    name: row.name,
-    depth: row.level || 0,
-    isSummary: !!row.isSummary,
-    summaryType: row.summaryType || '',
-    values: leafCols.map((col, ci) => {
-      const cell = parser.getCell(ri, ci)
+  // ✅ 辅助函数：生成业务编码（如果接口没有返回code）
+  function generateBusinessCode(strId, name) {
+    // 示例：将 "r_raw" 转换为 "RAW"，"m_raw_coal" 转换为 "RAW_COAL"
+    // 移除前缀（r_, m_, c_, ytd_, yoy_）
+    let code = strId.replace(/^(r_|m_|c_|ytd_|yoy_|col_)/, '').toUpperCase()
+    
+    // 如果编码为空或太短，使用名称生成
+    if (code.length < 2) {
+      // 从中文名称生成拼音编码（简化版）
+      const nameMap = {
+        '原煤': 'RAW_COAL',
+        '商品煤': 'COMMODITY_COAL',
+        '自用量': 'SELF_USE',
+        '库存量': 'INVENTORY',
+        '合计': 'TOTAL',
+        '小计': 'SUBTOTAL',
+        '本月': 'MONTH',
+        '本月止累计': 'YTD',
+        '同比': 'YOY',
+        '环比': 'MOM'
+      }
+      code = nameMap[name] || name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '').toUpperCase() || strId.toUpperCase()
+    }
+    
+    return code
+  }
+
+  // ✅ 构建行数据（直接使用接口返回的真实业务ID）
+  const rows = flatRows.map((row, ri) => {
+    // ✅ 直接使用接口返回的真实业务ID（BIGINT）
+    const businessId = row.id  // ✅ 使用接口返回的真实ID
+    
+    // ✅ 如果接口返回了 code，直接使用；否则生成业务编码
+    const businessCode = row.code || generateBusinessCode(row.id, row.name)
+    
+    console.log(`[buildConfigFromV2] 行 ${ri}: 接口ID=${row.id}, 使用ID=${businessId}, Code=${businessCode}`)
+    
+    return {
+      id: businessId,              // ✅ BIGINT - 真实业务ID（来自接口）
+      code: businessCode,          // ✅ VARCHAR - 业务编码
+      name: row.name,
+      depth: row.level || 0,
+      isSummary: !!row.isSummary,
+      summaryType: row.summaryType || '',
+      values: leafCols.map((col, ci) => {
+        const cell = parser.getCell(ri, ci)
+        return {
+          v: '',
+          raw: '',
+          readOnly: cell?.readOnly || false,
+          colIdx: ci,
+          colTitle: col.title || col.name || '',
+          formula: cell?.formula || null,
+          f: cell?.f || null
+        }
+      })
+    }
+  })
+
+  // ✅ 构建列数据（直接使用接口返回的真实业务ID）
+  const columns = [
+    { id: 0, code: 'INDEX', title: '#', width: 50, type: 'index', fixed: true },
+    { id: 1, code: 'METRIC', title: '指标', width: 150, type: 'metric', fixed: true },
+    ...leafCols.map((col, ci) => {
+      // ✅ 直接使用接口返回的真实业务ID（BIGINT）
+      const businessId = col.id  // ✅ 使用接口返回的真实ID
+      
+      // ✅ 如果接口返回了 code，直接使用；否则生成业务编码
+      const businessCode = col.code || generateBusinessCode(col.id, col.title || col.name)
+      
+      console.log(`[buildConfigFromV2] 列 ${ci}: 接口ID=${col.id}, 使用ID=${businessId}, Code=${businessCode}`)
+      
       return {
-        v: '',
-        raw: '',
-        readOnly: cell?.readOnly || false,
-        colIdx: ci,
-        colTitle: col.title || col.name || '',
-        formula: cell?.formula || null,
-        f: cell?.f || null
+        id: businessId,             // ✅ BIGINT - 真实业务ID（来自接口）
+        code: businessCode,         // ✅ VARCHAR - 业务编码
+        title: col.title || col.name || '',
+        width: col.width || 100,
+        type: col.type || 'data',
+        format: col.format || 'number',
+        align: col.align || 'right'
       }
     })
-  }))
-
-  // 构建列数据（兼容 V1 格式）
-  const columns = [
-    { id: '_index', title: '#', width: 50, type: 'index', fixed: true },
-    { id: '_metric', title: '指标', width: 150, type: 'metric', fixed: true },
-    ...leafCols.map(col => ({
-      id: col.id || '',
-      title: col.title || col.name || '',
-      width: col.width || 100,
-      type: col.type || 'data',
-      format: col.format || 'number',
-      align: col.align || 'right'
-    }))
   ]
 
   // 构建 cellData（表头 + 数据单元格）
   const cellData = {}
   const frozenRows = template.layout?.frozenRows || 4
 
-  // 填充表头行（前 frozenRows 行）
-  for (let r = 0; r < Math.min(frozenRows, leafCols.length); r++) {
-    for (let c = 2; c < columns.length; c++) {
-      if (r === 0 && leafCols[c - 2]) {
-        cellData[`${r}-${c}`] = { v: leafCols[c - 2].title || '', headerLevel: 1 }
+  // ✅ 辅助函数定义
+  // 获取树的最大层级
+  function getMaxLevel(tree) {
+    let max = 0
+    const walk = (nodes, level) => {
+      for (const node of nodes) {
+        if (level > max) max = level
+        if (node.children?.length) walk(node.children, level + 1)
       }
     }
+    walk(tree, 0)
+    return max
+  }
+
+  // 获取指定层级的所有节点
+  function getNodesAtLevel(tree, targetLevel) {
+    const result = []
+    const walk = (nodes, currentLevel) => {
+      for (const node of nodes) {
+        if (currentLevel === targetLevel) {
+          result.push(node)
+        } else if (node.children?.length && currentLevel < targetLevel) {
+          walk(node.children, currentLevel + 1)
+        }
+      }
+    }
+    walk(tree, 0)
+    return result
+  }
+
+  // 计算节点的叶子节点数量
+  function countLeafNodes(node) {
+    if (!node.children?.length) return 1
+    let count = 0
+    for (const child of node.children) {
+      count += countLeafNodes(child)
+    }
+    return count
+  }
+
+  // ✅ 正确填充多级表头（基于列树层级结构）
+  const maxHeaderLevel = template.columnTree ? getMaxLevel(template.columnTree) : 1
+
+  // 构建每一层的表头单元格
+  for (let level = 0; level < Math.min(frozenRows, maxHeaderLevel + 1); level++) {
+    const levelCells = getNodesAtLevel(template.columnTree || [], level)
+    let colOffset = 2 // 从第3列开始（跳过 # 和 指标列）
+
+    levelCells.forEach((node, ni) => {
+      // 计算该节点的列跨度（叶子节点数量）
+      const leafCount = countLeafNodes(node)
+      const colSpan = leafCount || 1
+
+      // ✅ 填充起始位置的表头单元格
+      cellData[`${level}-${colOffset}`] = {
+        v: node.title || node.name || '',
+        headerLevel: level + 1,
+        colSpan: colSpan,
+        rowSpan: 1,
+        isHeaderStart: true  // 标记为合并单元格的起始位置
+      }
+
+      // ✅ 填充合并范围内的其他列（标记为被合并，不显示文本）
+      for (let i = 1; i < colSpan; i++) {
+        cellData[`${level}-${colOffset + i}`] = {
+          v: '',  // 空文本
+          headerLevel: level + 1,
+          colSpan: 0,  // 0 表示被合并
+          rowSpan: 1,
+          isHeaderMerged: true  // 标记为被合并的单元格
+        }
+      }
+
+      colOffset += colSpan
+    })
   }
 
   // 填充数据行
@@ -929,7 +1100,6 @@ function buildConfigFromV2(parser) {
     conditionalFormats: template.conditionalFormats || []
   }
 }
-
 function parseAndRender(tpl) {
   try {
     config.value = new TemplateParser(tpl).parse()
@@ -939,11 +1109,51 @@ function parseAndRender(tpl) {
     throw new Error(`模板解析错误: ${parseErr.message}\n堆栈: ${parseErr.stack}`)
   }
   formulaEngine = new FormulaEngine(config.value.cellData)
-  aggregateEngine = new AggregateEngine(tpl, config.value.cellData)
+  aggregateEngine = new AggregateEngine({ template: tpl, cellData: config.value.cellData })
+  
+  const formulas = buildFormulaConfigs(tpl)
+  formulaEngine.setFormulas(formulas)
+  
+  if (tpl.aggregates && Array.isArray(tpl.aggregates)) {
+    aggregateEngine.setAggregates(tpl.aggregates)
+  }
+  
   formulaEngine.calculateAll()
   aggregateEngine.calculateAll()
   restoreTreeState()
   measureVP()
+}
+
+function buildFormulaConfigs(tpl) {
+  const configs = []
+  
+  if (tpl.formulas && Array.isArray(tpl.formulas)) {
+    tpl.formulas.forEach((f, idx) => {
+      configs.push({
+        id: f.id || `formula_${idx}`,
+        expression: f.expression || f.rawExpression || '',
+        targetCell: f.targetCell || '',
+        fieldName: f.fieldName || '',
+        dependencies: f.dependencies || []
+      })
+    })
+  }
+  
+  if (tpl.metrics && Array.isArray(tpl.metrics)) {
+    tpl.metrics.forEach((m, idx) => {
+      if (m.expression) {
+        configs.push({
+          id: m.id || `metric_${idx}`,
+          expression: m.expression,
+          targetCell: m.targetCell || '',
+          fieldName: m.fieldName || m.name || '',
+          dependencies: m.dependencies || []
+        })
+      }
+    })
+  }
+  
+  return configs
 }
 
 function initEngines(tpl) {
@@ -1494,21 +1704,72 @@ function onGlobalKeydown(event) {
 // ========================================
 
 /**
- * 更新 store 中的保存数据（在数据变更时调用）
+ * ✅ 更新 store 中的保存数据（在数据变更时调用）
+ * 
+ * 改造要点：
+ * - 传递真实的行/列配置（带业务ID）
+ * - 不再使用 r_0、c_2 等临时坐标
+ * - 生成标准 CellDataDTO，符合数据库表结构要求
+ * 
+ * ⚠️ 重要：buildConfigFromV2 返回的是 columnData，而不是 columns
  */
 function updateSaveData() {
   if (!config.value) return
   
-  store.setSaveData({
+  console.log('[UpdateSaveData] ========== 更新保存数据 ==========')
+  console.log('[UpdateSaveData] config.value:', config.value)
+  console.log('[UpdateSaveData] config.value.columnData:', config.value.columnData)
+  console.log('[UpdateSaveData] config.value.rows:', config.value.rows)
+  
+  console.log('[UpdateSaveData] 数据统计:', {
     templateId: props.templateId,
-    orgId: selectedOrgId.value,           // ✅ 组织ID
-    period: selectedPeriod.value,          // ✅ 填报周期
+    orgId: selectedOrgId.value,
+    period: selectedPeriod.value,
+    rowsCount: (config.value.rows || []).length,
+    columnsCount: (config.value.columnData || []).length,  // ✅ 使用 columnData
+    cellDataCount: Object.keys(config.value.cellData || {}).length
+  })
+  
+  // ✅ 直接使用 config.value.rows 和 config.value.columnData（已包含真实业务ID）
+  const rowsWithBusinessId = config.value.rows || []
+  const columnsWithBusinessId = config.value.columnData || []  // ✅ 使用 columnData
+  
+  console.log('[UpdateSaveData] 行配置示例（前3行）:', rowsWithBusinessId.slice(0, 3))
+  console.log('[UpdateSaveData] 列配置示例（前5列）:', columnsWithBusinessId.slice(0, 5))
+  
+  // ✅ 检查列配置是否包含真实业务ID
+  if (columnsWithBusinessId.length > 0) {
+    console.log('[UpdateSaveData] ✅ 列配置包含真实业务ID:')
+    columnsWithBusinessId.slice(2, 5).forEach((col, idx) => {
+      console.log(`  列 ${idx + 2}: id=${col.id}, code=${col.code}, title=${col.title}`)
+    })
+  } else {
+    console.warn('[UpdateSaveData] ⚠️ 列配置为空，请检查 buildConfigFromV2 方法')
+  }
+  
+  // ✅ 更新 store 保存数据
+  store.setSaveData({
+    templateId: props.templateId,           // ✅ 模板ID（BIGINT）
+    orgId: selectedOrgId.value,             // ✅ 组织ID（BIGINT）
+    period: selectedPeriod.value,           // ✅ 填报周期（VARCHAR）
     templateCode: v2TemplateCode.value,
     templateName: currentTemplate.value?.name || '',
-    rows: config.value.rows || [],
+    
+    // ✅ 传递真实的行/列配置（带业务ID）
+    rows: rowsWithBusinessId,
+    columns: columnsWithBusinessId,         // ✅ 使用 columnData
+    
+    // ✅ 单元格数据（VTable坐标 → 将在 buildCellDataDTO 中转换为业务ID）
     cellData: config.value.cellData || {},
-    formulas: savedFormulas
+    
+    // ✅ 其他数据
+    formulas: savedFormulas,
+    frozenRowCount: config.value.frozenRowCount || 4,
+    remark: ''
   })
+  
+  console.log('[UpdateSaveData] ========== 已更新保存数据 ==========')
+  console.log('[UpdateSaveData] ✅ 包含真实业务ID')
 }
 
 /**
@@ -1634,6 +1895,89 @@ function backfillCellsToTable(cells) {
   dataVersion.value++
   
   console.log(`[Backfill] 已回填 ${cells.length} 个单元格`)
+}
+
+/**
+ * ✅ 将API返回的 cellData 填充到表格中
+ * 处理 key 格式: "rowId:colId" → 实际行列坐标
+ * 
+ * @param {Object} apiCellData - API返回的 cellData 对象，如 { "r_mqrrbbp0_1:c_mqrrbi04_1": "677.000000" }
+ */
+function populateCellDataFromApi(apiCellData) {
+  if (!config.value || !apiCellData || typeof apiCellData !== 'object') return
+
+  const frozenRows = config.value.frozenRowCount || 4
+  const rows = config.value.rows || []
+  const columns = config.value.columnData || []
+
+  // 构建 rowId → rowIndex 映射
+  const rowIdToIndex = {}
+  rows.forEach((row, idx) => {
+    if (row && row.id) rowIdToIndex[row.id] = idx
+  })
+
+  // 构建 colId → colIndex 映射
+  const colIdToIndex = {}
+  columns.forEach((col, idx) => {
+    if (col && col.id) colIdToIndex[col.id] = idx
+  })
+
+  let filledCount = 0
+  const cellDataKeys = Object.keys(apiCellData)
+
+  for (const key of cellDataKeys) {
+    const rawValue = apiCellData[key]
+    if (rawValue === undefined || rawValue === null) continue
+
+    // 解析 key 格式: "rowId:colId"
+    const colonIdx = key.indexOf(':')
+    if (colonIdx === -1) continue
+
+    const rowId = key.substring(0, colonIdx)
+    const colId = key.substring(colonIdx + 1)
+
+    const rowIdx = rowIdToIndex[rowId]
+    const colIdx = colIdToIndex[colId]
+
+    if (rowIdx === undefined || colIdx === undefined) {
+      console.warn(`[PopulateCellData] 未找到匹配的行/列: rowId=${rowId}, colId=${colId}`)
+      continue
+    }
+
+    const actualRow = frozenRows + rowIdx
+    const actualCol = colIdx  // 列索引已包含 # 和 指标列
+
+    // 格式化显示值：数值类型去掉尾部多余的零
+    let displayValue = rawValue
+    const numVal = Number(rawValue)
+    if (!isNaN(numVal) && String(rawValue).indexOf('.') !== -1) {
+      displayValue = String(numVal)
+    }
+
+    const cellKey = `${actualRow}-${actualCol}`
+
+    // 更新 config.cellData
+    config.value.cellData[cellKey] = {
+      v: displayValue,
+      raw: rawValue,
+      readOnly: false,
+      f: null
+    }
+
+    // 同步更新 config.rows[rowIdx].values
+    const valueColIdx = colIdx - 2  // 转换为 values 数组索引（跳过 # 和 指标列）
+    if (valueColIdx >= 0 && rows[rowIdx]?.values?.[valueColIdx]) {
+      rows[rowIdx].values[valueColIdx].v = displayValue
+      rows[rowIdx].values[valueColIdx].raw = rawValue
+    }
+
+    filledCount++
+  }
+
+  // 触发响应式更新
+  dataVersion.value++
+
+  console.log(`[PopulateCellData] 从API cellData 填充 ${filledCount} 个单元格（共 ${cellDataKeys.length} 个键）`)
 }
 
 // ========================================
@@ -2023,9 +2367,13 @@ function showSaveStatus(text, type) {
 // 【六】公式引擎
 // ========================================
 function recalcFormulas() {
-  if (!formulaEngine) return
-  formulaEngine.invalidateCache()
-  formulaEngine.calculateAll()
+  if (formulaEngine) {
+    formulaEngine.invalidateCache()
+    formulaEngine.calculateAll()
+  }
+  if (aggregateEngine) {
+    aggregateEngine.calculateAll()
+  }
 }
 
 // ========================================
@@ -2351,6 +2699,30 @@ $anomaly-bg: #FEF2F2; $anomaly-border: #FECACA;
     border-color: $accent;
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
   }
+}
+
+/* ✅ 只读字段样式 */
+.fr-readonly-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  border: 1px solid #e4e7ed;
+}
+
+.fr-readonly-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #606266;
+  margin-right: 4px;
+}
+
+.fr-readonly-value {
+  font-size: 13px;
+  color: #303133;
+  font-weight: 500;
 }
 
 /* 单元格内联 fx 按钮 */

@@ -63,6 +63,31 @@
               @click="filterStatus = s.value"
             >{{ s.label }}</button>
           </div>
+          
+          <!-- ✅ 组织选择器 -->
+          <div class="tc-filter-group">
+            <span class="tc-filter-label">组织：</span>
+            <select 
+              class="tc-select" 
+              v-model="selectedOrgId" 
+              :disabled="store.orgLoading"
+              @change="onOrgChange"
+            >
+              <option value="">{{ store.orgLoading ? '加载中...' : '请选择组织' }}</option>
+              <option v-for="org in flatOrgList" :key="org.id" :value="org.id">
+                {{ org.name }}
+              </option>
+            </select>
+          </div>
+          
+          <!-- ✅ 周期选择器 -->
+          <div class="tc-filter-group">
+            <span class="tc-filter-label">周期：</span>
+            <select class="tc-select" v-model="selectedPeriod" @change="onPeriodChange">
+              <option value="">请选择周期</option>
+              <option v-for="p in periodList" :key="p.value" :value="p.value">{{ p.label }}</option>
+            </select>
+          </div>
         </div>
         <div class="template-grid">
           <!-- 新建报表入口 -->
@@ -82,9 +107,9 @@
             :class="{ 'tc-published-api': tpl._isPublishedApi }"
           >
             <!-- 卡片主体可点击进入 -->
-            <router-link
-              :to="tpl._isPublishedApi ? `/report/CUSTOM-${tpl.code || tpl.id}` : `/report/${tpl.id}`"
+            <div
               class="tc-card-body"
+              @click="handleTemplateClick(tpl)"
             >
               <span class="tc-icon" v-if="tpl._isPublishedApi">📊</span>
               <span class="tc-icon" v-else>{{ tpl.icon }}</span>
@@ -112,22 +137,22 @@
                   {{ tpl.useCount }}次
                 </span>
               </div>
-            </router-link>
+            </div>
 
             <!-- ⭐ 操作按钮区 -->
             <div class="tc-card-footer">
-              <router-link
-                :to="`/report/${tpl.id}`"
+              <button
                 class="tc-btn-primary"
+                @click="handleTemplateClick(tpl)"
               >
                 {{ tpl.templateType === 1 ? '查看报表' : '进入填报' }}
-              </router-link>
+              </button>
               <div class="tc-more-dropdown" @click.stop>
                 <button class="tc-btn-more" @click="toggleMoreMenu(tpl.id)">
                   更多 <span class="tc-more-arrow">▼</span>
                 </button>
                 <div v-if="openMoreId === tpl.id" class="tc-dropdown-menu">
-                  <button v-permission="'template:edit'" @click="editTemplate(tpl)">
+                  <button  @click="editTemplate(tpl)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     编辑
                   </button>
@@ -187,21 +212,13 @@
             <p class="org-empty-hint">请检查接口 /org/tree 是否正常</p>
           </div>
 
-          <!-- 组织列表 -->
-          <div
-            v-for="sub in store.subsidiaries"
-            :key="sub.id"
-            :class="['subsidiary-item', { active: sub.id === store.currentSubsidiaryId }]"
-            @click="store.selectSubsidiary(sub.id)"
-          >
-            <span class="sub-name">{{ sub.name }}</span>
-            <span 
-              :class="['sub-status', `status-badge--${sub.status}`]"
-              style="font-size:10px;padding:1px 6px;"
-            >
-              {{ getStatusLabel(sub.status) }}
-            </span>
-          </div>
+          <!-- 组织树形列表 -->
+          <OrgTree 
+            :tree-data="store.orgTree"
+            :selected-id="store.currentSubsidiaryId"
+            :loading="store.orgLoading"
+            @select="handleOrgSelect"
+          />
         </aside>
       </Transition>
     </main>
@@ -216,8 +233,9 @@ import { useReportStore } from '@/stores/reportStore.js'
 import ReportHeader from '@/components/ReportHeader.vue'
 import Toolbar from '@/components/Toolbar.vue'
 import UniverReport from '@/components/UniverReport.vue'
+import OrgTree from '@/components/OrgTree.vue'
 import { getTemplateList as getMockTemplates } from '@/mock/templates.js'
-import { getTemplateList } from '@/api/reportDesigner.js'
+import { getTemplateList, deleteTemplate } from '@/api/reportDesigner.js'
 
 const store = useReportStore()
 const router = useRouter()
@@ -245,6 +263,65 @@ const filterStatus = ref('')  // ''-全部, draft-草稿, published-已发布, d
 
 // ⭐ 更多菜单
 const openMoreId = ref(null)
+
+// ✅ 组织和周期选择器
+const selectedOrgId = ref('')
+const selectedPeriod = ref('')
+
+// ✅ 扁平化的组织列表（用于下拉选择）
+const flatOrgList = computed(() => {
+  return flattenOrgTree(store.orgTree)
+})
+
+// ✅ 周期列表（动态生成最近12个月+4个季度）
+const periodList = computed(() => {
+  const periods = []
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  
+  // 添加月度周期（最近6个月）
+  for (let i = 0; i < 6; i++) {
+    const m = month - i
+    const y = year - Math.ceil((i + 1 - month) / 12)
+    const actualMonth = ((m - 1) % 12 + 12) % 12 + 1
+    const actualYear = m <= 0 ? year - 1 : year
+    periods.push({
+      value: `${actualYear}${String(actualMonth).padStart(2, '0')}`,
+      label: `${actualYear}年${actualMonth}月`
+    })
+  }
+  
+  // 添加季度周期（最近4个季度）
+  const currentQ = Math.ceil(month / 3)
+  for (let i = 0; i < 4; i++) {
+    const q = currentQ - i
+    if (q > 0) {
+      periods.push({ value: `${year}Q${q}`, label: `${year}年第${q}季度` })
+    } else {
+      periods.push({ value: `${year-1}Q${q+4}`, label: `${year-1}年第${q+4}季度` })
+    }
+  }
+  
+  return periods
+})
+
+// ✅ 扁平化组织树（用于下拉选择）
+function flattenOrgTree(tree, level = 0) {
+  const result = []
+  for (const node of tree) {
+    result.push({
+      id: node.id,
+      name: `${'　'.repeat(level)}${node.name}`,
+      code: node.code,
+      orgType: node.orgType
+    })
+    if (node.children && node.children.length > 0) {
+      result.push(...flattenOrgTree(node.children, level + 1))
+    }
+  }
+  return result
+}
 
 // 监听筛选变化，重新请求 API
 watch([filterType, filterStatus], () => {
@@ -309,6 +386,19 @@ async function loadApiTemplates() {
       templates = res.data.records ||  []
     } 
     console.log(`[loadApiTemplates] 解析到 ${templates.length} 个模板`)
+    
+    // ✅ 调试：打印第一个模板的原始数据
+    if (templates.length > 0) {
+      console.log('[loadApiTemplates] 第一个模板原始数据:', templates[0])
+      console.log('[loadApiTemplates] 字段检查:', {
+        orgId: templates[0].orgId,
+        orgName: templates[0].orgName,
+        organizationId: templates[0].organizationId,
+        organizationName: templates[0].organizationName,
+        org_id: templates[0].org_id,
+        org_name: templates[0].org_name
+      })
+    }
 
     // ✅ 数据转换：统一为前端标准格式
     publishedTemplates.value = templates.map(tpl => ({
@@ -325,6 +415,12 @@ async function loadApiTemplates() {
       columnTree: transformColumnTree(tpl.columnTree || []),
       metrics: tpl.metrics || [],
       layout: tpl.layout || getDefaultLayout(),
+      // ✅ 添加单位信息字段映射
+      orgId: tpl.orgId || tpl.organizationId || tpl.org_id || null,
+      orgName: tpl.orgName || tpl.organizationName || tpl.org_name || null,
+      creatorName: tpl.creatorName || tpl.creator || tpl.createByName || null,
+      createdBy: tpl.createdBy || tpl.createBy || null,
+      useCount: tpl.useCount || tpl.use_count || 0,
       _rawData: tpl,
       _isPublishedApi: true
     }))
@@ -338,8 +434,7 @@ async function loadApiTemplates() {
         const code = tpl.code || tpl.id
         if (!code) return
 
-        // 缓存多种格式（供 getV2Template 查询）
-        window.__V2_TEMPLATES[`CUSTOM-${code}`] = tpl
+        // ✅ 直接使用原始code/id缓存，不再添加 CUSTOM- 前缀
         window.__V2_TEMPLATES[code] = tpl
         if (tpl.id) window.__V2_TEMPLATES[tpl.id] = tpl
         
@@ -428,11 +523,7 @@ function toggleMoreMenu(id) {
 
 function editTemplate(tpl) {
   openMoreId.value = null
-  if (tpl._isPublishedApi) {
-    router.push(`/designer/${tpl.code || tpl.id}`)
-  } else {
-    router.push(`/designer?code=${tpl.code}`)
-  }
+    router.push(`/designer/${tpl.id}`)
 }
 
 async function publishTemplate(tpl) {
@@ -445,16 +536,77 @@ function showPermDialog(tpl) {
   ElMessage.info('权限设置功能（待实现）')
 }
 
-function confirmDelete(tpl) {
+async function confirmDelete(tpl) {
   openMoreId.value = null
-  if (confirm(`确定删除模板 "${tpl.name}" 吗？此操作不可撤销。`)) {
-    ElMessage.success('已删除（模拟）')
+  if (!confirm(`确定删除模板 "${tpl.name}" 吗？此操作不可撤销。`)) {
+    return
+  }
+
+  try {
+    if (tpl._isPublishedApi) {
+      await deleteTemplate(tpl.id)
+      publishedTemplates.value = publishedTemplates.value.filter(t => t.id !== tpl.id)
+      if (window.__V2_TEMPLATES) {
+        delete window.__V2_TEMPLATES[tpl.id]
+        delete window.__V2_TEMPLATES[tpl.code]
+      }
+    } else {
+      const saved = JSON.parse(localStorage.getItem('rpt_custom_templates') || '[]')
+      const filtered = saved.filter(t => t.id !== tpl.id && t.code !== tpl.code)
+      localStorage.setItem('rpt_custom_templates', JSON.stringify(filtered))
+      originalTemplates.value = originalTemplates.value.filter(t => t.id !== tpl.id)
+    }
+    ElMessage.success(`模板 "${tpl.name}" 已删除`)
+  } catch (err) {
+    ElMessage.error(`删除失败: ${err.message}`)
   }
 }
 
 // 更新时间
 function updateTime() {
   currentTime.value = store.getCurrentTime()
+}
+
+/**
+ * ✅ 组织选择处理
+ */
+function onOrgChange() {
+  console.log(`[Org] 已选择组织: ${selectedOrgId.value}`)
+  // 可以在这里根据组织筛选模板或其他操作
+}
+
+/**
+ * ✅ 周期选择处理
+ */
+function onPeriodChange() {
+  console.log(`[Period] 已选择周期: ${selectedPeriod.value}`)
+}
+
+/**
+ * ✅ 处理模板点击事件（跳转到填报页面）
+ */
+function handleTemplateClick(tpl) {
+  // 检查是否选择了组织和周期
+  if (!selectedOrgId.value || !selectedPeriod.value) {
+    ElMessage.warning('请先选择组织和周期')
+    return
+  }
+  
+  // ✅ 直接使用模板ID
+  const templateId = tpl.id
+  
+  // 添加组织和周期参数
+  const route = `/report/${templateId}?orgId=${selectedOrgId.value}&period=${selectedPeriod.value}`
+  
+  // 跳转到填报页面
+  router.push(route)
+}
+
+/**
+ * ✅ 组织树选择处理
+ */
+function handleOrgSelect(orgId) {
+  store.selectSubsidiary(orgId)
 }
 
 function getStatusLabel(status) {
@@ -514,13 +666,32 @@ onMounted(async () => {
   updateTime()
   timeTimer = setInterval(updateTime, 1000)
 
-  // 加载模板数据
-  loadTemplates()
+  // ✅ 加载模板数据
+  await loadTemplates()
 
   // ✅ 从API加载组织/单位列表（替换原来的mock数据）
   await store.loadOrganizations()
 
-  // 默认选中第一个子公司
+  // ✅ 设置默认组织（优先选择第一个子公司）
+  if (flatOrgList.value.length > 0) {
+    const firstSubsidiary = flatOrgList.value.find(org => org.orgType === 2)
+    if (firstSubsidiary) {
+      selectedOrgId.value = firstSubsidiary.id
+      console.log(`[Org] ✅ 自动选中第一个子公司: ${firstSubsidiary.name}`)
+    } else {
+      selectedOrgId.value = flatOrgList.value[0].id
+      console.log(`[Org] ✅ 自动选中第一个组织: ${flatOrgList.value[0].name}`)
+    }
+  }
+
+  // ✅ 设置默认周期（当前月份）
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  selectedPeriod.value = `${year}${String(month).padStart(2, '0')}`
+  console.log(`[Period] ✅ 自动选中当前月份: ${year}年${month}月`)
+
+  // 默认选中第一个子公司（用于左侧树形面板）
   if (store.subsidiaries.length > 0) {
     store.selectSubsidiary(store.subsidiaries[0].id)
   }
@@ -585,6 +756,29 @@ function handleExportEvent() {
   &:hover { border-color: #3B82F6; color: #3B82F6; }
   &.active { background: #3B82F6; color: #fff; border-color: #3B82F6; }
 }
+
+// ✅ 组织和周期选择器样式
+.tc-select {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  background: #fff;
+  font-size: 12px;
+  color: #475569;
+  cursor: pointer;
+  transition: all .15s;
+  min-width: 150px;
+  
+  &:hover { border-color: #3B82F6; }
+  &:focus { border-color: #3B82F6; outline: none; }
+  &:disabled {
+    background: #f5f5f5;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
 .template-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -695,6 +889,7 @@ function handleExportEvent() {
   .tc-card-body {
     display: flex; flex-direction: column; flex: 1;
     text-decoration: none; color: inherit;
+    cursor: pointer;
     &:hover { color: inherit; }
   }
 

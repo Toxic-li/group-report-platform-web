@@ -1,8 +1,17 @@
 /**
  * HTTP 客户端 - 封装 fetch API
+ * ✅ 自动携带 token 认证
  */
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+
+/**
+ * ✅ 获取存储的 token
+ * 优先从 sessionStorage 读取，其次 localStorage
+ */
+function getToken() {
+  return sessionStorage.getItem('rpt_token') || localStorage.getItem('rpt_token') || ''
+}
 
 /**
  * 通用请求方法
@@ -13,9 +22,12 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 async function request(url, options = {}) {
   const fullUrl = url.startsWith('http') ? url : `${BASE_URL}${url}`
 
+  // ✅ 自动添加 token 到请求头
+  const token = getToken()
   const defaultOptions = {
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `${token}` } : {}),  // ✅ 添加 Authorization 头
       ...options.headers,
     },
     credentials: 'include', // 携带 cookie
@@ -23,6 +35,21 @@ async function request(url, options = {}) {
 
   try {
     const response = await fetch(fullUrl, { ...defaultOptions, ...options })
+
+    // ✅ 处理认证失败（401）
+    if (response.status === 401) {
+      // 清除本地认证信息
+      sessionStorage.removeItem('rpt_token')
+      sessionStorage.removeItem('rpt_user')
+      localStorage.removeItem('rpt_token')
+      
+      // 跳转到登录页（如果不在登录页）
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname)
+      }
+      
+      throw new Error('登录已过期，请重新登录')
+    }
 
     // 处理非 2xx 响应
     if (!response.ok) {

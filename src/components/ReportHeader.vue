@@ -60,7 +60,7 @@ const store = useReportStore()
 
 /** 按区域分组子公司 */
 const groupedSubsidiaries = computed(() => {
-  console.log(store.subsidiaries,'===')
+  // console.log(store.subsidiaries,'===')
   const groups = {}
   for (const sub of store.subsidiaries) {
     const region = sub.region || '其他'

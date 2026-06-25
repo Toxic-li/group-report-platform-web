@@ -1,7 +1,7 @@
 /**
  * 组织架构 API
  * 后端: OrgController
- * 代理: /api/org/* → localhost:8080/org/*
+ * 代理: /org/* → localhost:8080/org/*
  */
 import { get, post, put, del } from '@/utils/http.js'
 

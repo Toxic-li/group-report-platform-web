@@ -1,7 +1,7 @@
 /**
  * 角色管理 API
  * 后端: RoleController
- * 代理: /api/role/* → localhost:8080/role/*
+ * 代理: /role/* → localhost:8080/role/*
  */
 import { get, post, put, del } from '@/utils/http.js'
 

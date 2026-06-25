@@ -388,8 +388,8 @@ export async function getV2Template(code) {
   if (typeof window === 'undefined') return null
   const custom = window.__V2_TEMPLATES?.[code]
   
-  // 提取原始code（去掉 CUSTOM- 前缀）
-  const originalCode = code.startsWith('CUSTOM-') ? code.replace('CUSTOM-', '') : code
+  // ✅ 直接使用原始code，不再需要提取和去掉 CUSTOM- 前缀
+  const originalCode = code
   
   // ✅ 检查缓存数据是否完整（必须同时有 rowTree 和 columnTree）
   if (custom) {
@@ -426,9 +426,12 @@ export async function getV2Template(code) {
     const tpl = res?.data || res
 
     if (tpl && (tpl.id || tpl.code || tpl.name)) {
-      // 缓存到全局（同时缓存多种格式）
+      console.log('[getV2Template] tpl.columnTree:', tpl.columnTree?.length || 'null')
+      console.log('[getV2Template] tpl.rowTree:', tpl.rowTree?.length || 'null')
+      
+      // ✅ 缓存到全局（直接使用原始code/id，不再添加 CUSTOM- 前缀）
       window.__V2_TEMPLATES = window.__V2_TEMPLATES || {}
-      const cacheKey1 = `CUSTOM-${tpl.code || tpl.id}`
+      const cacheKey1 = tpl.code || tpl.id
       const cacheKey2 = tpl.code
       const cacheKey3 = tpl.id
 
@@ -445,13 +448,13 @@ export async function getV2Template(code) {
     console.warn('[getV2Template] API 模板加载失败:', err.message || err)
   }
 
-  // 4. 最后尝试 localStorage（兼容）
+  // 4. 最后查 localStorage（兼容旧数据）
   try {
     const saved = JSON.parse(localStorage.getItem('rpt_custom_templates') || '[]')
+    // ✅ 直接使用原始code查找，不再添加 CUSTOM- 前缀
     const found = saved.find(t =>
       t.code === code ||
       t.id === code ||
-      `CUSTOM-${t.code}` === code ||
       (originalCode && (t.code === originalCode || t.id === originalCode))
     )
     if (found) {

@@ -1,8 +1,8 @@
 /**
  * 认证 + 用户管理 API
  * 后端: AuthController + UserController
- * 代理: /api/auth/* → localhost:8080/auth/*
- *       /api/user/* → localhost:8080/user/*
+ * 代理:/auth/* → localhost:8080/auth/*
+ *       /user/* → localhost:8080/user/*
  */
 import { get, post, put, del } from '@/utils/http.js'
 

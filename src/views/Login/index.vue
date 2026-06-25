@@ -165,9 +165,11 @@ async function handleLogin() {
       rememberMe: form.rememberMe
     })
     
-    // 检查登录结果
-    if (result?.token || result?.success !== false) {
-      console.log('[Login] 登录成功:', result)
+    console.log('[Login] 后端返回数据:', result)
+    
+    // ✅ 检查登录结果（适配后端返回格式）
+    if (result?.success || result?.code === 200 || result?.token || result?.data?.token) {
+      console.log('[Login] 登录成功')
       
       // 存储认证信息
       storeAuthInfo(result)
@@ -187,17 +189,21 @@ async function handleLogin() {
         router.push(redirect)
       }, 500)
     } else {
+      // 登录失败
       error.value = result?.message || '登录失败，请检查用户名和密码'
+      console.error('[Login] 登录失败:', result)
     }
     
   } catch (err) {
-    console.error('[Login] 登录失败:', err)
+    console.error('[Login] 登录异常:', err)
     
     // 根据错误类型显示不同提示
     if (err.message?.includes('401') || err.message?.includes('403')) {
       error.value = '用户名或密码错误'
     } else if (err.message?.includes('network') || err.message?.includes('fetch')) {
       error.value = '网络连接失败，请检查网络设置'
+    } else if (err.message?.includes('过期')) {
+      error.value = '登录已过期，请重新登录'
     } else {
       error.value = err.message || '登录失败，请稍后重试'
     }
@@ -207,33 +213,44 @@ async function handleLogin() {
 }
 
 /**
- * ✅ 存储认证信息
+ * ✅ 存储认证信息（适配后端返回格式）
  */
 function storeAuthInfo(result) {
-  // 存储 token（根据实际返回格式调整）
-  const token = result?.token || result?.data?.token || result?.accessToken
+  // ✅ 解析后端返回数据（兼容多种格式）
+  const data = result?.data || result
+  const token = data?.token || result?.token
   
+  // ✅ 存储 token
   if (token) {
     sessionStorage.setItem('rpt_token', token)
     if (form.rememberMe) {
       localStorage.setItem('rpt_token', token)
     }
+    console.log('[Login] ✅ Token已存储:', token)
   }
   
-  // 存储用户信息
+  // ✅ 存储完整的用户信息
   const userInfo = {
-    id: result?.userId || result?.id,
-    username: result?.username || form.username.trim(),
-    name: result?.name || result?.realName || form.username.trim(),
-    avatar: result?.avatar || '',
-    roles: result?.roles || [],
-    permissions: result?.permissions || []
+    userId: data?.userId || data?.id,
+    username: data?.username || form.username.trim(),
+    realName: data?.realName || data?.name || form.username.trim(),
+    nickname: data?.nickname || data?.name,
+    avatar: data?.avatar || '',
+    orgId: data?.orgId || '',
+    orgName: data?.orgName || '',
+    roles: data?.roles || [],
+    permissions: data?.permissions || [],
+    loginTime: data?.loginTime || new Date().toISOString()
   }
   
   sessionStorage.setItem('rpt_user', JSON.stringify(userInfo))
+  sessionStorage.setItem('rpt_roles', JSON.stringify(userInfo.roles))
+  
   if (form.rememberMe) {
     localStorage.setItem('rpt_user', JSON.stringify(userInfo))
   }
+  
+  console.log('[Login] ✅ 用户信息已存储:', userInfo)
 }
 
 /**

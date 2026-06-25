@@ -4,15 +4,21 @@
  * 保存策略（双轨制）：
  * - localStorage: 立即保存，离线可用，刷新不丢失
  * - 后端API: 异步提交，持久化到服务器
+ * 
+ * ✅ 改造要点：
+ * - 使用真实业务ID（BIGINT）和编码（VARCHAR），不再使用 r_0、c_2 临时坐标
+ * - 生成标准 CellDataDTO，符合数据库表结构要求
  */
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, toRaw } from 'vue'
 import { ReportTemplate, Subsidiary, REPORT_STATUS } from '@/types/report.js'
+import { CellDataDTO, ReportDataSaveDTO } from '@/types/cellData.js'
 import {
   buildFullReportTemplate,
   generateGroupConsolidation
 } from '@/mock/dataGenerator.js'
-import { saveReportData, getOrgTree } from '@/api/reportDesigner.js'
+import { saveReportData } from '@/api/reportDesigner.js'
+import { getOrgTree } from '@/api/org.js'
 
 // localStorage key 前缀
 const DRAFT_PREFIX = 'rpt_draft_'
@@ -25,6 +31,9 @@ export const useReportStore = defineStore('report', () => {
   
   /** 所有子公司/组织列表（从API加载） */
   const subsidiaries = ref([])
+  
+  /** ✅ 组织树形数据（保持原始树结构） */
+  const orgTree = ref([])
   
   /** 组织数据加载状态 */
   const orgLoading = ref(false)
@@ -188,6 +197,9 @@ export const useReportStore = defineStore('report', () => {
         orgList = res.list
       }
       
+      // ✅ 保存原始树形数据（用于树形显示）
+      orgTree.value = transformOrgTree(orgList)
+      
       // 转换为前端标准格式（扁平化树形结构）
       const flatList = flattenOrgTree(orgList)
       
@@ -202,6 +214,7 @@ export const useReportStore = defineStore('report', () => {
       }))
       
       console.log(`[Store] ✅ 已加载 ${subsidiaries.value.length} 个组织/单位`)
+      console.log(`[Store] ✅ 树形数据: ${orgTree.value.length} 个根节点`)
       
       // 自动选中第一个
       if (subsidiaries.value.length > 0 && !currentSubsidiaryId.value) {
@@ -213,10 +226,34 @@ export const useReportStore = defineStore('report', () => {
     } catch (err) {
       console.warn('[Store] ⚠️ 组织API加载失败，使用空列表:', err.message)
       subsidiaries.value = []
+      orgTree.value = []
       return []
     } finally {
       orgLoading.value = false
     }
+  }
+
+  /**
+   * ✅ 转换组织树格式（后端 → 前端）
+   * @param {Array} tree - 树形组织数据
+   * @returns {Array} 转换后的树形数据
+   */
+  function transformOrgTree(tree) {
+    return tree.map(node => ({
+      id: String(node.id),
+      name: node.orgName || node.name || '未命名单位',
+      code: node.orgCode || node.code || '',
+      parentId: node.parentId ? String(node.parentId) : null,
+      orgType: node.orgType || 0,
+      orgTypeName: node.orgTypeName || '',
+      leader: node.leader || '',
+      phone: node.phone || '',
+      status: node.status || 1,
+      level: node.level || 0,
+      children: node.children && node.children.length > 0 
+        ? transformOrgTree(node.children) 
+        : null
+    }))
   }
 
   /**
@@ -232,7 +269,9 @@ export const useReportStore = defineStore('report', () => {
       result.push({
         ...node,
         level,
-        name: node.name || (level === 0 ? `${node.id}集团` : `${node.id}公司`)
+        // ✅ 优先使用 orgName（API返回字段），兼容 name 字段
+        name: node.orgName || node.name || (level === 0 ? `${node.id}集团` : `${node.id}公司`),
+        code: node.orgCode || node.code || ''
       })
       
       // 递归处理子节点
@@ -323,23 +362,36 @@ export const useReportStore = defineStore('report', () => {
       // 检查必填字段
       if (saveData.value.templateId && saveData.value.orgId && saveData.value.period) {
         try {
-          // ✅ 构建 ReportDataSaveDTO 格式的 payload
+          // ✅ 构建 CellDataDTO 列表（使用真实业务ID）
           const cells = buildCellDataDTO(saveData.value)
           
-          const payload = {
-            templateId: Number(saveData.value.templateId),  // Long 类型
-            orgId: Number(saveData.value.orgId),            // Long 类型
-            period: saveData.value.period,                  // String，如 202401、2024Q1
-            cells: cells,                                   // List<CellDataDTO>
+          // ✅ 创建 ReportDataSaveDTO 对象
+          const saveDTO = new ReportDataSaveDTO({
+            templateId: saveData.value.templateId,  // Long 类型
+            orgId: saveData.value.orgId,            // Long 类型
+            period: saveData.value.period,          // String，如 202401、2024Q1
+            cells: cells,                           // List<CellDataDTO>
             remark: saveData.value.remark || ''
+          })
+          
+          // ✅ 验证数据完整性
+          const validation = saveDTO.validate()
+          if (!validation.valid) {
+            console.warn('[Save] 数据验证失败:', validation.errors)
+            remoteError = validation.errors.join('; ')
+          } else {
+            // ✅ 转换为后端API格式（去除内部字段）
+            const payload = saveDTO.toAPIFormat()
+            
+            console.log('[Save] 提交数据到 /report/data/save:', payload)
+            console.log('[Save] 单元格数量:', payload.cells.length)
+            console.log('[Save] 示例单元格:', payload.cells.slice(0, 2))
+            
+            // 调用报表数据保存接口
+            await saveReportData(payload)
+            remoteSuccess = true
+            console.log(`[Save] ✅ 后端保存成功 (${Date.now() - startTime}ms)`)
           }
-          
-          console.log('[Save] 提交数据到 /report/data/save:', payload)
-          
-          // 调用报表数据保存接口
-          await saveReportData(payload)
-          remoteSuccess = true
-          console.log(`[Save] ✅ 后端保存成功 (${Date.now() - startTime}ms)`)
         } catch (err) {
           remoteError = err.message || err
           console.warn('[Save] ⚠️ 后端保存失败:', remoteError)
@@ -399,39 +451,92 @@ export const useReportStore = defineStore('report', () => {
 
   /**
    * ✅ 构建 CellDataDTO 列表（适配后端 /report/data/save 接口）
-   * 将 cellData 对象转换为 List<CellDataDTO> 数组格式
    * 
-   * @param {Object} saveData - 保存数据对象
+   * 改造要点：
+   * - 使用真实业务ID（BIGINT）和编码（VARCHAR），不再使用 r_0、c_2 临时坐标
+   * - 生成标准 CellDataDTO，符合数据库表结构要求
+   * - 从模板配置中查找真实的 rowId、rowCode、columnId、columnCode
+   * 
+   * @param {Object} data - 保存数据对象
    * @returns {Array<CellDataDTO>} 单元格数据列表
    */
   function buildCellDataDTO(data) {
+    console.log('[buildCellDataDTO] 输入数据:', data)
+
     const cells = []
-    const cellData = data.cellData || {}
-    
-    // 遍历 cellData 对象，转换为数组
-    // cellData 格式: { "4-2": { v: "100", raw: "100" }, "5-2": { v: "200", ... } }
-    for (const [key, cell] of Object.entries(cellData)) {
-      // 跳过表头行和空值单元格
-      if (!cell || !cell.v || String(cell.v).trim() === '') continue
-      
-      // 解析 key 格式: "rowIndex-colIndex"
-      const [rowIdx, colIdx] = key.split('-').map(Number)
-      
-      // 查找对应的行列信息
-      const row = (data.rows || [])[rowIdx - (data.frozenRowCount || 4)]
-      
-      cells.push({
-        rowIndex: rowIdx,      // 行索引
-        colIndex: colIdx,      // 列索引
-        rowId: row?.id || `r_${rowIdx}`,      // 行ID
-        colId: `c_${colIdx}`,                  // 列ID
-        value: String(cell.v),                 // 单元格值
-        rawValue: cell.raw || String(cell.v),  // 原始值
-        formula: cell.f || null                // 公式（如有）
-      })
+    const rows = toRaw(data?.rows || [])
+    const columns = toRaw(data?.columns || [])
+
+    // ✅ 验证数据完整性
+    if (rows.length === 0) {
+      return cells
     }
-    
-    console.log(`[CellDataDTO] 转换完成: ${cells.length} 个有效单元格`)
+
+    // ✅ 检查 columns 是否为空
+    if (columns.length === 0) {
+      return cells
+    }
+
+    // ✅ 遍历行数据
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+      const row = rows[rowIndex]
+      
+      // ✅ 验证行配置
+      if (!row || !row.id || !row.code) {
+        continue
+      }
+
+      // ✅ 遍历列数据（跳过前2列：# 和 指标列）
+      if (!row.values || !Array.isArray(row.values)) {
+        continue
+      }
+
+      for (let colIndex = 0; colIndex < row.values.length; colIndex++) {
+        const cell = row.values[colIndex]
+        
+        // ✅ 跳过空值单元格
+        if (!cell || cell.v === undefined || cell.v === null || String(cell.v).trim() === '') {
+          continue
+        }
+
+        // ✅ 根据 colIdx 从 columns 配置中查找真实的列ID和编码
+        // 注意：colIdx 是在 row.values 数组中的索引，对应 columns 数组中的位置（需要跳过前2列）
+        const actualColIndex = colIndex + 2  // 跳过 # 和 指标列
+        
+        const colConfig = columns[actualColIndex]
+        
+        console.log(`  - colConfig:`, colConfig)
+
+        // ✅ 如果找不到列配置，生成临时ID（实际应从数据库获取）
+        const columnCode = colConfig?.id || (2000 + colIndex + 1)  // ✅ 存储接口返回的id字段
+
+        console.log(`  - columnCode: ${columnCode} (${colConfig?.id ? '来自columns配置的id' : '临时生成'})`)
+        console.log(`  - value: ${cell.v}`)
+
+        // ✅ 创建 CellDataDTO 对象（使用真实业务ID）
+        const cellDTO = new CellDataDTO({
+          rowCode: row.id,              // ✅ 存储接口返回的id字段
+          columnCode: columnCode,       // ✅ 存储接口返回的id字段
+          value: String(cell.v),        // 单元格值
+          rawValue: cell.raw || String(cell.v),  // 原始值
+          formula: cell.f || cell.formula || null,  // 公式（如有）
+          dataType: cell.dataType || null,
+          source: cell.source || 1,     // 数据来源：1-手动录入
+          remark: cell.remark || ''
+        })
+
+        // ✅ 验证数据完整性
+        const validation = cellDTO.validate()
+        if (!validation.valid) {
+          console.warn(`[buildCellDataDTO] ⚠️ 单元格 (${rowIndex}, ${colIndex}) 验证失败:`, validation.errors)
+          console.warn(`[buildCellDataDTO] ⚠️ cellDTO 数据:`, cellDTO)
+          continue
+        }
+
+        cells.push(cellDTO)
+      }
+    }
+
     return cells
   }
 
@@ -545,7 +650,7 @@ export const useReportStore = defineStore('report', () => {
         console.log('[AutoSave] 15秒防抖触发，开始保存...')
         await saveDraft({ source: 'auto' })
       }
-    }, 15000) // ✅ 15秒无操作后自动保存
+    }, 8000) // ✅ 8秒无操作后自动保存
   }
 
   /**
@@ -577,6 +682,7 @@ export const useReportStore = defineStore('report', () => {
     // 状态
     currentSubsidiaryId,
     subsidiaries,
+    orgTree,           // ✅ 新增：树形组织数据
     orgLoading,
     template,
     groupTemplate,

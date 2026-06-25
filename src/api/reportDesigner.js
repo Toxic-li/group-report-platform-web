@@ -1,13 +1,13 @@
 /**
  * 报表设计器 API（模板管理）
  * 后端: ReportDesignerController
- * 代理: /api/report-designer/* → localhost:8080/report-designer/*
+ * 代理: /report-designer/* → localhost:8080/report-designer/*
  */
 import { get, post, put, del } from '@/utils/http.js'
 
 const BASE = '/report-designer'
 
-// ==================== 模板管理 ====================
+// ==================== 模板管理 ===================  =
 
 /** 加载完整模板 JSON */
 export function loadTemplate(templateId) {
@@ -47,6 +47,11 @@ export function importTemplate(data) {
 /** 预览模板 */
 export function previewTemplate(templateId, data) {
   return post(`${BASE}/template/${encodeURIComponent(templateId)}/preview`, data)
+}
+
+/** 删除模板 */
+export function deleteTemplate(templateId) {
+  return del(`${BASE}/template/${encodeURIComponent(templateId)}`)
 }
 
 /** 模板列表（分页） */

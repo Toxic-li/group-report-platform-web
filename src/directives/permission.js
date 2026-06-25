@@ -4,6 +4,7 @@
  * 支持多权限: <button v-permission="['template:edit', 'template:manage']">
  */
 import { useUserStore } from '@/stores/userStore'
+import { watch } from 'vue'
 
 export default {
   mounted(el, binding) {
@@ -12,15 +13,29 @@ export default {
 
     if (!code) return
 
-    let hasPerm = false
-    if (Array.isArray(code)) {
-      hasPerm = code.some(c => userStore.hasPermission(c))
-    } else {
-      hasPerm = userStore.hasPermission(code)
+    const checkPermission = () => {
+      let hasPerm = false
+      if (Array.isArray(code)) {
+        hasPerm = code.some(c => userStore.hasPermission(c))
+      } else {
+        hasPerm = userStore.hasPermission(code)
+      }
+
+      if (!hasPerm) {
+        el.style.display = 'none'
+      } else {
+        el.style.display = ''
+      }
     }
 
-    if (!hasPerm) {
-      el.parentNode?.removeChild(el)
-    }
+    checkPermission()
+
+    watch(
+      () => userStore.permissions,
+      () => {
+        checkPermission()
+      },
+      { deep: true }
+    )
   }
 }
