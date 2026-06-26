@@ -150,26 +150,20 @@
               <!-- 行维度 -->
               <div v-if="item.key === 'rows'" class="dgn-tree-list">
                 <div class="dgn-toolbar">
-                  <button class="dgn-tool-btn" @click.stop="addRowNode()">+ 添加</button>
+                  <button class="dgn-tool-btn" @click.stop="showAddRowNodeDialog(null)">+ 添加根节点</button>
                 </div>
                 <div class="dgn-tree">
-                  <template v-for="(node, index) in tpl.rowTree" :key="'row-'+index">
-                    <div class="dgn-tree-item" :style="{ paddingLeft: '8px' }">
-                      <span class="dgn-tree-expand" @click.stop="toggleRowExpand(index)">{{ node.expanded ? '▼' : '▶' }}</span>
-                      <span class="dgn-tree-label" @click.stop="selectRowNode(index)">{{ node.label }}</span>
-                      <span class="dgn-tree-code">{{ node.code }}</span>
-                      <button class="dgn-tree-edit" @click.stop="editRowNode(index)">✏️</button>
-                      <button class="dgn-tree-delete" @click.stop="deleteRowNode(index)">🗑️</button>
-                      <template v-if="node.children?.length">
-                        <div v-for="(child, ci) in node.children" :key="'row-'+index+'-'+ci" class="dgn-tree-item" :style="{ paddingLeft: '28px' }">
-                          <span class="dgn-tree-label">{{ child.label }}</span>
-                          <span class="dgn-tree-code">{{ child.code }}</span>
-                          <button class="dgn-tree-edit" @click.stop="editRowChild(index, ci)">✏️</button>
-                          <button class="dgn-tree-delete" @click.stop="deleteRowChild(index, ci)">🗑️</button>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
+                  <RowTreeItem 
+                    v-for="(node, index) in tpl.rowTree" 
+                    :key="'row-'+node.id"
+                    :node="node"
+                    :level="0"
+                    :path="[index]"
+                    @add-child="showAddRowNodeDialog"
+                    @edit="editRowNodeByPath"
+                    @delete="deleteRowNodeByPath"
+                    @toggle="toggleRowNodeByPath"
+                  />
                   <div v-if="tpl.rowTree.length === 0" class="dgn-empty">暂无行维度</div>
                 </div>
               </div>
@@ -177,26 +171,20 @@
               <!-- 列维度 -->
               <div v-if="item.key === 'cols'" class="dgn-tree-list">
                 <div class="dgn-toolbar">
-                  <button class="dgn-tool-btn" @click.stop="addColNode()">+ 添加</button>
+                  <button class="dgn-tool-btn" @click.stop="showAddColNodeDialog(null)">+ 添加根节点</button>
                 </div>
                 <div class="dgn-tree">
-                  <template v-for="(node, index) in tpl.columnTree" :key="'col-'+index">
-                    <div class="dgn-tree-item" :style="{ paddingLeft: '8px' }">
-                      <span class="dgn-tree-expand" @click.stop="toggleColExpand(index)">{{ node.expanded ? '▼' : '▶' }}</span>
-                      <span class="dgn-tree-label" @click.stop="selectColNode(index)">{{ node.label }}</span>
-                      <span class="dgn-tree-code">{{ node.code }}</span>
-                      <button class="dgn-tree-edit" @click.stop="editColNode(index)">✏️</button>
-                      <button class="dgn-tree-delete" @click.stop="deleteColNode(index)">🗑️</button>
-                      <template v-if="node.children?.length">
-                        <div v-for="(child, ci) in node.children" :key="'col-'+index+'-'+ci" class="dgn-tree-item" :style="{ paddingLeft: '28px' }">
-                          <span class="dgn-tree-label">{{ child.label }}</span>
-                          <span class="dgn-tree-code">{{ child.code }}</span>
-                          <button class="dgn-tree-edit" @click.stop="editColChild(index, ci)">✏️</button>
-                          <button class="dgn-tree-delete" @click.stop="deleteColChild(index, ci)">🗑️</button>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
+                  <ColTreeItem 
+                    v-for="(node, index) in tpl.columnTree" 
+                    :key="'col-'+node.id"
+                    :node="node"
+                    :level="0"
+                    :path="[index]"
+                    @add-child="showAddColNodeDialog"
+                    @edit="editColNodeByPath"
+                    @delete="deleteColNodeByPath"
+                    @toggle="toggleColNodeByPath"
+                  />
                   <div v-if="tpl.columnTree.length === 0" class="dgn-empty">暂无列维度</div>
                 </div>
               </div>
@@ -223,6 +211,7 @@
               <!-- 公式 -->
               <div v-if="item.key === 'formulas'" class="dgn-list">
                 <div class="dgn-toolbar">
+                  <span class="dgn-tool-hint">点击"+ 添加"前请先选中目标单元格</span>
                   <button class="dgn-tool-btn" @click.stop="addFormula()">+ 添加</button>
                 </div>
                 <div class="dgn-list-items">
@@ -230,12 +219,18 @@
                     <span class="dgn-list-icon">fx</span>
                     <div class="dgn-list-info">
                       <div class="dgn-list-label">{{ formula.label }}</div>
-                      <div class="dgn-list-desc">{{ formula.expression }}</div>
+                      <div class="dgn-list-desc">
+                        <span class="dgn-expr-text">{{ formula.expression }}</span>
+                        <span v-if="formula.targetCell" class="dgn-target-badge" :title="'目标单元格: ' + formula.targetCell">
+                          {{ getCellLabelByTarget(formula.targetCell) }}
+                        </span>
+                        <span v-else class="dgn-no-target-badge">未指定单元格</span>
+                      </div>
                     </div>
-                    <button class="dgn-list-edit" @click.stop="editFormula(index)">✏️</button>
-                    <button class="dgn-list-delete" @click.stop="deleteFormula(index)">🗑️</button>
+                    <button class="dgn-list-edit" @click.stop="editFormula(index)" title="编辑公式">✏️</button>
+                    <button class="dgn-list-delete" @click.stop="deleteFormula(index)" title="删除公式">🗑️</button>
                   </div>
-                  <div v-if="tpl.aggregates.length === 0" class="dgn-empty">暂无公式</div>
+                  <div v-if="tpl.aggregates.length === 0" class="dgn-empty">暂无公式，请选中单元格后点击"+ 添加"</div>
                 </div>
               </div>
 
@@ -333,15 +328,19 @@
                 <div class="dgn-panel-body">
                   <div class="dgn-field">
                     <label>模板名称</label>
-                    <span class="dgn-field-value">{{ tpl.name || '-' }}</span>
+                    <input v-model="tpl.name" class="dgn-input" placeholder="请输入模板名称" />
                   </div>
                   <div class="dgn-field">
                     <label>模板编码</label>
-                    <span class="dgn-field-value">{{ tpl.code || '-' }}</span>
+                    <input v-model="tpl.code" class="dgn-input" placeholder="请输入模板编码" />
                   </div>
                   <div class="dgn-field">
                     <label>模板类型</label>
-                    <span class="dgn-field-value">{{ ['统计报表', '填报报表', '汇总报表'][tpl.templateType - 1] || '-' }}</span>
+                    <select v-model="tpl.templateType" class="dgn-select">
+                      <option :value="1">统计报表</option>
+                      <option :value="2">填报报表</option>
+                      <option :value="3">汇总报表</option>
+                    </select>
                   </div>
                   <div class="dgn-field">
                     <label>状态</label>
@@ -353,7 +352,7 @@
                   </div>
                   <div class="dgn-field">
                     <label>描述</label>
-                    <span class="dgn-field-value">{{ tpl.description || '-' }}</span>
+                    <textarea v-model="tpl.description" class="dgn-textarea" rows="3" placeholder="请输入描述"></textarea>
                   </div>
                 </div>
               </div>
@@ -371,9 +370,13 @@
             <button class="dct-btn" :class="{ active: designMode === 'edit' }" @click="designMode = 'edit'">编辑</button>
             <button class="dct-btn" :class="{ active: designMode === 'preview' }" @click="designMode = 'preview'">预览</button>
             <span class="dct-divider"></span>
-            <button class="dct-btn" @click="addRow">+ 新增行</button>
+            <button class="dct-btn" @click="showAddRowDialog">+ 新增行</button>
             <button class="dct-btn" @click="addCol">+ 新增列</button>
-            <button class="dct-btn" @click="insertSummaryRow">+ 汇总行</button>
+            <button class="dct-btn" @click="deleteSelectedRow" :disabled="selectedCell.row === null">- 删除行</button>
+            <button class="dct-btn" @click="deleteSelectedCol" :disabled="selectedCell.col === null">- 删除列</button>
+            <span class="dct-divider"></span>
+            <button class="dct-btn" @click="mergeCells" :disabled="!canMergeCells">合并单元格</button>
+            <button class="dct-btn" @click="splitCells" :disabled="!canSplitCells">拆分单元格</button>
             <span class="dct-divider"></span>
             <button class="dct-btn" @click="freezeRows">冻结首行</button>
             <button class="dct-btn" @click="freezeCols">冻结首列</button>
@@ -382,45 +385,85 @@
           <div class="dg-spreadsheet" @contextmenu.prevent="showContextMenu($event)">
             <table class="dg-table">
               <thead>
-                <tr>
-                  <th class="dg-th dg-th-corner"></th>
-                  <th v-for="(col, ci) in columnHeaders" :key="'h'+ci" class="dg-th" :style="{ width: col.width + 'px' }">
-                    <span class="dg-col-label">{{ col.label }}</span>
-                    <span v-if="col.isFormula" class="dg-fx-badge">fx</span>
-                  </th>
-                </tr>
+                <template v-for="(headerRow, hi) in headerRows" :key="'hr'+hi">
+                  <tr>
+                    <!-- 多级列表头（行标签列标题） -->
+                    <th 
+                      v-if="hi < rowHeaderRows.length"
+                      class="dg-th dg-th-row-header"
+                      :rowspan="rowHeaderRows[hi]?.rowspan || 1"
+                    >
+                      <span class="dg-col-label">{{ rowHeaderRows[hi]?.label || '' }}</span>
+                    </th>
+                    <!-- 列维度标题 -->
+                    <th 
+                      v-for="(col, ci) in headerRow" 
+                      :key="'h'+hi+ci" 
+                      class="dg-th"
+                      :class="{ 'dg-th-group': col.isGroup }"
+                      :colspan="col.colspan"
+                      :rowspan="col.rowspan || 1"
+                      :style="col.isGroup ? {} : { width: col.width + 'px' }"
+                    >
+                      <span class="dg-col-label">{{ col.label }}</span>
+                      <span v-if="col.isFormula" class="dg-fx-badge">fx</span>
+                    </th>
+                  </tr>
+                </template>
               </thead>
               <tbody>
                 <tr v-for="(row, ri) in rows" :key="'r'+ri" :class="{ 'dg-row-summary': row.isSummary }">
-                  <td class="dg-td dg-td-row-label">
-                    <span>{{ row.label }}</span>
-                    <span v-if="row.isSummary" class="dg-summary-tag">{{ row.summaryType }}</span>
-                  </td>
                   <td 
-                    v-for="(cell, ci) in row.cells" 
-                    :key="'c'+ri+ci"
-                    :class="['dg-td', { 
-                      'dg-td-editing': editingCell.row === ri && editingCell.col === ci,
-                      'dg-td-formula': cell.isFormula,
-                      'dg-td-readonly': cell.readOnly,
-                      'dg-td-selected': selectedCell.row === ri && selectedCell.col === ci,
-                    }]"
-                    @click="selectCell(ri, ci)"
-                    @dblclick="startEdit(ri, ci)"
+                    class="dg-td dg-td-row-label"
+                    @click="toggleRowExpand(ri)"
                   >
-                    <input 
-                      v-if="editingCell.row === ri && editingCell.col === ci" 
-                      v-model="cell.value" 
-                      class="dg-cell-input"
-                      @blur="commitEdit"
-                      @keydown="onCellKeydown"
-                      autofocus
-                    />
-                    <template v-else>
-                      <span v-if="cell.isFormula" class="dg-fx-indicator">fx</span>
-                      {{ displayCellValue(cell) }}
-                    </template>
+                    <div class="dg-tree-cell" :style="{ paddingLeft: (row.level * 18 + 8) + 'px' }">
+                      <span 
+                        v-if="row.hasChildren" 
+                        class="dg-tree-toggle"
+                        :class="{ expanded: row.expanded }"
+                      >
+                        <svg v-if="!row.expanded" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polyline points="9 6 15 12 9 18"/>
+                        </svg>
+                      </span>
+                      <span v-else class="dg-tree-toggle-placeholder"></span>
+                      <span class="dg-tree-label">{{ row.label }}</span>
+                      <span v-if="row.isSummary" class="dg-summary-tag">{{ row.summaryType }}</span>
+                    </div>
                   </td>
+                  <template v-for="(cell, ci) in row.cells" :key="'c'+ri+ci">
+                    <td 
+                      v-if="!cell.skipCell"
+                      :colspan="cell.colspan || 1"
+                      :class="['dg-td', { 
+                        'dg-td-editing': editingCell.row === ri && editingCell.col === ci,
+                        'dg-td-formula': cell.isFormula,
+                        'dg-td-readonly': cell.readOnly,
+                        'dg-td-selected': selectedCell.row === ri && selectedCell.col === ci,
+                        'dg-td-merged': cell.colspan > 1,
+                        'dg-td-in-range': isInRange(ri, ci),
+                      }]"
+                      @click="selectCell(ri, ci, $event)"
+                      @dblclick="startEdit(ri, ci)"
+                    >
+                      <input 
+                        v-if="editingCell.row === ri && editingCell.col === ci" 
+                        v-model="cell.value" 
+                        class="dg-cell-input"
+                        @blur="commitEdit"
+                        @keydown="onCellKeydown"
+                        autofocus
+                      />
+                      <template v-else>
+                        <span v-if="cell.isFormula" class="dg-fx-indicator">fx</span>
+                        {{ displayCellValue(cell) }}
+                      </template>
+                    </td>
+                  </template>
                 </tr>
               </tbody>
             </table>
@@ -734,20 +777,362 @@
       </template>
     </el-dialog>
 
+    <!-- 添加行弹窗 -->
+    <el-dialog v-model="addRowDialog.visible" title="新增行" width="400px" destroy-on-close>
+      <div class="ard-form">
+        <div class="ard-field">
+          <label>行类型</label>
+          <div class="ard-type-options">
+            <button 
+              class="ard-type-btn" 
+              :class="{ active: addRowDialog.rowType === 'normal' }"
+              @click="addRowDialog.rowType = 'normal'"
+            >
+              <span class="ard-type-icon">📝</span>
+              <span class="ard-type-label">普通行</span>
+              <span class="ard-type-desc">数据录入行</span>
+            </button>
+            <button 
+              class="ard-type-btn" 
+              :class="{ active: addRowDialog.rowType === 'summary' }"
+              @click="addRowDialog.rowType = 'summary'"
+            >
+              <span class="ard-type-icon">📊</span>
+              <span class="ard-type-label">汇总行</span>
+              <span class="ard-type-desc">小计/合计等</span>
+            </button>
+          </div>
+        </div>
+        
+        <div v-if="addRowDialog.rowType === 'summary'" class="ard-field">
+          <label>汇总类型</label>
+          <div class="ard-summary-options">
+            <button 
+              v-for="opt in summaryTypeOptions" 
+              :key="opt"
+              class="ard-summary-btn"
+              :class="{ active: addRowDialog.summaryType === opt }"
+              @click="addRowDialog.summaryType = opt"
+            >
+              {{ opt }}
+            </button>
+          </div>
+        </div>
+        
+        <div v-if="addRowDialog.rowType === 'normal'" class="ard-field">
+          <label>行名称</label>
+          <input 
+            v-model="addRowDialog.rowName" 
+            class="ard-input" 
+            placeholder="请输入行名称"
+          />
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="addRowDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="confirmAddRow">确定添加</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 节点操作弹窗 -->
+    <el-dialog 
+      v-model="nodeDialog.visible" 
+      :title="nodeDialog.mode === 'add' ? '添加节点' : '编辑节点'" 
+      width="400px" 
+      destroy-on-close
+    >
+      <div class="nd-form">
+        <div class="nd-field">
+          <label>节点编码</label>
+          <input 
+            v-model="nodeDialog.code" 
+            class="nd-input" 
+            placeholder="请输入编码（如 row_001）"
+          />
+        </div>
+        
+        <div class="nd-field">
+          <label>节点名称</label>
+          <input 
+            v-model="nodeDialog.label" 
+            class="nd-input" 
+            placeholder="请输入名称"
+          />
+        </div>
+        
+        <!-- 行维度特有的汇总选项 -->
+        <div v-if="nodeDialog.type === 'row'" class="nd-field">
+          <label>节点类型</label>
+          <div class="nd-type-options">
+            <button 
+              class="nd-type-btn" 
+              :class="{ active: !nodeDialog.isSummary }"
+              @click="nodeDialog.isSummary = false"
+            >
+              <span class="nd-type-icon">📝</span>
+              <span class="nd-type-label">普通节点</span>
+            </button>
+            <button 
+              class="nd-type-btn" 
+              :class="{ active: nodeDialog.isSummary }"
+              @click="nodeDialog.isSummary = true"
+            >
+              <span class="nd-type-icon">📊</span>
+              <span class="nd-type-label">汇总节点</span>
+            </button>
+          </div>
+        </div>
+        
+        <div v-if="nodeDialog.type === 'row' && nodeDialog.isSummary" class="nd-field">
+          <label>汇总类型</label>
+          <div class="nd-summary-options">
+            <button 
+              v-for="opt in summaryTypeOptions" 
+              :key="opt"
+              class="nd-summary-btn"
+              :class="{ active: nodeDialog.summaryType === opt }"
+              @click="nodeDialog.summaryType = opt"
+            >
+              {{ opt }}
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="nodeDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="confirmNodeDialog">{{ nodeDialog.mode === 'add' ? '确定添加' : '确定修改' }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- Toast 提示 -->
     <Transition name="dg-toast">
       <div v-if="toast.visible" :class="['dg-toast', 'dg-toast-' + toast.type]">{{ toast.message }}</div>
     </Transition>
+
+    <!-- 确认对话框 -->
+    <el-dialog
+      v-model="confirmDialog.visible"
+      title="确认操作"
+      width="360px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <div class="cd-content">
+        <div class="cd-icon">
+          <span v-if="confirmDialog.type === 'danger'" class="cd-icon-danger">⚠️</span>
+          <span v-else class="cd-icon-info">💡</span>
+        </div>
+        <div class="cd-message">{{ confirmDialog.message }}</div>
+      </div>
+      <template #footer>
+        <div class="cd-footer">
+          <el-button @click="handleConfirmCancel">取消</el-button>
+          <el-button :type="confirmDialog.type === 'danger' ? 'danger' : 'primary'" @click="handleConfirmOk">
+            {{ confirmDialog.okText || '确定' }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 公式编辑器 -->
+    <FormulaEditor
+      v-if="formulaEditorDialog.visible"
+      :cell-info="formulaCellInfo"
+      :initial-value="formulaEditorDialog.expression"
+      :fields="formulaFields"
+      :row-fields="formulaRowFields"
+      :valid-field-ids="formulaValidFieldIds"
+      :template-id="tpl.id"
+      @apply="onFormulaApply"
+      @close="formulaEditorDialog.visible = false"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, defineComponent, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { loadTemplate, saveTemplate, updateTemplate, publishTemplate } from '@/api/reportDesigner.js'
+import FormulaEditor from '@/components/FormulaEditor.vue'
 
 const router = useRouter()
 const route = useRoute()
+
+// ==================== 递归树形组件 ====================
+// 行维度树形组件
+const RowTreeItem = defineComponent({
+  name: 'RowTreeItem',
+  props: {
+    node: { type: Object, required: true },
+    level: { type: Number, default: 0 },
+    path: { type: Array, default: () => [] }
+  },
+  emits: ['add-child', 'edit', 'delete', 'toggle'],
+  setup(props, { emit }) {
+    return () => {
+      const paddingLeft = 8 + props.level * 20
+      const hasChildren = props.node.children?.length > 0
+      
+      return h('div', { 
+        class: ['dgn-tree-node', { 'dgn-tree-summary': props.node.isSummary }],
+        style: { paddingLeft: `${paddingLeft}px` }
+      }, [
+        // 展开/收起图标
+        h('span', {
+          class: 'dgn-tree-expand',
+          onClick: (e) => {
+            e.stopPropagation()
+            emit('toggle', props.path)
+          }
+        }, hasChildren ? (props.node.expanded ? '▼' : '▶') : ''),
+        
+        // 节点标签
+        h('span', { class: 'dgn-tree-label' }, props.node.label),
+        
+        // 汇总类型标签
+        props.node.isSummary ? h('span', { class: 'dgn-tree-summary-tag' }, props.node.summaryType) : null,
+        
+        // 节点编码
+        h('span', { class: 'dgn-tree-code' }, props.node.code),
+        
+        // 操作按钮组
+        h('div', { class: 'dgn-tree-actions' }, [
+          // 添加子节点
+          h('button', {
+            class: 'dgn-tree-btn dgn-tree-add',
+            title: '添加子节点',
+            onClick: (e) => {
+              e.stopPropagation()
+              emit('add-child', props.path)
+            }
+          }, '+'),
+          // 编辑
+          h('button', {
+            class: 'dgn-tree-btn dgn-tree-edit',
+            title: '编辑',
+            onClick: (e) => {
+              e.stopPropagation()
+              emit('edit', props.path)
+            }
+          }, '✏️'),
+          // 删除
+          h('button', {
+            class: 'dgn-tree-btn dgn-tree-delete',
+            title: '删除',
+            onClick: (e) => {
+              e.stopPropagation()
+              emit('delete', props.path)
+            }
+          }, '🗑️')
+        ]),
+        
+        // 子节点（递归）
+        hasChildren && props.node.expanded ? 
+          h('div', { class: 'dgn-tree-children' },
+            props.node.children.map((child, idx) => 
+              h(RowTreeItem, {
+                key: child.id || `child-${idx}`,
+                node: child,
+                level: props.level + 1,
+                path: [...props.path, idx],
+                onAddChild: (p) => emit('add-child', p),
+                onEdit: (p) => emit('edit', p),
+                onDelete: (p) => emit('delete', p),
+                onToggle: (p) => emit('toggle', p)
+              })
+            )
+          ) : null
+      ])
+    }
+  }
+})
+
+// 列维度树形组件
+const ColTreeItem = defineComponent({
+  name: 'ColTreeItem',
+  props: {
+    node: { type: Object, required: true },
+    level: { type: Number, default: 0 },
+    path: { type: Array, default: () => [] }
+  },
+  emits: ['add-child', 'edit', 'delete', 'toggle'],
+  setup(props, { emit }) {
+    return () => {
+      const paddingLeft = 8 + props.level * 20
+      const hasChildren = props.node.children?.length > 0
+      
+      return h('div', { 
+        class: 'dgn-tree-node',
+        style: { paddingLeft: `${paddingLeft}px` }
+      }, [
+        // 展开/收起图标
+        h('span', {
+          class: 'dgn-tree-expand',
+          onClick: (e) => {
+            e.stopPropagation()
+            emit('toggle', props.path)
+          }
+        }, hasChildren ? (props.node.expanded ? '▼' : '▶') : ''),
+        
+        // 节点标签
+        h('span', { class: 'dgn-tree-label' }, props.node.label),
+        
+        // 节点编码
+        h('span', { class: 'dgn-tree-code' }, props.node.code),
+        
+        // 操作按钮组
+        h('div', { class: 'dgn-tree-actions' }, [
+          // 添加子节点
+          h('button', {
+            class: 'dgn-tree-btn dgn-tree-add',
+            title: '添加子节点',
+            onClick: (e) => {
+              e.stopPropagation()
+              emit('add-child', props.path)
+            }
+          }, '+'),
+          // 编辑
+          h('button', {
+            class: 'dgn-tree-btn dgn-tree-edit',
+            title: '编辑',
+            onClick: (e) => {
+              e.stopPropagation()
+              emit('edit', props.path)
+            }
+          }, '✏️'),
+          // 删除
+          h('button', {
+            class: 'dgn-tree-btn dgn-tree-delete',
+            title: '删除',
+            onClick: (e) => {
+              e.stopPropagation()
+              emit('delete', props.path)
+            }
+          }, '🗑️')
+        ]),
+        
+        // 子节点（递归）
+        hasChildren && props.node.expanded ? 
+          h('div', { class: 'dgn-tree-children' },
+            props.node.children.map((child, idx) => 
+              h(ColTreeItem, {
+                key: child.id || `child-${idx}`,
+                node: child,
+                level: props.level + 1,
+                path: [...props.path, idx],
+                onAddChild: (p) => emit('add-child', p),
+                onEdit: (p) => emit('edit', p),
+                onDelete: (p) => emit('delete', p),
+                onToggle: (p) => emit('toggle', p)
+              })
+            )
+          ) : null
+      ])
+    }
+  }
+})
 
 // ==================== 视图状态 ====================
 const isDark = ref(false)
@@ -777,7 +1162,7 @@ const tpl = reactive({
   id: '',
   name: '',
   code: '',
-  version: 2,
+  version: 1,
   templateType: 2,
   status: 'designing',
   description: '',
@@ -786,7 +1171,7 @@ const tpl = reactive({
   icon: '📊',
   layout: {
     type: 'table',
-    frozenRows: 4,
+    frozenRows: 1,
     frozenCols: 1,
     showRowNumbers: true,
     rowHeight: 32,
@@ -795,49 +1180,11 @@ const tpl = reactive({
     borderStyle: 'all',
     stripeRows: true
   },
-  rowTree: [
-    { id: 'r1', code: 'coal', label: '煤炭', expanded: true, children: [
-      { id: 'r1-1', code: 'coal_production', label: '产量' },
-      { id: 'r1-2', code: 'coal_sales', label: '销量' },
-      { id: 'r1-3', code: 'coal_stock', label: '库存' }
-    ]},
-    { id: 'r2', code: 'power', label: '电力', expanded: true, children: [
-      { id: 'r2-1', code: 'power_production', label: '产量' },
-      { id: 'r2-2', code: 'power_sales', label: '销量' }
-    ]},
-    { id: 'r3', code: 'steel', label: '钢铁', expanded: false, children: [] },
-    { id: 'r4', code: 'cement', label: '水泥', expanded: false, children: [] }
-  ],
-  columnTree: [
-    { id: 'c1', code: 'q1', label: '第一季度', expanded: true, children: [
-      { id: 'c1-1', code: 'jan', label: '1月' },
-      { id: 'c1-2', code: 'feb', label: '2月' },
-      { id: 'c1-3', code: 'mar', label: '3月' }
-    ]},
-    { id: 'c2', code: 'q2', label: '第二季度', expanded: true, children: [
-      { id: 'c2-1', code: 'apr', label: '4月' },
-      { id: 'c2-2', code: 'may', label: '5月' },
-      { id: 'c2-3', code: 'jun', label: '6月' }
-    ]},
-    { id: 'c3', code: 'total', label: '合计', expanded: false, children: [] }
-  ],
-  metrics: [
-    { id: 'm1', field: 'production', label: '产量', unit: '吨', type: 'number', decimals: 0, format: 'number' },
-    { id: 'm2', field: 'sales', label: '销量', unit: '吨', type: 'number', decimals: 0, format: 'number' },
-    { id: 'm3', field: 'stock', label: '库存', unit: '吨', type: 'number', decimals: 0, format: 'number' },
-    { id: 'm4', field: 'revenue', label: '收入', unit: '万元', type: 'currency', decimals: 2, format: 'currency' },
-    { id: 'm5', field: 'profit', label: '利润', unit: '万元', type: 'currency', decimals: 2, format: 'currency' }
-  ],
-  aggregates: [
-    { id: 'a1', label: '求和', expression: 'SUM', type: 'sum', order: 1 },
-    { id: 'a2', label: '平均值', expression: 'AVG', type: 'avg', order: 2 },
-    { id: 'a3', label: '同比增长率', expression: '(CURRENT-PREVIOUS)/PREVIOUS*100', type: 'custom', order: 3 }
-  ],
-  validators: [
-    { id: 'v1', label: '必填校验', type: 'required', expression: 'value !== ""', message: '此字段必填' },
-    { id: 'v2', label: '数值范围', type: 'range', expression: 'value >= 0 && value <= 999999', message: '数值超出范围' },
-    { id: 'v3', label: '格式校验', type: 'regex', expression: '/^\\d+(\\.\\d+)?$/', message: '格式不正确' }
-  ],
+  rowTree: [],
+  columnTree: [],
+  metrics: [],
+  aggregates: [],
+  validators: [],
   conditionalFormats: [],
   dataSource: {
     type: 'mock',
@@ -863,6 +1210,52 @@ const statusLabel = computed(() => ({
   changed: '已变更', archived: '已归档', disabled: '已停用'
 }[tpl.status] || tpl.status))
 
+// 公式编辑器字段列表
+const formulaFields = computed(() => {
+  return tpl.metrics.map(m => ({
+    id: m.id || m.code,
+    title: m.label || m.name,
+    type: m.type || 'number'
+  }))
+})
+
+const formulaRowFields = computed(() => {
+  const fields = []
+  const walk = (nodes) => {
+    for (const node of nodes || []) {
+      if (!node.isSummary) {
+        fields.push({
+          id: node.id || node.code,
+          name: node.label || node.name,
+          type: node.type || ''
+        })
+      }
+      if (node.children?.length) walk(node.children)
+    }
+  }
+  walk(tpl.rowTree)
+  return fields
+})
+
+const formulaValidFieldIds = computed(() => {
+  const ids = []
+  ids.push(...formulaFields.value.map(f => f.id))
+  ids.push(...formulaRowFields.value.map(f => f.id))
+  return ids
+})
+
+// 公式编辑器单元格信息
+const formulaCellInfo = computed(() => {
+  if (!formulaEditorDialog.targetCell) {
+    return formulaEditorDialog.mode === 'edit' ? '编辑公式' : '添加公式'
+  }
+  const { row, col } = formulaEditorDialog.targetCell
+  const cellLabel = getCellLabel(row, col)
+  const rowCode = getRowCode(row)
+  const colCode = getColCode(col)
+  return `${cellLabel} (${rowCode} / ${colCode})`
+})
+
 function countNodes(nodes) {
   let c = 0
   const walk = (list) => { for (const n of list) { c++; if (n.children?.length) walk(n.children) } }
@@ -872,20 +1265,33 @@ function countNodes(nodes) {
 
 // ==================== 表格数据 ====================
 const columnHeaders = ref([])
+const headerRows = ref([])
+const rowHeaderRows = ref([])
 const rows = ref([])
+
+function getMaxDepth(cols) {
+  let maxDepth = 1
+  for (const col of cols) {
+    if (col.children?.length) {
+      const childDepth = 1 + getMaxDepth(col.children)
+      maxDepth = Math.max(maxDepth, childDepth)
+    }
+  }
+  return maxDepth
+}
 
 function buildColumnHeaders() {
   const headers = [{ label: '指标', width: 120, isFormula: false }]
-  const flattenCols = []
+  const allLeafCols = []
   
   function walkCols(cols) {
     for (const col of cols) {
       if (col.children?.length) {
         walkCols(col.children)
       } else {
-        flattenCols.push(col)
+        allLeafCols.push(col)
         headers.push({ 
-          label: col.label || col.title || '', 
+          label: col.label || col.title || col.name || '', 
           width: col.width || 90, 
           isFormula: false 
         })
@@ -895,64 +1301,255 @@ function buildColumnHeaders() {
   
   walkCols(tpl.columnTree)
   
-  headers.push({ label: '合计', width: 90, isFormula: true })
+  if (headers.length > 1) {
+    headers.push({ label: '合计', width: 90, isFormula: true })
+  }
+  
   columnHeaders.value = headers
+}
+
+function buildMultiLevelHeaders() {
+  const maxDepth = tpl.columnTree.length ? getMaxDepth(tpl.columnTree) : 0
+  const result = []
+  
+  if (maxDepth === 0) {
+    result.push([{ label: '指标', width: 120, isFormula: false, colspan: 1 }])
+    headerRows.value = result
+    return
+  }
+  
+  for (let i = 0; i < maxDepth; i++) {
+    result.push([])
+  }
+  
+  function collectLeafCount(cols) {
+    let count = 0
+    for (const col of cols) {
+      if (col.children?.length) {
+        count += collectLeafCount(col.children)
+      } else {
+        count++
+      }
+    }
+    return count
+  }
+  
+  function buildLevel(cols, level) {
+    for (const col of cols) {
+      // 修复：正确计算 colspan，处理空数组的情况
+      const hasChildren = col.children && col.children.length > 0
+      const leafCount = hasChildren ? collectLeafCount(col.children) : 1
+      const rowspan = hasChildren ? 1 : (maxDepth - level)
+
+      result[level].push({
+        label: col.label || col.title || col.name || '',
+        width: col.width || 90,
+        isFormula: false,
+        isGroup: hasChildren,
+        colspan: leafCount,
+        rowspan: rowspan,
+        col
+      })
+
+      if (hasChildren) {
+        buildLevel(col.children, level + 1)
+      }
+    }
+  }
+  
+  buildLevel(tpl.columnTree, 0)
+  
+  headerRows.value = result
+}
+
+function buildRowHeaderRows() {
+  const maxColDepth = tpl.columnTree.length ? getMaxDepth(tpl.columnTree) : 0
+  const totalHeaderRows = Math.max(maxColDepth, 1)
+  
+  rowHeaderRows.value = [{ label: '指标', width: 120, rowspan: totalHeaderRows }]
+}
+
+function getRowHeaderLabel(level) {
+  const labels = ['指标', '一级分类', '二级分类', '三级分类', '四级分类', '五级分类']
+  return labels[level] || `第${level + 1}级`
 }
 
 function buildRows() {
   const result = []
   const colCount = columnHeaders.value.length
   
-  function walkRows(rowTree, indent = 0) {
-    for (const row of rowTree) {
+  if (colCount === 0) {
+    rows.value = []
+    return
+  }
+  
+  function walkRows(rowTree, level = 0, treePath = []) {
+    for (let idx = 0; idx < rowTree.length; idx++) {
+      const row = rowTree[idx]
       const label = row.label || row.name || ''
-      const cells = Array(colCount).fill(null).map(() => ({
-        value: '',
-        isFormula: false,
-        readOnly: false,
-        formula: ''
-      }))
+      const hasChildren = row.children?.length > 0
+      const isExpanded = row.expanded !== undefined ? row.expanded : false
+      const currentPath = [...treePath, idx]
+      
+      const cells = Array(colCount).fill(null).map((_, ci) => {
+        if (row.isSummary && ci > 0) {
+          return {
+            value: '',
+            isFormula: true,
+            readOnly: true,
+            formula: ''
+          }
+        }
+        return {
+          value: '',
+          isFormula: false,
+          readOnly: false,
+          formula: ''
+        }
+      })
       
       result.push({
-        label: ' '.repeat(indent * 2) + label,
+        label,
         isSummary: !!row.isSummary,
         summaryType: row.summaryType || '',
+        level,
+        hasChildren,
+        expanded: isExpanded,
+        treePath: currentPath,
         cells
       })
       
-      if (row.children?.length) {
-        walkRows(row.children, indent + 1)
+      if (hasChildren && isExpanded) {
+        walkRows(row.children, level + 1, currentPath)
       }
     }
   }
   
   walkRows(tpl.rowTree)
   
-  const summaryCells = Array(colCount).fill(null).map((_, ci) => ({
-    value: '',
-    isFormula: ci > 0,
-    readOnly: ci > 0,
-    formula: ci > 0 ? `=SUM(${String.fromCharCode(65 + ci)}2:${String.fromCharCode(65 + ci)}${result.length + 1})` : ''
-  }))
-  
-  result.push({
-    label: '汇总',
-    isSummary: true,
-    summaryType: '合计',
-    cells: summaryCells
-  })
-  
   rows.value = result
 }
 
 function rebuildTable() {
   buildColumnHeaders()
+  buildMultiLevelHeaders()
+  buildRowHeaderRows()
   buildRows()
 }
 
 watch(() => [tpl.rowTree, tpl.columnTree], () => {
   rebuildTable()
 }, { deep: true })
+
+// ==================== 添加行弹窗 ====================
+const addRowDialog = reactive({
+  visible: false,
+  rowType: 'normal',
+  summaryType: '小计',
+  rowName: ''
+})
+
+const summaryTypeOptions = ['小计', '合计', '汇总', '总计', '平均值']
+
+function showAddRowDialog() {
+  addRowDialog.visible = true
+  addRowDialog.rowType = 'normal'
+  addRowDialog.summaryType = '小计'
+  addRowDialog.rowName = ''
+}
+
+function confirmAddRow() {
+  saveToUndoStack()
+  
+  const isSummary = addRowDialog.rowType === 'summary'
+  const label = isSummary ? addRowDialog.summaryType : (addRowDialog.rowName || `新行${tpl.rowTree.length + 1}`)
+  
+  tpl.rowTree.push({
+    id: generateId('row'),
+    code: `row_${tpl.rowTree.length + 1}`,
+    label,
+    expanded: false,
+    children: [],
+    isSummary: isSummary,
+    summaryType: isSummary ? addRowDialog.summaryType : ''
+  })
+  
+  addRowDialog.visible = false
+  showToast('行添加成功', 'success')
+}
+
+// ==================== 合并单元格 ====================
+const selectedRange = reactive({
+  startRow: null,
+  startCol: null,
+  endRow: null,
+  endCol: null
+})
+
+const canMergeCells = computed(() => {
+  if (selectedRange.startRow === null || selectedRange.startCol === null) return false
+  if (selectedRange.endRow === null || selectedRange.endCol === null) return false
+  
+  const rowSpan = Math.abs(selectedRange.endRow - selectedRange.startRow) + 1
+  const colSpan = Math.abs(selectedRange.endCol - selectedRange.startCol) + 1
+  
+  return rowSpan > 1 || colSpan > 1
+})
+
+const canSplitCells = computed(() => {
+  if (selectedCell.row === null || selectedCell.col === null) return false
+  const row = rows.value[selectedCell.row]
+  if (!row) return false
+  const cell = row.cells[selectedCell.col]
+  if (!cell) return false
+  return cell.colspan > 1
+})
+
+function mergeCells() {
+  if (!canMergeCells.value) return
+  
+  saveToUndoStack()
+  
+  const startRow = Math.min(selectedRange.startRow, selectedRange.endRow)
+  const endRow = Math.max(selectedRange.startRow, selectedRange.endRow)
+  const startCol = Math.min(selectedRange.startCol, selectedRange.endCol)
+  const endCol = Math.max(selectedRange.startCol, selectedRange.endCol)
+  
+  const colSpan = endCol - startCol + 1
+  
+  const firstCell = rows.value[startRow].cells[startCol]
+  firstCell.colspan = colSpan
+  
+  for (let ri = startRow; ri <= endRow; ri++) {
+    for (let ci = startCol; ci <= endCol; ci++) {
+      if (ri === startRow && ci === startCol) continue
+      
+      rows.value[ri].cells[ci].skipCell = true
+      rows.value[ri].cells[ci].colspan = 0
+    }
+  }
+  
+  showToast('单元格合并成功', 'success')
+}
+
+function splitCells() {
+  if (!canSplitCells.value) return
+  
+  saveToUndoStack()
+  
+  const cell = rows.value[selectedCell.row].cells[selectedCell.col]
+  const colspan = cell.colspan
+  
+  cell.colspan = 1
+  cell.skipCell = false
+  
+  for (let ci = selectedCell.col + 1; ci < selectedCell.col + colspan; ci++) {
+    rows.value[selectedCell.row].cells[ci].skipCell = false
+    rows.value[selectedCell.row].cells[ci].colspan = 1
+  }
+  
+  showToast('单元格拆分成功', 'success')
+}
 
 // ==================== 编辑状态 ====================
 const selectedCell = reactive({ row: null, col: null })
@@ -1007,6 +1604,39 @@ const contextMenu = reactive({ visible: false, x: 0, y: 0 })
 // ==================== Toast ====================
 const toast = reactive({ visible: false, message: '', type: 'success' })
 
+// ==================== 确认对话框 ====================
+const confirmDialog = reactive({
+  visible: false,
+  message: '',
+  type: 'info', // info 或 danger
+  okText: '确定',
+  onOk: null,
+  onCancel: null
+})
+
+function showConfirmDialog(message, options = {}) {
+  confirmDialog.visible = true
+  confirmDialog.message = message
+  confirmDialog.type = options.type || 'info'
+  confirmDialog.okText = options.okText || '确定'
+  confirmDialog.onOk = options.onOk || null
+  confirmDialog.onCancel = options.onCancel || null
+}
+
+function handleConfirmOk() {
+  confirmDialog.visible = false
+  if (confirmDialog.onOk) {
+    confirmDialog.onOk()
+  }
+}
+
+function handleConfirmCancel() {
+  confirmDialog.visible = false
+  if (confirmDialog.onCancel) {
+    confirmDialog.onCancel()
+  }
+}
+
 // ==================== 资源面板操作 ====================
 function toggleNav(key) {
   activeNav.value = key
@@ -1018,69 +1648,275 @@ function toggleNav(key) {
 }
 
 // 行维度操作
-function toggleRowExpand(index) {
-  tpl.rowTree[index].expanded = !tpl.rowTree[index].expanded
-}
-
 function selectRowNode(index) {
   const node = tpl.rowTree[index]
   showToast(`选中行维度: ${node.label}`, 'success')
 }
 
-function addRowNode() {
+// ==================== 节点操作弹窗 ====================
+const nodeDialog = reactive({
+  visible: false,
+  type: 'row', // row 或 col
+  mode: 'add', // add 或 edit
+  path: null, // 节点路径数组
+  node: null, // 当前节点数据
+  code: '',
+  label: '',
+  isSummary: false,
+  summaryType: '小计'
+})
+
+// 公式编辑器状态
+const formulaEditorDialog = reactive({
+  visible: false,
+  mode: 'add', // add 或 edit
+  index: null, // 编辑时的索引
+  formulaId: '',
+  formulaName: '',
+  formulaLabel: '',
+  expression: '',
+  resultType: 'number',
+  targetCell: null // 目标单元格位置 { row, col }
+})
+
+function getNodeByPath(tree, path) {
+  if (!path || path.length === 0) return null
+  let node = tree[path[0]]
+  for (let i = 1; i < path.length; i++) {
+    if (!node?.children) return null
+    node = node.children[path[i]]
+  }
+  return node
+}
+
+function getParentByPath(tree, path) {
+  if (!path || path.length === 0) return null
+  if (path.length === 1) return { tree, index: path[0] }
+  let node = tree[path[0]]
+  for (let i = 1; i < path.length - 1; i++) {
+    if (!node?.children) return null
+    node = node.children[path[i]]
+  }
+  return { parent: node, index: path[path.length - 1] }
+}
+
+function showAddRowNodeDialog(path) {
+  // 计算默认编码
+  let defaultCode = ''
+  if (path === null) {
+    // 添加根节点
+    defaultCode = `R${tpl.rowTree.length + 1}`
+  } else {
+    // 添加子节点
+    const parent = getNodeByPath(tpl.rowTree, path)
+    const childCount = parent?.children?.length || 0
+    const parentPath = path.join('_')
+    defaultCode = `R${parentPath}_${childCount + 1}`
+  }
+
+  nodeDialog.type = 'row'
+  nodeDialog.mode = 'add'
+  nodeDialog.path = path ? [...path] : null  // 复制数组，避免引用问题
+  nodeDialog.node = null
+  nodeDialog.code = defaultCode
+  nodeDialog.label = ''
+  nodeDialog.isSummary = false
+  nodeDialog.summaryType = '小计'
+  nodeDialog.visible = true
+}
+
+function showAddColNodeDialog(path) {
+  // 计算默认编码
+  let defaultCode = ''
+  if (path === null) {
+    // 添加根节点
+    defaultCode = `C${tpl.columnTree.length + 1}`
+  } else {
+    // 添加子节点
+    const parent = getNodeByPath(tpl.columnTree, path)
+    const childCount = parent?.children?.length || 0
+    const parentPath = path.join('_')
+    defaultCode = `C${parentPath}_${childCount + 1}`
+  }
+
+  nodeDialog.type = 'col'
+  nodeDialog.mode = 'add'
+  nodeDialog.path = path ? [...path] : null  // 复制数组，避免引用问题
+  nodeDialog.node = null
+  nodeDialog.code = defaultCode
+  nodeDialog.label = ''
+  nodeDialog.isSummary = false
+  nodeDialog.summaryType = '小计'
+  nodeDialog.visible = true
+}
+
+function showEditRowNodeDialog(path) {
+  const node = getNodeByPath(tpl.rowTree, path)
+  if (!node) return
+  nodeDialog.type = 'row'
+  nodeDialog.mode = 'edit'
+  nodeDialog.path = path ? [...path] : null  // 复制数组，避免引用问题
+  nodeDialog.node = node
+  nodeDialog.code = node.code || ''
+  nodeDialog.label = node.label || ''
+  nodeDialog.isSummary = node.isSummary || false
+  nodeDialog.summaryType = node.summaryType || '小计'
+  nodeDialog.visible = true
+}
+
+function showEditColNodeDialog(path) {
+  const node = getNodeByPath(tpl.columnTree, path)
+  if (!node) return
+  nodeDialog.type = 'col'
+  nodeDialog.mode = 'edit'
+  nodeDialog.path = path ? [...path] : null  // 复制数组，避免引用问题
+  nodeDialog.node = node
+  nodeDialog.code = node.code || ''
+  nodeDialog.label = node.label || ''
+  nodeDialog.isSummary = false
+  nodeDialog.summaryType = '小计'
+  nodeDialog.visible = true
+}
+
+function confirmNodeDialog() {
+  if (!nodeDialog.code || !nodeDialog.label) {
+    showToast('请填写编码和名称', 'error')
+    return
+  }
+  
   const newNode = {
-    id: generateId('row'),
-    code: prompt('请输入行编码:', `row_${tpl.rowTree.length + 1}`),
-    label: prompt('请输入行名称:', `新行${tpl.rowTree.length + 1}`),
+    id: nodeDialog.mode === 'add' ? generateId(nodeDialog.type === 'row' ? 'row' : 'col') : nodeDialog.node.id,
+    code: nodeDialog.code,
+    label: nodeDialog.label,
     expanded: false,
-    children: []
+    children: nodeDialog.mode === 'edit' ? (nodeDialog.node.children || []) : [],
+    isSummary: nodeDialog.type === 'row' ? nodeDialog.isSummary : false,
+    summaryType: nodeDialog.type === 'row' && nodeDialog.isSummary ? nodeDialog.summaryType : ''
   }
-  if (newNode.code && newNode.label) {
-    tpl.rowTree.push(newNode)
-    showToast('行维度添加成功', 'success')
+  
+  if (nodeDialog.mode === 'add') {
+    // 添加模式
+    if (nodeDialog.path === null) {
+      // 添加根节点
+      if (nodeDialog.type === 'row') {
+        tpl.rowTree.push(newNode)
+      } else {
+        tpl.columnTree.push(newNode)
+      }
+    } else {
+      // 添加子节点
+      const tree = nodeDialog.type === 'row' ? tpl.rowTree : tpl.columnTree
+      const parent = getNodeByPath(tree, nodeDialog.path)
+      if (parent) {
+        if (!parent.children) parent.children = []
+        parent.children.push(newNode)
+        parent.expanded = true
+        rebuildTable()
+      }
+    }
+    showToast('节点添加成功', 'success')
+  } else {
+    // 编辑模式
+    const node = getNodeByPath(nodeDialog.type === 'row' ? tpl.rowTree : tpl.columnTree, nodeDialog.path)
+    if (node) {
+      node.code = newNode.code
+      node.label = newNode.label
+      node.isSummary = newNode.isSummary
+      node.summaryType = newNode.summaryType
+    }
+    showToast('节点修改成功', 'success')
+  }
+  
+  nodeDialog.visible = false
+}
+
+function editRowNodeByPath(path) {
+  showEditRowNodeDialog(path)
+}
+
+function deleteRowNodeByPath(path) {
+  const node = getNodeByPath(tpl.rowTree, path)
+  if (!node) return
+
+  const childText = node.children?.length ? '及其所有子节点' : ''
+  showConfirmDialog(`确定删除行维度 "${node.label}"${childText}?`, {
+    type: 'danger',
+    okText: '删除',
+    onOk: () => {
+      if (path.length === 1) {
+        tpl.rowTree.splice(path[0], 1)
+      } else {
+        const parentInfo = getParentByPath(tpl.rowTree, path)
+        if (parentInfo?.parent?.children) {
+          parentInfo.parent.children.splice(path[path.length - 1], 1)
+        }
+      }
+      showToast('行维度删除成功', 'success')
+    }
+  })
+}
+
+function toggleRowNodeByPath(path) {
+  const node = getNodeByPath(tpl.rowTree, path)
+  if (node) {
+    node.expanded = !node.expanded
   }
 }
 
-function editRowNode(index) {
-  const node = tpl.rowTree[index]
-  const newCode = prompt('修改行编码:', node.code)
-  const newLabel = prompt('修改行名称:', node.label)
-  if (newCode && newLabel) {
-    node.code = newCode
-    node.label = newLabel
-    showToast('行维度修改成功', 'success')
+function toggleRowExpand(rowIndex) {
+  const row = rows.value[rowIndex]
+  if (!row) return
+  
+  const node = getNodeByPath(tpl.rowTree, row.treePath)
+  if (node && node.hasChildren) {
+    node.expanded = !node.expanded
   }
 }
 
-function deleteRowNode(index) {
-  if (confirm(`确定删除行维度 "${tpl.rowTree[index].label}"?`)) {
-    tpl.rowTree.splice(index, 1)
-    showToast('行维度删除成功', 'success')
+function editColNodeByPath(path) {
+  showEditColNodeDialog(path)
+}
+
+function deleteColNodeByPath(path) {
+  const node = getNodeByPath(tpl.columnTree, path)
+  if (!node) return
+
+  const childText = node.children?.length ? '及其所有子节点' : ''
+  showConfirmDialog(`确定删除列维度 "${node.label}"${childText}?`, {
+    type: 'danger',
+    okText: '删除',
+    onOk: () => {
+      if (path.length === 1) {
+        tpl.columnTree.splice(path[0], 1)
+      } else {
+        const parentInfo = getParentByPath(tpl.columnTree, path)
+        if (parentInfo?.parent?.children) {
+          parentInfo.parent.children.splice(path[path.length - 1], 1)
+        }
+      }
+      showToast('列维度删除成功', 'success')
+    }
+  })
+}
+
+function toggleColNodeByPath(path) {
+  const node = getNodeByPath(tpl.columnTree, path)
+  if (node) {
+    node.expanded = !node.expanded
   }
 }
 
 function editRowChild(parentIndex, childIndex) {
-  const child = tpl.rowTree[parentIndex].children[childIndex]
-  const newCode = prompt('修改子节点编码:', child.code)
-  const newLabel = prompt('修改子节点名称:', child.label)
-  if (newCode && newLabel) {
-    child.code = newCode
-    child.label = newLabel
-    showToast('子节点修改成功', 'success')
-  }
+  // 已废弃，使用 editRowNodeByPath 替代
 }
 
 function deleteRowChild(parentIndex, childIndex) {
-  const child = tpl.rowTree[parentIndex].children[childIndex]
-  if (confirm(`确定删除子节点 "${child.label}"?`)) {
-    tpl.rowTree[parentIndex].children.splice(childIndex, 1)
-    showToast('子节点删除成功', 'success')
-  }
+  // 已废弃，使用 deleteRowNodeByPath 替代
 }
 
 // 列维度操作
 function toggleColExpand(index) {
-  tpl.columnTree[index].expanded = !tpl.columnTree[index].expanded
+  // 已废弃，使用 toggleColNodeByPath 替代
 }
 
 function selectColNode(index) {
@@ -1089,54 +1925,23 @@ function selectColNode(index) {
 }
 
 function addColNode() {
-  const newNode = {
-    id: generateId('col'),
-    code: prompt('请输入列编码:', `col_${tpl.columnTree.length + 1}`),
-    label: prompt('请输入列名称:', `新列${tpl.columnTree.length + 1}`),
-    expanded: false,
-    children: []
-  }
-  if (newNode.code && newNode.label) {
-    tpl.columnTree.push(newNode)
-    showToast('列维度添加成功', 'success')
-  }
+  // 已废弃，使用 showAddColNodeDialog 替代
 }
 
 function editColNode(index) {
-  const node = tpl.columnTree[index]
-  const newCode = prompt('修改列编码:', node.code)
-  const newLabel = prompt('修改列名称:', node.label)
-  if (newCode && newLabel) {
-    node.code = newCode
-    node.label = newLabel
-    showToast('列维度修改成功', 'success')
-  }
+  // 已废弃，使用 editColNodeByPath 替代
 }
 
 function deleteColNode(index) {
-  if (confirm(`确定删除列维度 "${tpl.columnTree[index].label}"?`)) {
-    tpl.columnTree.splice(index, 1)
-    showToast('列维度删除成功', 'success')
-  }
+  // 已废弃，使用 deleteColNodeByPath 替代
 }
 
 function editColChild(parentIndex, childIndex) {
-  const child = tpl.columnTree[parentIndex].children[childIndex]
-  const newCode = prompt('修改子节点编码:', child.code)
-  const newLabel = prompt('修改子节点名称:', child.label)
-  if (newCode && newLabel) {
-    child.code = newCode
-    child.label = newLabel
-    showToast('子节点修改成功', 'success')
-  }
+  // 已废弃，使用 editColNodeByPath 替代
 }
 
 function deleteColChild(parentIndex, childIndex) {
-  const child = tpl.columnTree[parentIndex].children[childIndex]
-  if (confirm(`确定删除子节点 "${child.label}"?`)) {
-    tpl.columnTree[parentIndex].children.splice(childIndex, 1)
-    showToast('子节点删除成功', 'success')
-  }
+  // 已废弃，使用 deleteColNodeByPath 替代
 }
 
 // 指标操作
@@ -1165,39 +1970,105 @@ function editMetric(index) {
 }
 
 function deleteMetric(index) {
-  if (confirm(`确定删除指标 "${tpl.metrics[index].label}"?`)) {
-    tpl.metrics.splice(index, 1)
-    showToast('指标删除成功', 'success')
-  }
+  showConfirmDialog(`确定删除指标 "${tpl.metrics[index].label}"?`, {
+    type: 'danger',
+    okText: '删除',
+    onOk: () => {
+      tpl.metrics.splice(index, 1)
+      showToast('指标删除成功', 'success')
+    }
+  })
 }
 
 // 公式操作
 function addFormula() {
-  const newFormula = {
-    id: generateId('formula'),
-    label: prompt('请输入公式名称:', '新公式'),
-    expression: prompt('请输入公式表达式:', 'SUM'),
-    type: 'custom',
-    order: tpl.aggregates.length + 1
+  if (selectedCell.row === null || selectedCell.col === null) {
+    showToast('请先在表格中选中一个目标单元格再添加公式', 'warning')
+    return
   }
-  if (newFormula.label && newFormula.expression) {
-    tpl.aggregates.push(newFormula)
-    showToast('公式添加成功', 'success')
-  }
+
+  formulaEditorDialog.visible = true
+  formulaEditorDialog.mode = 'add'
+  formulaEditorDialog.index = null
+  formulaEditorDialog.formulaId = ''
+  formulaEditorDialog.formulaName = ''
+  formulaEditorDialog.formulaLabel = ''
+  formulaEditorDialog.expression = ''
+  formulaEditorDialog.resultType = 'number'
+  formulaEditorDialog.targetCell = { row: selectedCell.row, col: selectedCell.col }
 }
 
 function editFormula(index) {
   const formula = tpl.aggregates[index]
-  formula.label = prompt('修改公式名称:', formula.label) || formula.label
-  formula.expression = prompt('修改公式表达式:', formula.expression) || formula.expression
-  showToast('公式修改成功', 'success')
+  formulaEditorDialog.visible = true
+  formulaEditorDialog.mode = 'edit'
+  formulaEditorDialog.index = index
+  formulaEditorDialog.formulaId = formula.id || ''
+  formulaEditorDialog.formulaName = formula.fieldName || ''
+  formulaEditorDialog.formulaLabel = formula.label || ''
+  formulaEditorDialog.expression = formula.expression || ''
+  formulaEditorDialog.resultType = formula.resultType || 'number'
+  formulaEditorDialog.targetCell = formula.targetCell ? parseTargetCell(formula.targetCell) : null
+}
+
+/** 解析 targetCell 字符串 "row-col" 为对象 */
+function parseTargetCell(targetCellStr) {
+  if (!targetCellStr) return null
+  const parts = targetCellStr.split('-').map(Number)
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return { row: parts[0], col: parts[1] }
+  }
+  return null
+}
+
+function onFormulaApply(formulaData) {
+  saveToUndoStack()
+  
+  const expr = typeof formulaData === 'string' ? formulaData : formulaData.expression
+  const targetCell = formulaEditorDialog.targetCell
+  
+  if (formulaEditorDialog.mode === 'add') {
+    const newFormula = {
+      id: formulaData.fieldName || generateId('formula'),
+      label: formulaData.label || '新公式',
+      fieldName: formulaData.fieldName || '',
+      expression: expr.replace(/^=/, ''),
+      resultType: formulaData.resultType || 'number',
+      type: 'custom',
+      order: tpl.aggregates.length + 1,
+      dependencies: formulaData.dependencies || [],
+      targetCell: targetCell ? `${targetCell.row}-${targetCell.col}` : null,
+      targetRow: targetCell ? getRowCode(targetCell.row) : null,
+      targetCol: targetCell ? getColCode(targetCell.col) : null
+    }
+    tpl.aggregates.push(newFormula)
+    showToast('公式添加成功', 'success')
+  } else {
+    const formula = tpl.aggregates[formulaEditorDialog.index]
+    formula.id = formulaData.fieldName || formula.id
+    formula.label = formulaData.label || formula.label
+    formula.fieldName = formulaData.fieldName || ''
+    formula.expression = expr.replace(/^=/, '')
+    formula.resultType = formulaData.resultType || 'number'
+    formula.dependencies = formulaData.dependencies || []
+    formula.targetCell = targetCell ? `${targetCell.row}-${targetCell.col}` : formula.targetCell
+    formula.targetRow = targetCell ? getRowCode(targetCell.row) : formula.targetRow
+    formula.targetCol = targetCell ? getColCode(targetCell.col) : formula.targetCol
+    showToast('公式修改成功', 'success')
+  }
+  
+  formulaEditorDialog.visible = false
 }
 
 function deleteFormula(index) {
-  if (confirm(`确定删除公式 "${tpl.aggregates[index].label}"?`)) {
-    tpl.aggregates.splice(index, 1)
-    showToast('公式删除成功', 'success')
-  }
+  showConfirmDialog(`确定删除公式 "${tpl.aggregates[index].label}"?`, {
+    type: 'danger',
+    okText: '删除',
+    onOk: () => {
+      tpl.aggregates.splice(index, 1)
+      showToast('公式删除成功', 'success')
+    }
+  })
 }
 
 // 校验规则操作
@@ -1224,22 +2095,50 @@ function editValidator(index) {
 }
 
 function deleteValidator(index) {
-  if (confirm(`确定删除校验规则 "${tpl.validators[index].label}"?`)) {
-    tpl.validators.splice(index, 1)
-    showToast('校验规则删除成功', 'success')
-  }
+  showConfirmDialog(`确定删除校验规则 "${tpl.validators[index].label}"?`, {
+    type: 'danger',
+    okText: '删除',
+    onOk: () => {
+      tpl.validators.splice(index, 1)
+      showToast('校验规则删除成功', 'success')
+    }
+  })
 }
 
 // ==================== 表格操作 ====================
-function selectCell(row, col) {
+function selectCell(row, col, event) {
   selectedCell.row = row
   selectedCell.col = col
+  
+  // Shift 键多选
+  if (event?.shiftKey && selectedRange.startRow !== null) {
+    selectedRange.endRow = row
+    selectedRange.endCol = col
+  } else {
+    selectedRange.startRow = row
+    selectedRange.startCol = col
+    selectedRange.endRow = row
+    selectedRange.endCol = col
+  }
+  
   const cell = rows.value[row]?.cells[col]
   if (cell) {
     selectedCellType.value = cell.isFormula ? 'formula' : 'cell'
     selectedCellDataType.value = getCellDataType(cell)
     selectedCellReadOnly.value = cell.readOnly
   }
+}
+
+function isInRange(row, col) {
+  if (selectedRange.startRow === null || selectedRange.endRow === null) return false
+  if (selectedRange.startCol === null || selectedRange.endCol === null) return false
+  
+  const minRow = Math.min(selectedRange.startRow, selectedRange.endRow)
+  const maxRow = Math.max(selectedRange.startRow, selectedRange.endRow)
+  const minCol = Math.min(selectedRange.startCol, selectedRange.endCol)
+  const maxCol = Math.max(selectedRange.startCol, selectedRange.endCol)
+  
+  return row >= minRow && row <= maxRow && col >= minCol && col <= maxCol
 }
 
 function startEdit(row, col) {
@@ -1307,6 +2206,16 @@ function getCellLabel(row, col) {
   return `${colLetter}${row + 1}`
 }
 
+/** 根据 targetCell 字符串（如 "3-5"）生成可读标签 */
+function getCellLabelByTarget(targetCellStr) {
+  if (!targetCellStr) return '未指定'
+  const parts = targetCellStr.split('-').map(Number)
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return getCellLabel(parts[0], parts[1])
+  }
+  return targetCellStr
+}
+
 function getRowCode(row) {
   if (row === null) return '-'
   return `r_${row + 1}`
@@ -1315,21 +2224,6 @@ function getRowCode(row) {
 function getColCode(col) {
   if (col === null) return '-'
   return `c_${col + 1}`
-}
-
-function addRow() {
-  saveToUndoStack()
-  const newRow = {
-    label: `新行${rows.value.length + 1}`,
-    isSummary: false,
-    summaryType: '',
-    cells: columnHeaders.value.map(() => ({
-      value: '',
-      isFormula: false,
-      readOnly: false,
-    }))
-  }
-  rows.value.splice(rows.value.length - 1, 0, newRow)
 }
 
 function addCol() {
@@ -1347,6 +2241,78 @@ function addCol() {
       readOnly: false
     })
   })
+  
+  // 同时添加到左侧资源面板
+  tpl.columnTree.push({
+    id: generateId('col'),
+    code: `col_${tpl.columnTree.length + 1}`,
+    label: `${monthIndex}月`,
+    expanded: false,
+    children: []
+  })
+}
+
+function deleteSelectedRow() {
+  if (selectedCell.row === null || rows.value.length <= 1) {
+    showToast('请先选中要删除的行', 'warning')
+    return
+  }
+  
+  const rowIndex = selectedCell.row
+  const row = rows.value[rowIndex]
+  
+  if (row.isSummary) {
+    showToast('不能删除汇总行', 'warning')
+    return
+  }
+  
+  if (!confirm(`确定删除行 "${row.label}"?`)) return
+  
+  saveToUndoStack()
+  rows.value.splice(rowIndex, 1)
+  
+  // 同时从左侧资源面板删除
+  if (rowIndex < tpl.rowTree.length) {
+    tpl.rowTree.splice(rowIndex, 1)
+  }
+  
+  selectedCell.row = null
+  showToast('行已删除', 'success')
+}
+
+function deleteSelectedCol() {
+  if (selectedCell.col === null || columnHeaders.value.length <= 2) {
+    showToast('请先选中要删除的列', 'warning')
+    return
+  }
+  
+  const colIndex = selectedCell.col
+  const col = columnHeaders.value[colIndex]
+  
+  if (colIndex === 0) {
+    showToast('不能删除指标列', 'warning')
+    return
+  }
+  
+  if (col.isFormula) {
+    showToast('不能删除合计列', 'warning')
+    return
+  }
+  
+  if (!confirm(`确定删除列 "${col.label}"?`)) return
+  
+  saveToUndoStack()
+  columnHeaders.value.splice(colIndex, 1)
+  rows.value.forEach(row => row.cells.splice(colIndex, 1))
+  
+  // 同时从左侧资源面板删除（排除合计列）
+  const colNodeIndex = colIndex - 1 // 因为第0列是"指标"
+  if (colNodeIndex >= 0 && colNodeIndex < tpl.columnTree.length) {
+    tpl.columnTree.splice(colNodeIndex, 1)
+  }
+  
+  selectedCell.col = null
+  showToast('列已删除', 'success')
 }
 
 function insertSummaryRow() {
@@ -1437,8 +2403,22 @@ function cmSplitCells() {
 }
 
 function cmSetFormula() {
-  showTemplateProps.value = false
-  activeNav.value = 'formulas'
+  if (selectedCell.row === null || selectedCell.col === null) {
+    showToast('请先选中一个单元格', 'warning')
+    contextMenu.visible = false
+    return
+  }
+
+  formulaEditorDialog.visible = true
+  formulaEditorDialog.mode = 'add'
+  formulaEditorDialog.index = null
+  formulaEditorDialog.formulaId = ''
+  formulaEditorDialog.formulaName = ''
+  formulaEditorDialog.formulaLabel = ''
+  formulaEditorDialog.expression = ''
+  formulaEditorDialog.resultType = 'number'
+  formulaEditorDialog.targetCell = { row: selectedCell.row, col: selectedCell.col }
+  
   contextMenu.visible = false
 }
 
@@ -1712,28 +2692,104 @@ function transformTemplateData(data) {
   const typeMap = { '1': 'data', '5': 'formula', '6': 'metric' }
   const alignMap = { '0': 'left', '1': 'center', '2': 'right' }
 
+  // 检查是否是扁平化结构（带 level 字段但没有嵌套的 children）
+  function isFlatStructure(arr) {
+    if (!arr?.length) return false
+    const hasAnyNestedChildren = arr.some(item => item.children?.length > 0)
+    if (hasAnyNestedChildren) return false
+    return arr[0].level !== undefined && 
+           typeof arr[0].level === 'number' && 
+           arr[0].level >= 0
+  }
+
+  // 将扁平化的数据转换为嵌套树形结构
+  function buildTreeFromFlat(flatArr) {
+    if (!flatArr || flatArr.length === 0) return []
+    
+    const result = []
+    const stack = []
+    
+    for (const item of flatArr) {
+      const node = {
+        id: item.id || generateId('node'),
+        code: item.code || '',
+        label: item.name || item.title || '',
+        expanded: item.expanded !== undefined ? item.expanded : false,
+        children: [],
+        isSummary: item.isSummary || false,
+        summaryType: item.summaryType || ''
+      }
+      
+      while (stack.length > item.level) {
+        stack.pop()
+      }
+      
+      if (stack.length === 0) {
+        result.push(node)
+      } else if (stack.length > 0) {
+        stack[stack.length - 1].children.push(node)
+      }
+      
+      stack.push(node)
+    }
+    
+    function setExpanded(nodes) {
+      for (const node of nodes) {
+        if (node.children.length > 0 && node.expanded === false) {
+          node.expanded = true
+        }
+        if (node.children.length > 0) {
+          setExpanded(node.children)
+        }
+      }
+    }
+    
+    setExpanded(result)
+    
+    return result
+  }
+
+  // 处理嵌套结构
   function transformCols(columns) {
     if (!columns || !Array.isArray(columns)) return []
+    
+    // 如果是扁平化结构，先转换为嵌套结构
+    if (isFlatStructure(columns)) {
+      return buildTreeFromFlat(columns.map(col => ({
+        ...col,
+        name: col.title || col.name
+      })))
+    }
+    
     return columns.map(col => ({
       id: col.id || col.columnId,
-      title: col.title || col.name || '',
+      code: col.code || '',
+      label: col.title || col.name || '',
       type: typeMap[col.type] || col.type || 'data',
       format: col.format || (col.type === '5' ? 'percent' : 'number'),
       width: col.width || 120,
       align: alignMap[col.align] || col.align || 'right',
-      children: col.children ? transformCols(col.children) : null
+      expanded: false,
+      children: col.children ? transformCols(col.children) : []
     }))
   }
 
   function transformRows(rows) {
     if (!rows || !Array.isArray(rows)) return []
+    
+    // 如果是扁平化结构，先转换为嵌套结构
+    if (isFlatStructure(rows)) {
+      return buildTreeFromFlat(rows)
+    }
+    
     return rows.map(row => ({
       id: row.id || row.rowId,
-      name: row.name || row.title || '',
+      code: row.code || '',
+      label: row.name || row.title || '',
       isSummary: !!row.isSummary,
       summaryType: row.summaryType || 'total',
-      parentId: row.parentId || null,
-      children: row.children ? transformRows(row.children) : null
+      expanded: row.expanded !== undefined ? row.expanded : (row.children?.length > 0),
+      children: row.children ? transformRows(row.children) : []
     }))
   }
 
@@ -1749,11 +2805,27 @@ function transformTemplateData(data) {
     status: data.status || 'designing',
     rowTree: transformRows(data.rowTree),
     columnTree: transformCols(data.columnTree),
-    metrics: data.metrics || [],
+    aggregates: (data.metrics || data.aggregates || []).map(fromBackendAggregate),
+    metrics: [],
     layout: data.layout || tpl.layout,
-    aggregates: data.aggregates || [],
     validators: data.validators || [],
     conditionalFormats: data.conditionalFormats || []
+  }
+}
+
+// 后端 metrics 格式 → 前端 aggregates 格式
+function fromBackendAggregate(item) {
+  return {
+    id: item.id || generateId('formula'),
+    label: item.label || '',
+    fieldName: item.field || item.fieldName || '',
+    expression: item.customFormula || item.expression || '',
+    resultType: item.resultType || 'number',
+    targetCell: item.targetCell || '',
+    targetRow: item.targetRowCode || item.targetRow || '',
+    targetCol: item.targetColCode || item.targetCol || '',
+    dependencies: item.sourceRowCodes || item.dependencies || [],
+    order: item.priority ?? item.order ?? 0
   }
 }
 
@@ -1781,12 +2853,8 @@ async function handleSaveTemplate() {
 
   saving.value = true
   try {
-    let output
-    const cleanTpl = JSON.parse(JSON.stringify(tpl))
-    delete cleanTpl._isCustom
-    delete cleanTpl.createdAt
-    delete cleanTpl.updatedAt
-    output = cleanTpl
+    // 转换数据结构为后端期望的格式
+    const output = transformToBackendFormat(tpl)
 
     let result
     if (tpl.id) {
@@ -1801,9 +2869,13 @@ async function handleSaveTemplate() {
     showToast(`报表 "${tpl.name}" 已保存`, 'success')
 
     setTimeout(() => {
-      if (confirm(`是否跳转到报表预览页面？\n路径: /report/${tpl.id}`)) {
-        router.push(`/report/${tpl.id}`)
-      }
+      showConfirmDialog(`是否跳转到报表预览页面？`, {
+        type: 'info',
+        okText: '跳转',
+        onOk: () => {
+          router.push(`/report/${tpl.id}`)
+        }
+      })
     }, 800)
 
   } catch (err) {
@@ -1814,21 +2886,85 @@ async function handleSaveTemplate() {
   }
 }
 
-async function handlePublishTemplate() {
-  if (!tpl.id || !confirm(`确定要发布报表 "${tpl.name}" 吗？`)) return
-
-  publishing.value = true
-  try {
-    await handleSaveTemplate()
-    await publishTemplate(tpl.id)
-    tpl.status = 'published'
-    showToast(`报表 "${tpl.name}" 已发布`, 'success')
-  } catch (err) {
-    showToast('发布失败: ' + err.message, 'error')
-    console.error('发布失败:', err)
-  } finally {
-    publishing.value = false
+// 转换数据结构为后端期望的格式（嵌套结构，带 level 和 children）
+function transformToBackendFormat(data) {
+  return {
+    id: data.id || 0,
+    code: data.code || '',
+    name: data.name || '',
+    templateType: data.templateType || 0,
+    description: data.description || '',
+    rowTree: transformRowTreeToBackend(data.rowTree || []),
+    columnTree: transformColumnTreeToBackend(data.columnTree || []),
+    metrics: (data.aggregates || []).map(a => ({
+      id: a.id || '',
+      label: a.label || '',
+      field: a.fieldName || '',
+      expression: a.expression || '',
+      resultType: a.resultType || 'number',
+      targetCell: a.targetCell || '',
+      targetRow: a.targetRow || '',
+      targetCol: a.targetCol || '',
+      dependencies: a.dependencies || [],
+      priority: a.order || 0
+    }))
   }
+}
+
+// 将行维度树转换为后端格式（嵌套结构，添加 level）
+function transformRowTreeToBackend(nodes, level = 0, parentIndex = '') {
+  return nodes.map((node, index) => {
+    const currentIndex = parentIndex ? `${parentIndex}_${index + 1}` : `${index + 1}`
+    return {
+      id: node.id || '',
+      name: node.label || node.name || '',
+      code: node.code || `R${currentIndex}`,
+      level: level,
+      isSummary: node.isSummary || false,
+      summaryType: node.summaryType || '',
+      children: node.children?.length ? transformRowTreeToBackend(node.children, level + 1, currentIndex) : []
+    }
+  })
+}
+
+// 将列维度树转换为后端格式（嵌套结构，添加 level）
+function transformColumnTreeToBackend(nodes, level = 0, parentIndex = '') {
+  return nodes.map((node, index) => {
+    const currentIndex = parentIndex ? `${parentIndex}_${index + 1}` : `${index + 1}`
+    return {
+      id: node.id || '',
+      name: node.label || node.title || node.name || '',
+      code: node.code || `C${currentIndex}`,
+      type: node.type || 'text',
+      width: node.width || 90,
+      align: node.align || 'right',
+      level: level,
+      children: node.children?.length ? transformColumnTreeToBackend(node.children, level + 1, currentIndex) : []
+    }
+  })
+}
+
+async function handlePublishTemplate() {
+  if (!tpl.id) return
+
+  showConfirmDialog(`确定要发布报表 "${tpl.name}" 吗？`, {
+    type: 'info',
+    okText: '发布',
+    onOk: async () => {
+      publishing.value = true
+      try {
+        await handleSaveTemplate()
+        await publishTemplate(tpl.id)
+        tpl.status = 'published'
+        showToast(`报表 "${tpl.name}" 已发布`, 'success')
+      } catch (err) {
+        showToast('发布失败: ' + err.message, 'error')
+        console.error('发布失败:', err)
+      } finally {
+        publishing.value = false
+      }
+    }
+  })
 }
 </script>
 
@@ -2000,10 +3136,16 @@ async function handlePublishTemplate() {
 }
 
 .dgn-toolbar {
-  display: flex; align-items: center;
+  display: flex; align-items: center; gap: 8px;
   padding: 4px 8px;
   border-bottom: 1px solid #E5E7EB;
   margin-bottom: 4px;
+}
+
+.dgn-tool-hint {
+  font-size: 10px;
+  color: #9CA3AF;
+  flex: 1;
 }
 
 .dgn-tool-btn {
@@ -2045,6 +3187,23 @@ async function handlePublishTemplate() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dgn-tree-summary-tag {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: #DBEAFE;
+  color: #1D4ED8;
+  margin-right: 4px;
+}
+
+.dgn-tree-summary {
+  background: #FEF3C7;
+  
+  .dgn-tree-label {
+    font-weight: 600;
+  }
 }
 
 .dgn-tree-code {
@@ -2108,6 +3267,39 @@ async function handlePublishTemplate() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dgn-expr-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+}
+
+.dgn-target-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: #7C3AED;
+  color: #fff;
+  font-size: 9px;
+  border-radius: 3px;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.dgn-no-target-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: #FEE2E2;
+  color: #DC2626;
+  font-size: 9px;
+  border-radius: 3px;
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .dgn-list-edit,
@@ -2168,6 +3360,19 @@ async function handlePublishTemplate() {
 
 .dgn-textarea { resize: vertical; min-height: 40px; }
 
+.dgn-select {
+  padding: 3px 6px;
+  border: 1px solid #E5E7EB;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #374151;
+  background: #fff;
+  outline: none;
+  cursor: pointer;
+
+  &:focus { border-color: #1D4ED8; }
+}
+
 .dgn-field-value {
   font-size: 11px;
   color: #374151;
@@ -2216,6 +3421,12 @@ async function handlePublishTemplate() {
   
   &:hover { background: #F9FAFB; }
   &.active { background: #1D4ED8; color: #fff; border-color: #1D4ED8; }
+  &:disabled { 
+    color: #9CA3AF; 
+    background: #F3F4F6; 
+    cursor: not-allowed; 
+    border-color: #E5E7EB;
+  }
 }
 
 .dg-spreadsheet {
@@ -2246,6 +3457,23 @@ async function handlePublishTemplate() {
   background: #F3F4F6;
 }
 
+.dg-th-row-header {
+  width: 120px;
+  background: #E5E7EB;
+  font-weight: 700;
+  color: #374151;
+  position: sticky;
+  left: 0;
+  z-index: 15;
+  border-right: 2px solid #D1D5DB;
+}
+
+.dg-th-group {
+  background: #F3F4F6;
+  font-weight: 700;
+  color: #1F2937;
+}
+
 .dg-col-label { display: block; }
 
 .dg-fx-badge {
@@ -2264,10 +3492,12 @@ async function handlePublishTemplate() {
   vertical-align: middle;
   
   &:hover { background: #F9FAFB; }
-  &.dg-td-selected { background: #EFF6FF; }
+  &.dg-td-selected { background: #EFF6FF; box-shadow: inset 0 0 0 2px #3B82F6; }
   &.dg-td-editing { padding: 0; }
   &.dg-td-readonly { background: #F9FAFB; color: #9CA3AF; }
   &.dg-td-formula { background: #F0F9FF; }
+  &.dg-td-merged { background: #DBEAFE; text-align: center; font-weight: 600; }
+  &.dg-td-in-range { background: #DBEAFE; }
 }
 
 .dg-td-row-label {
@@ -2276,6 +3506,51 @@ async function handlePublishTemplate() {
   color: #374151;
   position: sticky; left: 0;
   z-index: 5;
+  cursor: pointer;
+  user-select: none;
+  
+  &:hover { background: #F3F4F6; }
+}
+
+.dg-tree-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.dg-tree-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #6B7280;
+  cursor: pointer;
+  transition: transform 0.2s;
+  
+  &:hover { color: #3B82F6; }
+}
+
+.dg-tree-toggle-placeholder {
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.dg-tree-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dg-td-group {
+  background: #F3F4F6;
+  font-weight: 700;
+  color: #1F2937;
+  vertical-align: middle;
+  border-right: 2px solid #D1D5DB;
 }
 
 .dg-row-summary {
@@ -2454,6 +3729,328 @@ async function handlePublishTemplate() {
   margin: 4px 0;
 }
 
+/* ====== 添加行弹窗 ====== */
+.ard-form {
+  padding: 16px;
+}
+
+.ard-field {
+  margin-bottom: 16px;
+  
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+  }
+}
+
+.ard-type-options {
+  display: flex;
+  gap: 12px;
+}
+
+.ard-type-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  border: 2px solid #E5E7EB;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all .2s;
+  
+  &:hover {
+    border-color: #93C5FD;
+    background: #EFF6FF;
+  }
+  
+  &.active {
+    border-color: #1D4ED8;
+    background: #DBEAFE;
+    
+    .ard-type-label {
+      color: #1D4ED8;
+    }
+  }
+}
+
+.ard-type-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.ard-type-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.ard-type-desc {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-top: 4px;
+}
+
+.ard-summary-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ard-summary-btn {
+  padding: 8px 16px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  transition: all .2s;
+  
+  &:hover {
+    border-color: #93C5FD;
+    background: #EFF6FF;
+  }
+  
+  &.active {
+    border-color: #1D4ED8;
+    background: #DBEAFE;
+    color: #1D4ED8;
+  }
+}
+
+.ard-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  
+  &:focus {
+    outline: none;
+    border-color: #1D4ED8;
+    box-shadow: 0 0 0 2px #DBEAFE;
+  }
+}
+
+/* ====== 节点弹窗样式 ====== */
+.nd-form {
+  padding: 16px;
+}
+
+.nd-field {
+  margin-bottom: 16px;
+  
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+  }
+}
+
+.nd-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #374151;
+  
+  &:focus {
+    outline: none;
+    border-color: #1D4ED8;
+    box-shadow: 0 0 0 2px #DBEAFE;
+  }
+}
+
+.nd-type-options {
+  display: flex;
+  gap: 12px;
+}
+
+.nd-type-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 2px solid #E5E7EB;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all .2s;
+  
+  &:hover {
+    border-color: #93C5FD;
+    background: #EFF6FF;
+  }
+  
+  &.active {
+    border-color: #1D4ED8;
+    background: #DBEAFE;
+    
+    .nd-type-label {
+      color: #1D4ED8;
+    }
+  }
+}
+
+.nd-type-icon {
+  font-size: 20px;
+}
+
+.nd-type-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.nd-summary-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nd-summary-btn {
+  padding: 8px 16px;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+  transition: all .2s;
+  
+  &:hover {
+    border-color: #93C5FD;
+    background: #EFF6FF;
+  }
+  
+  &.active {
+    border-color: #1D4ED8;
+    background: #DBEAFE;
+    color: #1D4ED8;
+  }
+}
+
+/* ====== 递归树形组件样式 ====== */
+.dgn-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+  transition: background .15s;
+  position: relative;
+  
+  &:hover {
+    background: #F3F4F6;
+    
+    .dgn-tree-actions {
+      opacity: 1;
+    }
+  }
+}
+
+.dgn-tree-node.dgn-tree-summary {
+  background: #FEF3C7;
+  
+  &:hover {
+    background: #FDE68A;
+  }
+}
+
+.dgn-tree-expand {
+  font-size: 10px;
+  color: #9CA3AF;
+  width: 14px;
+  text-align: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.dgn-tree-label {
+  flex: 1;
+  font-size: 12px;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dgn-tree-summary-tag {
+  display: inline-block;
+  padding: 1px 4px;
+  background: #3B82F6;
+  color: #fff;
+  font-size: 10px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+.dgn-tree-code {
+  font-size: 10px;
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.dgn-tree-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity .2s;
+  flex-shrink: 0;
+}
+
+.dgn-tree-btn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all .15s;
+  
+  &:hover {
+    background: #E5E7EB;
+  }
+}
+
+.dgn-tree-btn.dgn-tree-add {
+  color: #1D4ED8;
+  
+  &:hover {
+    background: #DBEAFE;
+  }
+}
+
+.dgn-tree-btn.dgn-tree-edit {
+  font-size: 11px;
+}
+
+.dgn-tree-btn.dgn-tree-delete {
+  font-size: 11px;
+  
+  &:hover {
+    background: #FEE2E2;
+  }
+}
+
+.dgn-tree-children {
+  width: 100%;
+}
+
 /* ====== Toast ====== */
 .dg-toast {
   position: fixed; top: 20px; right: 20px;
@@ -2470,4 +4067,38 @@ async function handlePublishTemplate() {
 
 .dg-toast-enter-active, .dg-toast-leave-active { transition: all .3s; }
 .dg-toast-enter-from, .dg-toast-leave-to { opacity: 0; transform: translateX(100px); }
+
+/* ====== 确认对话框 ====== */
+.cd-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 0;
+  gap: 16px;
+}
+
+.cd-icon {
+  font-size: 40px;
+}
+
+.cd-icon-danger {
+  color: #EF4444;
+}
+
+.cd-icon-info {
+  color: #3B82F6;
+}
+
+.cd-message {
+  font-size: 14px;
+  color: #374151;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.cd-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
 </style>

@@ -224,7 +224,7 @@ export class MetricConfig {
   constructor(json = {}) {
     this.field = json.field || generateId('metric')   // 字段标识符（唯一）
     this.label = json.label || ''                      // 显示名称
-    this.expression = json.expression || ''            // 表达式（不含=号）
+    this.expression = json.expression || json.customFormula || ''  // 表达式（兼容后端 customFormula）
     this.type = json.type || 'number'                 // number | percent | string | boolean | currency | date
     this.description = json.description || ''
     this.unit = json.unit || ''

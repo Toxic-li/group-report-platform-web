@@ -336,6 +336,8 @@ const config = ref(null)
 let formulaEngine = null
 let aggregateEngine = null
 let validationEngine = null
+// 行引用映射：sourceRowId → [{ targetRi, colsLen, sourceRi }]
+let rowRefMap = new Map()
 let conditionalFormatEngine = null
 let permissionEngine = null
 let reportFactory = null
@@ -1156,6 +1158,208 @@ function buildFormulaConfigs(tpl) {
   return configs
 }
 
+// ==================== 公式应用层 ====================
+
+/** cellKey 生成：统一为 frozenRows + rowIdx, colIdx + 2 */
+function mckey(rowIdx, colIdx, frozenRows) {
+  return `${frozenRows + rowIdx}-${colIdx + 2}`
+}
+
+/** 解析 targetCell：支持 "rowIdx-colIdx" 和 "rowId-colId"（ID 含 - 用 lastIndexOf） */
+function parseTargetCell(targetCell, rows, rowIdToIdx, colIdToIdx) {
+  const lastDash = targetCell.lastIndexOf('-')
+  if (lastDash <= 0) return null
+  const rPart = targetCell.substring(0, lastDash)
+  const cPart = targetCell.substring(lastDash + 1)
+
+  let targetRi, targetCi
+  if (!isNaN(rPart) && !isNaN(cPart)) {
+    targetRi = parseInt(rPart)
+    targetCi = parseInt(cPart)
+  } else {
+    targetRi = rowIdToIdx.get(rPart) ?? rowIdToIdx.get(Number(rPart))
+    targetCi = colIdToIdx.get(cPart) ?? colIdToIdx.get(Number(cPart))
+  }
+  if (targetRi === undefined || targetCi === undefined) return null
+  return { targetRi, targetCi }
+}
+
+/**
+ * 将公式配置写入 cellData + rows.values，供 FormulaEngine 扫描和页面渲染
+ * 修复全部5个问题：
+ *   - targetCell 用 lastIndexOf('-') 解析
+ *   - cellKey 统一 mckey(rowIdx, colIdx, frozenRows)
+ *   - 行引用直接复制值 / 公式转为 Excel 引用
+ *   - 写入 cellData 同时同步 rows.values
+ */
+function applyFormulaConfigsToCellData(tpl) {
+  const configs = buildFormulaConfigs(tpl)
+  console.log('[FormulaDebug] buildFormulaConfigs 结果:', configs.length, '条')
+
+  const rows = config.value?.rows || []
+  const cols = (config.value?.columnData || []).slice(2)
+  const frozenRows = config.value?.frozenRowCount || 4
+
+  const rowIdToIdx = new Map(rows.map((r, i) => [r.id, i]))
+  const colIdToIdx = new Map(cols.map((c, i) => [c.id, i]))
+
+  let appliedCount = 0
+  for (const fc of configs) {
+    if (!fc.expression || !fc.targetCell) continue
+
+    const tc = parseTargetCell(fc.targetCell, rows, rowIdToIdx, colIdToIdx)
+    if (!tc || tc.targetRi >= rows.length) continue
+
+    const { targetRi, targetCi } = tc
+    if (targetCi >= cols.length) continue
+
+    const key = mckey(targetRi, targetCi, frozenRows)
+    const cell = config.value.cellData[key]
+    if (!cell) {
+      console.log('[FormulaDebug] cellKey不存在:', key)
+      continue
+    }
+
+    // 行引用检测
+    const sourceRi = rowIdToIdx.get(fc.expression) ?? rowIdToIdx.get(Number(fc.expression))
+    if (sourceRi !== undefined && sourceRi < rows.length) {
+      // 单行引用：登记 rowRefMap + 初始复制值
+      const srcId = rows[sourceRi].id
+      if (!rowRefMap.has(srcId)) rowRefMap.set(srcId, [])
+      rowRefMap.get(srcId).push({ targetRi, colsLen: cols.length, sourceRi })
+
+      for (let c = 0; c < cols.length; c++) {
+        const tkey = mckey(targetRi, c, frozenRows)
+        const skey = mckey(sourceRi, c, frozenRows)
+        const sc = config.value.cellData[skey]
+        if (config.value.cellData[tkey] && sc?.v !== undefined && sc.v !== '') {
+          config.value.cellData[tkey].v = sc.v
+          config.value.cellData[tkey].raw = sc.raw ?? sc.v
+          config.value.cellData[tkey].readOnly = true
+          config.value.cellData[tkey].f = null
+          const tr = rows[targetRi]
+          if (tr?.values?.[c]) {
+            tr.values[c].v = sc.v
+            tr.values[c].raw = sc.raw ?? sc.v
+            tr.values[c].readOnly = true
+          }
+        }
+      }
+      appliedCount++
+      continue
+    }
+
+    // 行列表 SUM(row_a,row_b) → =C7+C8
+    const rowList = extractRowListExpr(fc.expression)
+    if (rowList?.length) {
+      const parts = rowList.map(rid => {
+        const ri = rowIdToIdx.get(rid) ?? rowIdToIdx.get(Number(rid))
+        if (ri === undefined || ri >= rows.length) return null
+        return `${numToColLetter(targetCi + 2)}${frozenRows + ri}`
+      }).filter(Boolean)
+      if (parts.length > 0) {
+        setFormulaCell(key, '=' + parts.join('+'), fc, targetRi, targetCi, rows)
+        console.log('[FormulaDebug] 行求和:', key, '←', '=' + parts.join('+'))
+      }
+      appliedCount++
+      continue
+    }
+
+    // 普通公式：shiftFormulaCols 解决 colToNum 1-based 偏移
+    let expr = shiftFormulaCols(fc.expression, -1)
+    if (!expr.startsWith('=')) expr = '=' + expr
+    setFormulaCell(key, expr, fc, targetRi, targetCi, rows)
+    console.log('[FormulaDebug] 公式:', key, '←', expr)
+    appliedCount++
+  }
+  console.log(`[FormulaDebug] 总共应用 ${appliedCount} 个单元格公式`)
+}
+
+function setFormulaCell(key, formulaStr, fc, targetRi, targetCi, rows) {
+  config.value.cellData[key].f = formulaStr
+  config.value.cellData[key].readOnly = true
+  config.value.cellData[key].v = ''
+  const tgtRow = rows[targetRi]
+  if (tgtRow?.values?.[targetCi]) {
+    tgtRow.values[targetCi].readOnly = true
+    tgtRow.values[targetCi].formula = fc.expression
+    tgtRow.values[targetCi].f = formulaStr
+  }
+}
+
+// 从表达式中提取行 ID 列表：SUM(row_a,row_b) → [row_a, row_b]
+function extractRowListExpr(expr) {
+  if (!expr) return null
+  const inner = expr.trim().replace(/^(SUM|AVERAGE|MAX|MIN)\((.*)\)$/i, '$2').trim()
+  const parts = inner.split(/[,，]\s*/)
+  const hasRowIds = parts.some(p => {
+    const t = p.trim()
+    return t && !/^\d+$/.test(t) && !/^[A-Z]+\d+$/.test(t)
+  })
+  return hasRowIds ? parts.map(p => p.trim()).filter(Boolean) : null
+}
+
+// 公式列号偏移：=C7+D9 → =B7+C9（FormulaEngine 的 colToNum 是 1-based）
+function shiftFormulaCols(expr, offset) {
+  if (!expr || offset === 0) return expr
+  return expr.replace(/([A-Z]+)(\d+)/g, (_, col, row) => {
+    const n = colToNum(col) + offset
+    if (n < 0) return `${col}${row}`
+    return `${numToColLetter(n)}${row}`
+  })
+}
+function colToNum(col) {
+  let n = 0
+  for (let i = 0; i < col.length; i++) n = n * 26 + (col.charCodeAt(i) - 65)
+  return n
+}
+function numToColLetter(n) {
+  let s = ''
+  while (n >= 0) { s = String.fromCharCode(65 + (n % 26)) + s; n = Math.floor(n / 26) - 1 }
+  return s
+}
+
+// cellData.v → rows.values.v
+function syncCellDataToRows() {
+  const rows = config.value?.rows || []
+  const frozenRows = config.value?.frozenRowCount || 4
+  const colsLen = (config.value?.columnData?.length || 3) - 2
+  for (let ri = 0; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row?.values) continue
+    for (let c = 0; c < colsLen && c < row.values.length; c++) {
+      const key = mckey(ri, c, frozenRows)
+      const cell = config.value.cellData?.[key]
+      if (cell && row.values[c]) {
+        row.values[c].v = cell.v !== undefined ? cell.v : row.values[c].v
+        row.values[c].raw = cell.raw !== undefined ? cell.raw : row.values[c].raw
+      }
+    }
+  }
+}
+
+// 行引用实时联动
+function syncRowRefsToTargets() {
+  if (rowRefMap.size === 0) return
+  const rows = config.value?.rows || []
+  const frozenRows = config.value?.frozenRowCount || 4
+  for (const [, refs] of rowRefMap) {
+    for (const ref of refs) {
+      const src = rows[ref.sourceRi], tgt = rows[ref.targetRi]
+      if (!src?.values || !tgt?.values) continue
+      for (let c = 0; c < ref.colsLen && c < tgt.values.length; c++) {
+        if (tgt.values[c]?.readOnly) {
+          const v = src.values[c]?.v ?? ''
+          tgt.values[c].v = v
+          tgt.values[c].raw = src.values[c]?.raw ?? v
+          const key = mckey(ref.targetRi, c, frozenRows)
+          if (config.value.cellData?.[key]) config.value.cellData[key].v = v
+        }
+      }
+    }
+  }
+}
+
 function initEngines(tpl) {
   // 校验引擎
   validationEngine = new ValidationEngine({ template: tpl, cellData: config.value.cellData })
@@ -1166,6 +1370,24 @@ function initEngines(tpl) {
 
   // 权限引擎
   permissionEngine = new PermissionEngine({ template: tpl, currentRole: 'filler' })
+
+  // 公式引擎（V2路径也需要初始化）
+  if (!formulaEngine) {
+    formulaEngine = new FormulaEngine(config.value.cellData)
+  }
+  applyFormulaConfigsToCellData(tpl)
+  formulaEngine.invalidateCache()
+  const calcResults = formulaEngine.calculateAll()
+  console.log('[FormulaDebug] calculateAll 结果:', calcResults)
+
+  // 将 cellData 计算后的值同步到 rows[].values[]（渲染链路）
+  syncCellDataToRows()
+
+  // 汇总引擎
+  if (!aggregateEngine) {
+    aggregateEngine = new AggregateEngine({ template: tpl, cellData: config.value.cellData })
+  }
+  aggregateEngine.calculateAll()
 }
 
 /** Mock 数据生成器（开发阶段使用） */
@@ -1379,14 +1601,14 @@ function startEdit(val, row, colIdx, event) {
   selectedCell.row = row
   selectedCell.colIdx = colIdx
 
-  // 权限检查
-  if (permissionEngine && !permissionEngine.canEditCell(row.depth, colIdx, val)) {
-    showToast('无编辑权限', 'warning'); return
-  }
-
   // 有公式的单元格 / 只读单元格 → 打开右侧详情面板
   if (val.readOnly || val.formula || val.f) {
     openDetail(val, row, event); return
+  }
+
+  // 权限检查
+  if (permissionEngine && !permissionEngine.canEditCell(row.depth, colIdx, val)) {
+    showToast('无编辑权限', 'warning'); return
   }
 
   editingCell.rowId = row.id
@@ -1414,6 +1636,18 @@ function commitEdit(val, row, colIdx, event) {
 
   val.v = newValue; val.raw = newValue
   store.updateCellValue(row.id, getColIdByIndex(colIdx), newValue)
+
+  // 同步 cellData（供 FormulaEngine 读取最新值）
+  const frozenRows = config.value?.frozenRowCount || 4
+  const ri = (config.value?.rows || []).findIndex(r => r.id === row.id)
+  if (ri >= 0) {
+    const key = `${frozenRows + ri}-${colIdx + 2}`
+    if (config.value?.cellData?.[key]) {
+      config.value.cellData[key].v = newValue
+      config.value.cellData[key].raw = newValue
+    }
+  }
+
   clearEditing(); triggerAutoSave(); recalcFormulas()
   event?.stopPropagation()
 }
@@ -2374,6 +2608,8 @@ function recalcFormulas() {
   if (aggregateEngine) {
     aggregateEngine.calculateAll()
   }
+  syncCellDataToRows()
+  syncRowRefsToTargets()
 }
 
 // ========================================

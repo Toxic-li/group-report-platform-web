@@ -114,6 +114,20 @@
           </div>
         </transition>
 
+        <!-- 公式模板 -->
+        <div class="fe-templates" v-if="formulaTemplates.length">
+          <span class="fe-templates-label">常用模板</span>
+          <button
+            v-for="tpl in formulaTemplates"
+            :key="tpl.name"
+            class="fe-template-btn"
+            :title="tpl.desc"
+            @click="insertTemplate(tpl)"
+          >
+            {{ tpl.label }}
+          </button>
+        </div>
+
         <!-- 快捷操作 -->
         <div class="fe-actions">
           <button class="fe-btn fe-btn-primary" :disabled="hasError || !expression.trim()" @click="applyFormula">
@@ -214,6 +228,16 @@ const builtInFunctions = [
   { name: 'IF', desc: '条件判断', template: 'IF(${cond}, ${trueVal}, ${falseVal})' },
   { name: 'ROUND', desc: '四舍五入', template: 'ROUND(${val}, ${digits})' },
   { name: 'ABS', desc: '绝对值', template: 'ABS(${val})' }
+]
+
+// ==================== 公式模板预设 ====================
+const formulaTemplates = [
+  { name: 'ratio', label: '两值比率', desc: 'A / B，常用于完成率等', template: 'IF({B} != 0, ROUND({A} / {B}, 2), 0)', placeholder: '{A} 为分子字段，{B} 为分母字段' },
+  { name: 'growth', label: '同比增长率', desc: '(本期 - 上期) / 上期', template: 'IF({prev} != 0, ROUND(({curr} - {prev}) / {prev} * 100, 2), 0)', placeholder: '{curr} 本期值，{prev} 上期值' },
+  { name: 'diff', label: '差值', desc: 'A - B，计算两值之差', template: '{a} - {b}', placeholder: '{a}、{b} 为两个字段' },
+  { name: 'proportion', label: '占比', desc: 'A / SUM(B...)，计算占总体的比例', template: 'IF(SUM({total_ids}) != 0, ROUND({part} / SUM({total_ids}) * 100, 2), 0)', placeholder: '{part} 部分值，{total_ids} 总体字段（逗号分隔）' },
+  { name: 'weighted', label: '加权平均', desc: 'SUM(A*B) / SUM(B)', template: 'IF(SUM({weights}) != 0, ROUND(SUM({values} * {weights}) / SUM({weights}), 2), 0)', placeholder: '{values} 数值字段，{weights} 权重字段' },
+  { name: 'moving_avg', label: '移动平均', desc: '(A + B + C) / 3，三期间平均', template: 'ROUND(({t1} + {t2} + {t3}) / 3, 2)', placeholder: '{t1}, {t2}, {t3} 为三个期间的字段' }
 ]
 
 // ==================== 校验引擎 ====================
@@ -465,6 +489,18 @@ function insertFunction(func) {
   tpl = tpl.replace(new RegExp('\\$\\{falseVal\\}', 'g'), '${valueIfFalse}')
   tpl = tpl.replace(new RegExp('\\$\\{digits\\}', 'g'), '2')
   insertAtCursor(tpl)
+}
+
+/** 插入公式模板预设 */
+function insertTemplate(tpl) {
+  let template = tpl.template
+  // 将模板中的占位符 {xxx} 替换为可编辑状态的 ${xxx}
+  template = template.replace(/\{([^}]+)\}/g, (match, key) => {
+    // {A}, {B}, {curr}, {prev} 等 → ${A}, ${B}, ...
+    // 但保留 {total_ids} 这种多个ID的情况为可编辑标记
+    return `\${${key}}`
+  })
+  insertAtCursor(template)
 }
 
 function clearInput() {
@@ -848,8 +884,38 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #F3F4F6;
+}
+
+/* 公式模板 */
+.fe-templates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   padding-top: 4px;
 }
+.fe-templates-label {
+  font-size: 10px;
+  color: #9CA3AF;
+  font-weight: 600;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+.fe-template-btn {
+  padding: 2px 8px;
+  font-size: 10px;
+  color: #7C3AED;
+  background: #F5F3FF;
+  border: 1px solid #DDD6FE;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s;
+  &:hover { background: #EDE9FE; border-color: #C4B5FD; }
+}
+
 .fe-btn {
   padding: 7px 16px;
   border-radius: 8px;
