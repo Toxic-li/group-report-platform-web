@@ -1377,12 +1377,16 @@ function getRowHeaderLabel(level) {
 function buildRows() {
   const result = []
   const colCount = columnHeaders.value.length
-  
+
   if (colCount === 0) {
     rows.value = []
     return
   }
-  
+
+  // ✅ 调试日志：检查 tpl.rowTree 的结构
+  console.log('[buildRows] tpl.rowTree:', tpl.rowTree)
+  console.log('[buildRows] tpl.rowTree.length:', tpl.rowTree.length)
+
   function walkRows(rowTree, level = 0, treePath = []) {
     for (let idx = 0; idx < rowTree.length; idx++) {
       const row = rowTree[idx]
@@ -1390,7 +1394,16 @@ function buildRows() {
       const hasChildren = row.children?.length > 0
       const isExpanded = row.expanded !== undefined ? row.expanded : false
       const currentPath = [...treePath, idx]
-      
+
+      // ✅ 调试日志：每个节点的详细信息
+      console.log(`[buildRows] 节点 ${idx} (level ${level}):`, {
+        label,
+        hasChildren,
+        childrenCount: row.children?.length || 0,
+        children: row.children,
+        treePath: currentPath
+      })
+
       const cells = Array(colCount).fill(null).map((_, ci) => {
         if (row.isSummary && ci > 0) {
           return {
@@ -1407,7 +1420,7 @@ function buildRows() {
           formula: ''
         }
       })
-      
+
       result.push({
         label,
         isSummary: !!row.isSummary,
@@ -1418,15 +1431,20 @@ function buildRows() {
         treePath: currentPath,
         cells
       })
-      
+
       if (hasChildren && isExpanded) {
+        console.log(`[buildRows] 展开节点 "${label}" 的子节点，level + 1`)
         walkRows(row.children, level + 1, currentPath)
       }
     }
   }
-  
+
   walkRows(tpl.rowTree)
-  
+
+  // ✅ 调试日志：最终的 rows 数组
+  console.log('[buildRows] 最终 rows 数组:', result)
+  console.log('[buildRows] rows.length:', result.length)
+
   rows.value = result
 }
 
@@ -2692,14 +2710,40 @@ function transformTemplateData(data) {
   const typeMap = { '1': 'data', '5': 'formula', '6': 'metric' }
   const alignMap = { '0': 'left', '1': 'center', '2': 'right' }
 
-  // 检查是否是扁平化结构（带 level 字段但没有嵌套的 children）
+  // ✅ 修复：检查是否是扁平化结构（所有节点都没有 children）
   function isFlatStructure(arr) {
     if (!arr?.length) return false
-    const hasAnyNestedChildren = arr.some(item => item.children?.length > 0)
-    if (hasAnyNestedChildren) return false
-    return arr[0].level !== undefined && 
-           typeof arr[0].level === 'number' && 
-           arr[0].level >= 0
+
+    // ✅ 调试日志：检查每个节点的 children
+    arr.forEach((item, idx) => {
+      console.log(`[isFlatStructure] 节点 ${idx}:`, {
+        name: item.name,
+        children: item.children,
+        childrenType: typeof item.children,
+        isArray: Array.isArray(item.children),
+        childrenLength: item.children?.length
+      })
+    })
+
+    // ✅ 关键修复：检查所有节点的 children 是否都是空数组或 null/undefined
+    const hasAnyValidChildren = arr.some(item => {
+      // children 是有效数组且长度 > 0
+      const isValid = Array.isArray(item.children) && item.children.length > 0
+      console.log(`[isFlatStructure] 节点 "${item.name}" 的 children 是否有效:`, isValid)
+      return isValid
+    })
+
+
+    // ✅ 如果有任何节点有有效的 children，就不是扁平结构
+    if (hasAnyValidChildren) {
+      return false
+    }
+
+    // ✅ 检查是否有 level 字段（扁平结构的特征）
+    const hasLevel = arr[0].level !== undefined &&
+                     typeof arr[0].level === 'number' &&
+                     arr[0].level >= 0
+    return hasLevel
   }
 
   // 将扁平化的数据转换为嵌套树形结构
@@ -2774,23 +2818,29 @@ function transformTemplateData(data) {
     }))
   }
 
-  function transformRows(rows) {
+  function transformRows(rows, isRecursive = false) {
     if (!rows || !Array.isArray(rows)) return []
-    
-    // 如果是扁平化结构，先转换为嵌套结构
-    if (isFlatStructure(rows)) {
+    // ✅ 关键修复：只有顶层调用才判断是否是扁平结构
+    // 递归调用时，子节点自然有 level 字段，不需要再次转换
+    if (!isRecursive && isFlatStructure(rows)) {
       return buildTreeFromFlat(rows)
     }
-    
-    return rows.map(row => ({
-      id: row.id || row.rowId,
-      code: row.code || '',
-      label: row.name || row.title || '',
-      isSummary: !!row.isSummary,
-      summaryType: row.summaryType || 'total',
-      expanded: row.expanded !== undefined ? row.expanded : (row.children?.length > 0),
-      children: row.children ? transformRows(row.children) : []
-    }))
+
+    // ✅ 处理嵌套结构 - 递归处理 children
+    const result = rows.map((row, idx) => {
+      const transformedNode = {
+        id: row.id || row.rowId,
+        code: row.code || '',
+        label: row.name || row.title || '',
+        isSummary: !!row.isSummary,
+        summaryType: row.summaryType || 'total',
+        expanded: row.expanded !== undefined ? row.expanded : (row.children?.length > 0),
+        // ✅ 关键修复：递归调用时传递 isRecursive=true
+        children: row.children ? transformRows(row.children, true) : []
+      }
+      return transformedNode
+    })
+    return result
   }
 
   return {

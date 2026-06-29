@@ -618,7 +618,8 @@ export class FormulaEngine {
   }
 
   evalArithmetic(expr) {
-    const sanitized = expr.replace(/[^0-9+\-*/().%\s]/g, '')
+    // ✅ 保留三元运算符支持：? : 以及比较运算符 > < >= <= == !=
+    const sanitized = expr.replace(/[^0-9+\-*/().%?<>=:!&|\s]/g, '')
     try {
       return Function(`"use strict"; return (${sanitized})`)()
     } catch {
