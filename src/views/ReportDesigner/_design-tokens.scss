@@ -1,0 +1,110 @@
+// Pixso Design Tokens for Report Designer
+// Extracted from Frame41.vue / Frame4436.vue
+
+// ==================== Colors ====================
+// Primary
+$dg-primary: #1264E8;
+$dg-primary-dark: #0D52C0;
+$dg-primary-light: #E8F0FE;
+$dg-primary-lighter: #F0F5FF;
+$dg-primary-border: #BFCCFF;
+
+// Backgrounds
+$dg-bg-page: #F5F6F8;
+$dg-bg-panel: #FFFFFF;
+$dg-bg-hover: #F0F5FF;
+$dg-bg-selected: #E8F0FE;
+$dg-bg-row-alt: #FAFAFA;
+$dg-bg-input: #F5F6F8;
+$dg-bg-header: #F5F6F8;
+$dg-bg-divider: #E4E6EB;
+
+// Status
+$dg-success: #52C41A;
+$dg-success-bg: #F0FFF4;
+$dg-error: #EF4444;
+$dg-error-bg: #FFF5F5;
+$dg-warning: #FAAD14;
+$dg-warning-bg: #FFFBF0;
+$dg-info: #1264E8;
+
+// Text
+$dg-text-heading: #1A1A2E;
+$dg-text-primary: #3C3C4E;
+$dg-text-secondary: #6B7280;
+$dg-text-placeholder: #9CA3AF;
+$dg-text-inverse: #FFFFFF;
+$dg-text-link: #1264E8;
+
+// Borders
+$dg-border: #E4E6EB;
+$dg-border-strong: #D9DCE3;
+$dg-border-focus: #1264E8;
+$dg-border-success: #52C41A;
+
+// ==================== Typography ====================
+$dg-font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+$dg-font-regular: "Noto Sans SC-Regular", $dg-font-family;
+$dg-font-medium: "Noto Sans SC-Medium", $dg-font-family;
+$dg-font-semibold: "Noto Sans SC-SemiBold", $dg-font-family;
+$dg-font-bold: "Noto Sans SC-Bold", $dg-font-family;
+
+$dg-font-size-xs: 11px;
+$dg-font-size-sm: 12px;
+$dg-font-size-base: 13px;
+$dg-font-size-md: 14px;
+$dg-font-size-lg: 16px;
+$dg-font-size-xl: 22px;
+
+// ==================== Spacing ====================
+$dg-spacing-xs: 4px;
+$dg-spacing-sm: 8px;
+$dg-spacing-md: 12px;
+$dg-spacing-lg: 16px;
+$dg-spacing-xl: 20px;
+$dg-spacing-xxl: 24px;
+
+// ==================== Layout Sizes ====================
+// Heights
+$dg-header-height: 48px;
+$dg-menubar-height: 32px;
+$dg-toolbar-height: 36px;
+$dg-formula-bar-height: 28px;
+$dg-sheet-tabs-height: 36px;
+$dg-footer-height: 36px;
+
+// Widths
+$dg-sidebar-width: 200px;
+$dg-sidebar-collapsed-width: 48px;
+$dg-props-width: 240px;
+$dg-props-collapsed-width: 48px;
+$dg-formula-panel-height: 200px;
+
+// Table
+$dg-table-header-height: 24px;
+$dg-table-row-height: 28px;
+$dg-row-number-width: 36px;
+$dg-row-label-width: 120px;
+$dg-col-width-default: 90px;
+
+// ==================== Borders ====================
+$dg-radius-xs: 1px;
+$dg-radius-sm: 3px;
+$dg-radius-md: 4px;
+$dg-radius-lg: 6px;
+$dg-radius-xl: 11px;
+$dg-radius-pill: 14px;
+
+// ==================== Shadows ====================
+$dg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+$dg-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
+$dg-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+$dg-shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.1);
+
+// ==================== Z-Index ====================
+$dg-z-sidebar: 10;
+$dg-z-header: 20;
+$dg-z-dropdown: 100;
+$dg-z-context-menu: 1000;
+$dg-z-dialog: 10000;
+$dg-z-toast: 99999;

@@ -1,0 +1,10 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+ol, ul, menu {
+  padding-inline-start: 0;
+  list-style: none;
+}

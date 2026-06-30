@@ -12,6 +12,7 @@ import '@univerjs/ui/lib/index.css'
 import '@univerjs/sheets-ui/lib/index.css'
 import '@univerjs/docs-ui/lib/index.css'
 import './styles/global.scss'
+import './assets/styles/font.css'
 
 // ✅ 开发环境导入测试工具
 if (import.meta.env.DEV) {

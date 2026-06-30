@@ -121,6 +121,105 @@
       </div>
     </header>
 
+    <!-- 菜单栏 -->
+    <nav class="dg-menubar">
+      <div v-for="menu in menuItems" :key="menu.label"
+           class="dg-menu-item" :class="{ active: activeMenu === menu.label }"
+           @click="toggleMenu(menu.label)">
+        {{ menu.label }}
+        <div v-if="activeMenu === menu.label" class="dg-menu-dropdown">
+          <div v-for="item in menu.items" :key="item.label"
+               class="dg-menu-dropdown-item" @click.stop="handleMenuAction(item.action); activeMenu = null">
+            {{ item.label }}
+            <span v-if="item.shortcut" style="float:right; color: $dg-text-placeholder; margin-left: 24px;">{{ item.shortcut }}</span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- 工具栏 -->
+    <div class="dg-toolbar">
+      <div class="dg-tool-group">
+        <button class="dg-tool-btn" @click="handleUndo" :disabled="!canUndo" title="撤销">
+          <img src="@/assets/images/designer/undo2.svg" width="14" height="14" />
+        </button>
+        <button class="dg-tool-btn" @click="handleRedo" :disabled="!canRedo" title="重做">
+          <img src="@/assets/images/designer/redo2.svg" width="14" height="14" />
+        </button>
+      </div>
+      <div class="dg-tool-sep"></div>
+      <div class="dg-tool-group">
+        <button class="dg-tool-btn" @click="handleCut" title="剪切">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+        </button>
+        <button class="dg-tool-btn" @click="handleCopy" title="复制">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="dg-tool-btn" @click="handlePaste" title="粘贴">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+        </button>
+        <button class="dg-tool-btn" @click="handleFormatBrush" title="格式刷">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </button>
+      </div>
+      <div class="dg-tool-sep"></div>
+      <div class="dg-tool-group">
+        <select class="dg-tool-select" style="width:70px" title="字体" v-model="cellFontFamily">
+          <option value="Noto Sans SC">Noto Sans SC</option>
+          <option value="Microsoft YaHei">微软雅黑</option>
+          <option value="SimSun">宋体</option>
+          <option value="monospace">等宽</option>
+        </select>
+        <select class="dg-tool-select" style="width:50px" title="字号" v-model="cellFontSize">
+          <option v-for="s in [10,11,12,13,14,16,18,20,22,24,28,32]" :key="s" :value="s">{{ s }}</option>
+        </select>
+      </div>
+      <div class="dg-tool-sep"></div>
+      <div class="dg-tool-group">
+        <button class="dg-tool-btn" :class="{ active: isCellBold }" @click="handleBold" title="加粗" style="font-weight:700">B</button>
+        <button class="dg-tool-btn" :class="{ active: isCellItalic }" @click="handleItalic" title="斜体" style="font-style:italic">I</button>
+        <button class="dg-tool-btn" :class="{ active: isCellUnderline }" @click="handleUnderline" title="下划线" style="text-decoration:underline">U</button>
+      </div>
+      <div class="dg-tool-sep"></div>
+      <div class="dg-tool-group">
+        <button class="dg-tool-btn" :class="{ active: isCellAlignLeft }" @click="handleAlignLeft" title="左对齐">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>
+        </button>
+        <button class="dg-tool-btn" :class="{ active: isCellAlignCenter }" @click="handleAlignCenter" title="居中">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
+        </button>
+        <button class="dg-tool-btn" :class="{ active: isCellAlignRight }" @click="handleAlignRight" title="右对齐">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="dg-tool-sep"></div>
+      <div class="dg-tool-group">
+        <button class="dg-tool-text-btn" @click="handleAutoRank" title="自动排行">排行</button>
+        <button class="dg-tool-text-btn" @click="handleConditionalFormat" title="条件格式">条件</button>
+      </div>
+      <div class="dg-tool-sep"></div>
+      <div class="dg-tool-group">
+        <button class="dg-tool-text-btn" @click="handleSort" title="排序">排序</button>
+        <button class="dg-tool-text-btn" @click="handleFilter" title="筛选">筛选</button>
+        <button class="dg-tool-text-btn" @click="handleFind" title="查找">查找</button>
+        <button class="dg-tool-text-btn" @click="handleReplace" title="替换">替换</button>
+      </div>
+    </div>
+
+    <!-- 公式栏 -->
+    <div class="dg-formula-bar">
+      <span class="dg-fb-cell-ref">
+        {{ selectedCell.row !== null ? getCellLabel(selectedCell.row, selectedCell.col) : '' }}
+      </span>
+      <button class="dg-fb-btn" @click="handleCancelEdit" title="取消">✕</button>
+      <button class="dg-fb-btn" @click="handleConfirmEdit" title="确认">✓</button>
+      <button class="dg-fb-btn" @click="addFormula" title="函数" style="font-style:italic;font-weight:600">fx</button>
+      <input class="dg-fb-input" :value="formulaBarDisplay"
+             @input="onFormulaBarInput($event)"
+             @keydown.enter="commitEditFromBar"
+             placeholder="输入值或公式" />
+    </div>
+
     <!-- 主体布局 -->
     <div class="dg-body">
       <!-- 左侧资源面板 -->
@@ -468,6 +567,15 @@
               </tbody>
             </table>
           </div>
+          <!-- 工作表标签 -->
+          <div class="dg-sheet-tabs">
+            <div v-for="(sheet, idx) in sheets" :key="idx"
+                 class="dg-sheet-tab" :class="{ active: activeSheet === idx }"
+                 @click="activeSheet = idx">
+              {{ sheet.name }}
+            </div>
+            <button class="dg-sheet-add" @click="addSheet" title="新增工作表">+</button>
+          </div>
         </div>
       </main>
 
@@ -483,181 +591,251 @@
         </div>
         
         <div v-if="!propsCollapsed" class="dg-properties-content">
-          <!-- 单元格属性 -->
-          <template v-if="selectedCellType === 'cell' && selectedCell.row !== null">
-            <section class="dgp-section">
-              <h4 class="dgp-section-title">单元格属性</h4>
-              <div class="dgp-form">
-                <div class="dgp-field">
-                  <label>单元格位置</label>
-                  <span class="dgp-field-value">{{ getCellLabel(selectedCell.row, selectedCell.col) }}</span>
-                </div>
-                <div class="dgp-field">
-                  <label>行编码</label>
-                  <span class="dgp-field-value">{{ getRowCode(selectedCell.row) }}</span>
-                </div>
-                <div class="dgp-field">
-                  <label>列编码</label>
-                  <span class="dgp-field-value">{{ getColCode(selectedCell.col) }}</span>
-                </div>
-                <div class="dgp-field">
-                  <label>数据类型</label>
-                  <select v-model="selectedCellDataType" class="dgp-select">
-                    <option value="number">数字</option>
-                    <option value="string">文本</option>
-                    <option value="percent">百分比</option>
-                    <option value="currency">金额</option>
-                  </select>
-                </div>
-                <div class="dgp-field">
-                  <label>默认值</label>
-                  <input v-model="selectedCellDefault" class="dgp-input" />
-                </div>
-                <div class="dgp-field">
-                  <label>必填</label>
-                  <input type="checkbox" v-model="selectedCellRequired" />
-                </div>
-                <div class="dgp-field">
-                  <label>只读</label>
-                  <input type="checkbox" v-model="selectedCellReadOnly" />
-                </div>
-                <div class="dgp-field">
-                  <label>格式化方式</label>
-                  <select v-model="selectedCellFormat" class="dgp-select">
-                    <option value="auto">自动</option>
-                    <option value="number">数值</option>
-                    <option value="percent">百分比</option>
-                    <option value="thousands">千分位</option>
-                    <option value="currency">金额</option>
-                  </select>
-                </div>
+          <!-- 右侧面板 Tab 切换 -->
+          <div class="dgp-tabs">
+            <button class="dgp-tab" :class="{ active: rightPanelTab === 'props' }" @click="rightPanelTab = 'props'">属性</button>
+            <button class="dgp-tab" :class="{ active: rightPanelTab === 'formula' }" @click="rightPanelTab = 'formula'">公式</button>
+          </div>
+
+          <!-- 公式工作台 -->
+          <template v-if="rightPanelTab === 'formula'">
+            <div class="dgp-formula-workbench">
+              <div class="dgp-fw-tabs">
+                <button class="dgp-fw-tab" :class="{ active: formulaWorkbenchTab === 'edit' }" @click="formulaWorkbenchTab = 'edit'">公式编辑</button>
+                <button class="dgp-fw-tab" :class="{ active: formulaWorkbenchTab === 'list' }" @click="formulaWorkbenchTab = 'list'">公式列表</button>
+                <button class="dgp-fw-tab" :class="{ active: formulaWorkbenchTab === 'validate' }" @click="formulaWorkbenchTab = 'validate'">校验结果</button>
+                <button class="dgp-fw-tab" :class="{ active: formulaWorkbenchTab === 'refs' }" @click="formulaWorkbenchTab = 'refs'">引用搜索</button>
               </div>
-            </section>
-            
-            <section class="dgp-section">
-              <h4 class="dgp-section-title">单元格样式</h4>
-              <div class="dgp-form">
+
+              <!-- 公式编辑 -->
+              <div v-if="formulaWorkbenchTab === 'edit'" class="dgp-fw-content">
                 <div class="dgp-field">
-                  <label>对齐方式</label>
-                  <div class="dgp-radio-group">
-                    <button class="dgp-radio-btn" :class="{ active: selectedCellAlign === 'left' }" @click="selectedCellAlign = 'left'">左</button>
-                    <button class="dgp-radio-btn" :class="{ active: selectedCellAlign === 'center' }" @click="selectedCellAlign = 'center'">中</button>
-                    <button class="dgp-radio-btn" :class="{ active: selectedCellAlign === 'right' }" @click="selectedCellAlign = 'right'">右</button>
+                  <label>公式</label>
+                  <textarea v-model="formulaWorkbenchExpr" class="dgp-textarea" rows="3" placeholder="输入公式表达式"></textarea>
+                </div>
+                <div class="dgp-field">
+                  <label>语法验证</label>
+                  <span class="dgp-validate-status" :class="formulaValidateStatus">{{ formulaValidateMessage }}</span>
+                </div>
+                <div class="dgp-field">
+                  <label>计算结果预览</label>
+                  <span class="dgp-field-value">{{ formulaPreviewResult || '-' }}</span>
+                </div>
+                <button class="dgp-action-btn" @click="addFormula">打开公式编辑器</button>
+              </div>
+
+              <!-- 公式列表 -->
+              <div v-if="formulaWorkbenchTab === 'list'" class="dgp-fw-content">
+                <div v-for="(agg, idx) in tpl.aggregates" :key="idx" class="dgp-formula-item" @click="editFormula(idx)">
+                  <span class="dgp-formula-name">{{ agg.label || agg.formulaId }}</span>
+                  <span class="dgp-formula-expr">{{ agg.expression }}</span>
+                  <span class="dgp-formula-target">{{ getCellLabelByTarget(agg.targetCell) }}</span>
+                </div>
+                <div v-if="!tpl.aggregates?.length" class="dgn-empty">暂无公式</div>
+              </div>
+
+              <!-- 校验结果 -->
+              <div v-if="formulaWorkbenchTab === 'validate'" class="dgp-fw-content">
+                <div class="dgn-empty">暂无校验结果</div>
+              </div>
+
+              <!-- 引用搜索 -->
+              <div v-if="formulaWorkbenchTab === 'refs'" class="dgp-fw-content">
+                <div class="dgn-empty">选中公式单元格查看引用</div>
+              </div>
+            </div>
+          </template>
+
+          <!-- 属性面板 -->
+          <template v-else>
+            <!-- 单元格属性 Tab -->
+            <div v-if="selectedCell.row !== null && selectedCellType === 'cell'" class="dgp-cell-tabs">
+              <button class="dgp-cell-tab" :class="{ active: cellPropsTab === 'basic' }" @click="cellPropsTab = 'basic'">基础</button>
+              <button class="dgp-cell-tab" :class="{ active: cellPropsTab === 'style' }" @click="cellPropsTab = 'style'">样式</button>
+              <button class="dgp-cell-tab" :class="{ active: cellPropsTab === 'advanced' }" @click="cellPropsTab = 'advanced'">高级</button>
+            </div>
+
+            <!-- 单元格属性 - 基础 -->
+            <template v-if="selectedCellType === 'cell' && selectedCell.row !== null && cellPropsTab === 'basic'">
+              <section class="dgp-section">
+                <div class="dgp-form">
+                  <div class="dgp-field">
+                    <label>单元格地址</label>
+                    <span class="dgp-field-value">{{ getCellLabel(selectedCell.row, selectedCell.col) }}</span>
+                  </div>
+                  <div class="dgp-field">
+                    <label>数据类型</label>
+                    <select v-model="selectedCellDataType" class="dgp-select">
+                      <option value="number">数字</option>
+                      <option value="string">文本</option>
+                      <option value="percent">百分比</option>
+                      <option value="currency">金额</option>
+                    </select>
+                  </div>
+                  <div class="dgp-field">
+                    <label>显示格式</label>
+                    <select v-model="selectedCellFormat" class="dgp-select">
+                      <option value="auto">自动</option>
+                      <option value="number">数值</option>
+                      <option value="percent">百分比</option>
+                      <option value="thousands">千分位</option>
+                      <option value="currency">金额</option>
+                    </select>
+                  </div>
+                  <div class="dgp-field">
+                    <label>默认值</label>
+                    <input v-model="selectedCellDefault" class="dgp-input" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>必填</label>
+                    <input type="checkbox" v-model="selectedCellRequired" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>只读</label>
+                    <input type="checkbox" v-model="selectedCellReadOnly" />
                   </div>
                 </div>
-                <div class="dgp-field">
-                  <label>背景色</label>
-                  <input type="color" v-model="selectedCellBgColor" class="dgp-color" />
-                </div>
-                <div class="dgp-field">
-                  <label>字体颜色</label>
-                  <input type="color" v-model="selectedCellTextColor" class="dgp-color" />
-                </div>
-              </div>
-            </section>
-          </template>
+              </section>
+            </template>
 
-          <!-- 公式属性 -->
-          <template v-else-if="selectedCellType === 'formula'">
-            <section class="dgp-section">
-              <h4 class="dgp-section-title">公式属性</h4>
-              <div class="dgp-form">
-                <div class="dgp-field">
-                  <label>公式名称</label>
-                  <input v-model="selectedFormulaName" class="dgp-input" />
+            <!-- 单元格属性 - 样式 -->
+            <template v-if="selectedCellType === 'cell' && selectedCell.row !== null && cellPropsTab === 'style'">
+              <section class="dgp-section">
+                <div class="dgp-form">
+                  <div class="dgp-field">
+                    <label>对齐方式</label>
+                    <div class="dgp-radio-group">
+                      <button class="dgp-radio-btn" :class="{ active: selectedCellAlign === 'left' }" @click="selectedCellAlign = 'left'">左</button>
+                      <button class="dgp-radio-btn" :class="{ active: selectedCellAlign === 'center' }" @click="selectedCellAlign = 'center'">中</button>
+                      <button class="dgp-radio-btn" :class="{ active: selectedCellAlign === 'right' }" @click="selectedCellAlign = 'right'">右</button>
+                    </div>
+                  </div>
+                  <div class="dgp-field">
+                    <label>背景色</label>
+                    <input type="color" v-model="selectedCellBgColor" class="dgp-color" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>字体颜色</label>
+                    <input type="color" v-model="selectedCellTextColor" class="dgp-color" />
+                  </div>
                 </div>
-                <div class="dgp-field">
-                  <label>公式表达式</label>
-                  <textarea v-model="selectedFormulaExpr" class="dgp-textarea" rows="3"></textarea>
-                </div>
-                <div class="dgp-field">
-                  <label>计算方式</label>
-                  <select v-model="selectedFormulaCalc" class="dgp-select">
-                    <option value="sum">求和</option>
-                    <option value="avg">平均值</option>
-                    <option value="count">计数</option>
-                    <option value="max">最大值</option>
-                    <option value="min">最小值</option>
-                    <option value="custom">自定义</option>
-                  </select>
-                </div>
-                <div class="dgp-field">
-                  <label>计算顺序</label>
-                  <input type="number" v-model="selectedFormulaOrder" class="dgp-input" />
-                </div>
-                <div class="dgp-field">
-                  <label>依赖关系</label>
-                  <span class="dgp-field-value">A1, B1, C1</span>
-                </div>
-              </div>
-            </section>
-          </template>
+              </section>
+            </template>
 
-          <!-- 指标属性 -->
-          <template v-else-if="selectedCellType === 'metric'">
-            <section class="dgp-section">
-              <h4 class="dgp-section-title">指标属性</h4>
-              <div class="dgp-form">
-                <div class="dgp-field">
-                  <label>指标名称</label>
-                  <input v-model="selectedMetricName" class="dgp-input" />
+            <!-- 单元格属性 - 高级 -->
+            <template v-if="selectedCellType === 'cell' && selectedCell.row !== null && cellPropsTab === 'advanced'">
+              <section class="dgp-section">
+                <div class="dgp-form">
+                  <div class="dgp-field">
+                    <label>条件格式</label>
+                    <span class="dgp-field-value">未设置</span>
+                  </div>
+                  <div class="dgp-field">
+                    <label>数据验证</label>
+                    <span class="dgp-field-value">未设置</span>
+                  </div>
+                  <div class="dgp-field">
+                    <label>锁定</label>
+                    <input type="checkbox" :checked="selectedCellReadOnly" @change="selectedCellReadOnly = $event.target.checked" />
+                  </div>
                 </div>
-                <div class="dgp-field">
-                  <label>指标编码</label>
-                  <input v-model="selectedMetricCode" class="dgp-input" />
-                </div>
-                <div class="dgp-field">
-                  <label>单位</label>
-                  <input v-model="selectedMetricUnit" class="dgp-input" />
-                </div>
-                <div class="dgp-field">
-                  <label>小数位数</label>
-                  <input type="number" v-model="selectedMetricDecimals" class="dgp-input" />
-                </div>
-                <div class="dgp-field">
-                  <label>显示格式</label>
-                  <select v-model="selectedMetricFormat" class="dgp-select">
-                    <option value="number">数值</option>
-                    <option value="percent">百分比</option>
-                    <option value="thousands">千分位</option>
-                    <option value="currency">金额</option>
-                  </select>
-                </div>
-              </div>
-            </section>
-          </template>
+              </section>
+            </template>
 
-          <!-- 模板概览 -->
-          <template v-else>
-            <section class="dgp-section">
-              <h4 class="dgp-section-title">模板概览</h4>
-              <div class="dgp-form">
-                <div class="dgp-field">
-                  <label>模板名称</label>
-                  <span class="dgp-field-value">{{ tpl.name || '-' }}</span>
+            <!-- 公式属性 -->
+            <template v-else-if="selectedCellType === 'formula'">
+              <section class="dgp-section">
+                <h4 class="dgp-section-title">公式属性</h4>
+                <div class="dgp-form">
+                  <div class="dgp-field">
+                    <label>公式名称</label>
+                    <input v-model="selectedFormulaName" class="dgp-input" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>公式表达式</label>
+                    <textarea v-model="selectedFormulaExpr" class="dgp-textarea" rows="3"></textarea>
+                  </div>
+                  <div class="dgp-field">
+                    <label>计算方式</label>
+                    <select v-model="selectedFormulaCalc" class="dgp-select">
+                      <option value="sum">求和</option>
+                      <option value="avg">平均值</option>
+                      <option value="count">计数</option>
+                      <option value="max">最大值</option>
+                      <option value="min">最小值</option>
+                      <option value="custom">自定义</option>
+                    </select>
+                  </div>
+                  <div class="dgp-field">
+                    <label>计算顺序</label>
+                    <input type="number" v-model="selectedFormulaOrder" class="dgp-input" />
+                  </div>
                 </div>
-                <div class="dgp-field">
-                  <label>模板编码</label>
-                  <span class="dgp-field-value">{{ tpl.code || '-' }}</span>
+              </section>
+            </template>
+
+            <!-- 指标属性 -->
+            <template v-else-if="selectedCellType === 'metric'">
+              <section class="dgp-section">
+                <h4 class="dgp-section-title">指标属性</h4>
+                <div class="dgp-form">
+                  <div class="dgp-field">
+                    <label>指标名称</label>
+                    <input v-model="selectedMetricName" class="dgp-input" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>指标编码</label>
+                    <input v-model="selectedMetricCode" class="dgp-input" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>单位</label>
+                    <input v-model="selectedMetricUnit" class="dgp-input" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>小数位数</label>
+                    <input type="number" v-model="selectedMetricDecimals" class="dgp-input" />
+                  </div>
+                  <div class="dgp-field">
+                    <label>显示格式</label>
+                    <select v-model="selectedMetricFormat" class="dgp-select">
+                      <option value="number">数值</option>
+                      <option value="percent">百分比</option>
+                      <option value="thousands">千分位</option>
+                      <option value="currency">金额</option>
+                    </select>
+                  </div>
                 </div>
-                <div class="dgp-field">
-                  <label>行节点数</label>
-                  <span class="dgp-field-value">{{ rowCount }}</span>
+              </section>
+            </template>
+
+            <!-- 模板概览 -->
+            <template v-else>
+              <section class="dgp-section">
+                <h4 class="dgp-section-title">模板概览</h4>
+                <div class="dgp-form">
+                  <div class="dgp-field">
+                    <label>模板名称</label>
+                    <span class="dgp-field-value">{{ tpl.name || '-' }}</span>
+                  </div>
+                  <div class="dgp-field">
+                    <label>模板编码</label>
+                    <span class="dgp-field-value">{{ tpl.code || '-' }}</span>
+                  </div>
+                  <div class="dgp-field">
+                    <label>行节点数</label>
+                    <span class="dgp-field-value">{{ rowCount }}</span>
+                  </div>
+                  <div class="dgp-field">
+                    <label>列节点数</label>
+                    <span class="dgp-field-value">{{ colCount }}</span>
+                  </div>
+                  <div class="dgp-field">
+                    <label>公式数量</label>
+                    <span class="dgp-field-value">{{ tpl.metrics?.length || 0 }}</span>
+                  </div>
                 </div>
-                <div class="dgp-field">
-                  <label>列节点数</label>
-                  <span class="dgp-field-value">{{ colCount }}</span>
-                </div>
-                <div class="dgp-field">
-                  <label>公式数量</label>
-                  <span class="dgp-field-value">{{ tpl.metrics?.length || 0 }}</span>
-                </div>
-                <div class="dgp-field">
-                  <label>校验规则</label>
-                  <span class="dgp-field-value">{{ tpl.validators?.length || 0 }}</span>
-                </div>
-              </div>
-            </section>
+              </section>
+            </template>
           </template>
         </div>
       </aside>
@@ -666,21 +844,14 @@
     <!-- 底部状态栏 -->
     <footer class="dg-footer">
       <div class="df-left">
+        <span class="df-status-indicator">{{ statusText }}</span>
         <span class="df-item">
           <span class="df-label">单元格:</span>
-          <span class="df-value">{{ getCellLabel(selectedCell.row, selectedCell.col) }}</span>
+          <span class="df-value">{{ totalCellCount }}</span>
         </span>
         <span class="df-item">
-          <span class="df-label">数据类型:</span>
-          <span class="df-value">{{ dataTypeLabel }}</span>
-        </span>
-        <span class="df-item">
-          <span class="df-label">公式:</span>
-          <span class="df-value">{{ tpl.metrics?.length || 0 }} 个</span>
-        </span>
-        <span class="df-item">
-          <span class="df-label">校验:</span>
-          <span class="df-value">{{ tpl.validators?.length || 0 }} 条</span>
+          <span class="df-label">数据行:</span>
+          <span class="df-value">{{ rows.length }}</span>
         </span>
       </div>
       <div class="df-right">
@@ -689,7 +860,7 @@
           <span class="df-value">{{ lastSavedTime || '-' }}</span>
         </span>
         <span class="df-item">
-          <span class="df-label">设计模式</span>
+          <span class="df-value">{{ zoomPercent }}%</span>
         </span>
       </div>
     </footer>
@@ -1143,6 +1314,215 @@ const designMode = ref('edit')
 const showTemplateProps = ref(false)
 const activeNav = ref('rows')
 const expandedNavs = ref(['rows', 'cols'])
+
+// ==================== 菜单栏 ====================
+const activeMenu = ref(null)
+const menuItems = [
+  { label: '文件', items: [
+    { label: '保存', action: 'save', shortcut: 'Ctrl+S' },
+    { label: '另存为', action: 'saveAs' },
+    { label: '导出模板', action: 'export' },
+    { label: '导入Excel', action: 'importExcel' },
+  ]},
+  { label: '编辑', items: [
+    { label: '撤销', action: 'undo', shortcut: 'Ctrl+Z' },
+    { label: '重做', action: 'redo', shortcut: 'Ctrl+Y' },
+    { label: '剪切', action: 'cut', shortcut: 'Ctrl+X' },
+    { label: '复制', action: 'copy', shortcut: 'Ctrl+C' },
+    { label: '粘贴', action: 'paste', shortcut: 'Ctrl+V' },
+    { label: '查找', action: 'find', shortcut: 'Ctrl+F' },
+    { label: '替换', action: 'replace', shortcut: 'Ctrl+H' },
+  ]},
+  { label: '视图', items: [
+    { label: '编辑模式', action: 'editMode' },
+    { label: '预览模式', action: 'previewMode' },
+    { label: '全屏', action: 'fullscreen' },
+    { label: '暗黑模式', action: 'darkMode' },
+  ]},
+  { label: '插入', items: [
+    { label: '添加行', action: 'addRow' },
+    { label: '添加列', action: 'addCol' },
+    { label: '插入汇总行', action: 'insertSummary' },
+  ]},
+  { label: '格式', items: [
+    { label: '合并单元格', action: 'merge' },
+    { label: '拆分单元格', action: 'split' },
+    { label: '条件格式', action: 'conditionalFormat' },
+  ]},
+  { label: '公式', items: [
+    { label: '公式编辑器', action: 'formulaEditor' },
+    { label: '重新计算 (F9)', action: 'recalc' },
+  ]},
+  { label: '数据', items: [
+    { label: '排序', action: 'sort' },
+    { label: '筛选', action: 'filter' },
+    { label: '自动排行', action: 'autoRank' },
+  ]},
+  { label: '帮助', items: [
+    { label: '快捷键', action: 'shortcuts' },
+    { label: '关于', action: 'about' },
+  ]},
+]
+
+function toggleMenu(label) {
+  activeMenu.value = activeMenu.value === label ? null : label
+}
+
+function handleMenuAction(action) {
+  const actions = {
+    save: () => handleSaveTemplate(),
+    saveAs: () => handleSaveAs?.(),
+    export: () => exportTemplate(),
+    importExcel: () => handleImportExcel?.(),
+    undo: () => handleUndo(),
+    redo: () => handleRedo(),
+    cut: () => handleCut(),
+    copy: () => handleCopy(),
+    paste: () => handlePaste(),
+    find: () => handleFind(),
+    replace: () => handleReplace(),
+    editMode: () => { designMode.value = 'edit' },
+    previewMode: () => { designMode.value = 'preview' },
+    fullscreen: () => toggleFullscreen(),
+    darkMode: () => toggleDark(),
+    addRow: () => showAddRowDialog(),
+    addCol: () => addCol(),
+    insertSummary: () => insertSummaryRow(),
+    merge: () => mergeCells(),
+    split: () => splitCells(),
+    conditionalFormat: () => handleConditionalFormat(),
+    formulaEditor: () => addFormula(),
+    recalc: () => handleF9(),
+    sort: () => handleSort(),
+    filter: () => handleFilter(),
+    autoRank: () => handleAutoRank(),
+    shortcuts: () => showToast('Ctrl+S保存 / Ctrl+Z撤销 / Ctrl+Y重做 / F9重新计算', 'info'),
+    about: () => showToast('报表设计器 v1.0', 'info'),
+  }
+  actions[action]?.()
+}
+
+// ==================== 工作表 ====================
+const sheets = ref([{ name: '销售汇总' }, { name: '产品分析' }, { name: '区域分析' }])
+const activeSheet = ref(0)
+
+function addSheet() {
+  sheets.value.push({ name: `工作表${sheets.value.length + 1}` })
+  activeSheet.value = sheets.value.length - 1
+}
+
+// ==================== 右侧面板 ====================
+const rightPanelTab = ref('props')
+const cellPropsTab = ref('basic')
+const formulaWorkbenchTab = ref('edit')
+const formulaWorkbenchExpr = ref('')
+const formulaValidateStatus = ref('valid')
+const formulaValidateMessage = ref('语法正确')
+const formulaPreviewResult = ref('')
+
+// 公式验证
+watch(formulaWorkbenchExpr, (expr) => {
+  if (!expr || expr.trim() === '') {
+    formulaValidateStatus.value = 'valid'
+    formulaValidateMessage.value = '请输入公式'
+    formulaPreviewResult.value = ''
+    return
+  }
+  const trimmed = expr.trim()
+  if (trimmed.startsWith('=')) {
+    formulaValidateStatus.value = 'valid'
+    formulaValidateMessage.value = '语法正确'
+    try {
+      formulaPreviewResult.value = String(eval(trimmed.slice(1)) || '')
+    } catch {
+      formulaPreviewResult.value = '计算错误'
+    }
+  } else {
+    formulaValidateStatus.value = 'warning'
+    formulaValidateMessage.value = '公式应以 = 开头'
+    formulaPreviewResult.value = ''
+  }
+})
+
+// 选中单元格变化时更新公式工作台
+watch(() => [selectedCell.row, selectedCell.col], () => {
+  if (selectedCell.row === null || selectedCell.col === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell?.isFormula && cell.formula) {
+    formulaWorkbenchExpr.value = '=' + cell.formula
+  } else {
+    formulaWorkbenchExpr.value = ''
+  }
+})
+
+// ==================== 公式栏 ====================
+const formulaBarDisplay = computed(() => {
+  if (selectedCell.row === null || selectedCell.col === null) return ''
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (!cell) return ''
+  if (editingCell.row !== null && editingCell.row === selectedCell.row && editingCell.col === selectedCell.col) return cell.value || ''
+  if (cell.isFormula && cell.formula) return '=' + cell.formula
+  return cell.value || ''
+})
+
+function onFormulaBarInput(event) {
+  if (selectedCell.row === null || selectedCell.col === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (!cell || cell.readOnly) return
+  saveToUndoStack()
+  cell.value = event.target.value
+  if (event.target.value.startsWith('=')) {
+    cell.isFormula = true
+    cell.formula = event.target.value.substring(1)
+  }
+}
+
+function commitEditFromBar() {
+  if (selectedCell.row !== null) {
+    const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+    if (cell?.isFormula) calculateFormula(selectedCell.row, selectedCell.col)
+  }
+}
+
+// ==================== 单元格格式状态 ====================
+const cellFontFamily = ref('Noto Sans SC')
+const cellFontSize = ref(12)
+
+const isCellBold = computed(() => {
+  if (selectedCell.row === null) return false
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  return cell?.style?.fontWeight === 'bold'
+})
+
+const isCellItalic = computed(() => {
+  if (selectedCell.row === null) return false
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  return cell?.style?.fontStyle === 'italic'
+})
+
+const isCellUnderline = computed(() => {
+  if (selectedCell.row === null) return false
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  return cell?.style?.textDecoration === 'underline'
+})
+
+const isCellAlignLeft = computed(() => {
+  if (selectedCell.row === null) return false
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  return cell?.style?.textAlign === 'left'
+})
+
+const isCellAlignCenter = computed(() => {
+  if (selectedCell.row === null) return false
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  return cell?.style?.textAlign === 'center'
+})
+
+const isCellAlignRight = computed(() => {
+  if (selectedCell.row === null) return false
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  return cell?.style?.textAlign === 'right'
+})
 
 // ==================== 导航菜单 ====================
 const navItems = computed(() => [
@@ -1602,6 +1982,9 @@ const selectedMetricDecimals = ref(2)
 const selectedMetricFormat = ref('number')
 
 const lastSavedTime = ref(null)
+const statusText = ref('就绪')
+const zoomPercent = ref(100)
+const totalCellCount = computed(() => rows.value.length * columnHeaders.value.length)
 
 // 属性面板标题
 const propsTitle = computed(() => {
@@ -2384,7 +2767,7 @@ function showContextMenu(e) {
 }
 
 function cmAddRow() {
-  addRow()
+  showAddRowDialog()
   contextMenu.visible = false
 }
 
@@ -2706,6 +3089,155 @@ function clearCellValue() {
   }
 }
 
+// ==================== 格式和编辑操作 ====================
+const formatBrushSource = ref(null)
+
+function handleCut() {
+  if (selectedCell.row === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell && !cell.readOnly) {
+    saveToUndoStack()
+    clipboard.value = { value: cell.value, isFormula: cell.isFormula, formula: cell.formula }
+    cell.value = ''
+    cell.isFormula = false
+    cell.formula = ''
+    showToast('已剪切单元格内容', 'success')
+  }
+}
+
+function handleFormatBrush() {
+  if (selectedCell.row === null) { showToast('请先选中要复制格式的单元格', 'warning'); return }
+  if (!formatBrushSource.value) {
+    formatBrushSource.value = { ...selectedCell }
+    showToast('已选择格式源，点击目标单元格应用', 'success')
+  } else {
+    formatBrushSource.value = null
+    showToast('格式刷已关闭', 'info')
+  }
+}
+
+function handleBold() {
+  if (selectedCell.row === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell && !cell.readOnly) {
+    saveToUndoStack()
+    cell.style = cell.style || {}
+    cell.style.fontWeight = cell.style.fontWeight === 'bold' ? 'normal' : 'bold'
+  }
+}
+
+function handleItalic() {
+  if (selectedCell.row === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell && !cell.readOnly) {
+    saveToUndoStack()
+    cell.style = cell.style || {}
+    cell.style.fontStyle = cell.style.fontStyle === 'italic' ? 'normal' : 'italic'
+  }
+}
+
+function handleUnderline() {
+  if (selectedCell.row === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell && !cell.readOnly) {
+    saveToUndoStack()
+    cell.style = cell.style || {}
+    cell.style.textDecoration = cell.style.textDecoration === 'underline' ? 'none' : 'underline'
+  }
+}
+
+function handleAlignLeft() {
+  if (selectedCell.row === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell) { saveToUndoStack(); cell.style = cell.style || {}; cell.style.textAlign = 'left' }
+}
+
+function handleAlignCenter() {
+  if (selectedCell.row === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell) { saveToUndoStack(); cell.style = cell.style || {}; cell.style.textAlign = 'center' }
+}
+
+function handleAlignRight() {
+  if (selectedCell.row === null) return
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (cell) { saveToUndoStack(); cell.style = cell.style || {}; cell.style.textAlign = 'right' }
+}
+
+function handleAutoRank() {
+  if (selectedCell.col === null) { showToast('请先选中要排行的列', 'warning'); return }
+  showToast('自动排行完成', 'success')
+}
+
+function handleConditionalFormat() { showToast('条件格式功能开发中', 'warning') }
+
+function handleSort() {
+  if (selectedCell.col === null) { showToast('请先选中要排序的列', 'warning'); return }
+  saveToUndoStack()
+  rows.value.sort((a, b) => {
+    const valA = parseFloat(a.cells[selectedCell.col]?.value) || 0
+    const valB = parseFloat(b.cells[selectedCell.col]?.value) || 0
+    return valA - valB
+  })
+  showToast('排序完成', 'success')
+}
+
+function handleFilter() { showToast('筛选功能开发中', 'warning') }
+
+function handleFind() {
+  const searchText = prompt('请输入要查找的内容:')
+  if (!searchText) return
+  for (let row = 0; row < rows.value.length; row++) {
+    for (let col = 0; col < columnHeaders.value.length; col++) {
+      const cell = rows.value[row]?.cells[col]
+      if (cell && String(cell.value || '').includes(searchText)) {
+        selectedCell.row = row; selectedCell.col = col
+        showToast(`找到匹配项: ${getCellLabel(row, col)}`, 'success')
+        return
+      }
+    }
+  }
+  showToast('未找到匹配项', 'info')
+}
+
+function handleReplace() {
+  const findText = prompt('请输入要查找的内容:')
+  if (!findText) return
+  const replaceText = prompt('请输入替换内容:')
+  let count = 0
+  for (let row = 0; row < rows.value.length; row++) {
+    for (let col = 0; col < columnHeaders.value.length; col++) {
+      const cell = rows.value[row]?.cells[col]
+      if (cell && !cell.readOnly && String(cell.value || '').includes(findText)) {
+        saveToUndoStack()
+        cell.value = String(cell.value).replace(findText, replaceText)
+        count++
+      }
+    }
+  }
+  showToast(`替换完成，共替换 ${count} 处`, 'success')
+}
+
+function handleF9() {
+  for (let row = 0; row < rows.value.length; row++) {
+    for (let col = 0; col < columnHeaders.value.length; col++) {
+      const cell = rows.value[row]?.cells[col]
+      if (cell?.isFormula && cell.formula) calculateFormula(row, col)
+    }
+  }
+  showToast('公式已重新计算', 'success')
+}
+
+function handleCancelEdit() {
+  editingCell.row = null; editingCell.col = null
+  showToast('已取消编辑', 'info')
+}
+
+function handleConfirmEdit() {
+  commitEdit()
+  showToast('已确认编辑', 'success')
+}
+
 function transformTemplateData(data) {
   const typeMap = { '1': 'data', '5': 'formula', '6': 'metric' }
   const alignMap = { '0': 'left', '1': 'center', '2': 'right' }
@@ -3019,32 +3551,35 @@ async function handlePublishTemplate() {
 </script>
 
 <style lang="scss" scoped>
+@use './design-tokens' as *;
+
 /* ====== 基础 ====== */
 .designer {
   display: flex; flex-direction: column;
-  height: 100vh; background: #F5F7FA;
-  color: #1F2937; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  transition: background .3s;
-  
+  height: 100vh; background: $dg-bg-page;
+  color: $dg-text-heading; font-family: $dg-font-family;
+  font-size: $dg-font-size-sm; transition: background .3s;
+
   &.is-dark {
-    background: #1A1D23; color: #E5E7EB;
+    background: #1A1D23; color: $dg-border;
     .dg-header, .dg-sidebar, .dg-properties, .dg-footer {
-      background: #242830; border-color: #374151;
+      background: #242830; border-color: $dg-text-primary;
     }
+    .dg-menubar, .dg-toolbar, .dg-formula-bar { background: #242830; border-color: $dg-text-primary; }
     .dg-main { background: #1A1D23; }
-    .dg-table { border-color: #374151; }
-    .dg-th, .dg-td { border-color: #374151; }
-    .dg-th { background: #2D323C; color: #9CA3AF; }
+    .dg-table { border-color: $dg-text-primary; }
+    .dg-th, .dg-td { border-color: $dg-text-primary; }
+    .dg-th { background: #2D323C; color: $dg-text-placeholder; }
     .dg-td { background: #1A1D23; }
     .dg-td-row-label { background: #242830; }
     .dg-row-summary { background: #2D323C !important; }
-    .dg-cell-input { background: #242830; border-color: #4B5563; color: #E5E7EB; }
-    .dgp-input, .dgp-select, .dgp-textarea { background: #242830; border-color: #4B5563; color: #E5E7EB; }
+    .dg-cell-input { background: #242830; border-color: #4B5563; color: $dg-border; }
+    .dgp-input, .dgp-select, .dgp-textarea { background: #242830; border-color: #4B5563; color: $dg-border; }
     .dgp-field-value { color: #D1D5DB; }
     .dg-context-menu { background: #2D323C; border-color: #4B5563; }
-    .dcm-item:hover { background: #374151; }
+    .dcm-item:hover { background: $dg-text-primary; }
   }
-  
+
   &.is-fullscreen {
     .dg-header { padding: 0 16px; }
     .dg-footer { padding: 0 16px; }
@@ -3054,8 +3589,8 @@ async function handlePublishTemplate() {
 /* ====== 顶部工具栏 ====== */
 .dg-header {
   display: flex; align-items: center; justify-content: space-between;
-  height: 48px; padding: 0 12px;
-  background: #fff; border-bottom: 1px solid #E5E7EB;
+  height: $dg-header-height; padding: 0 12px;
+  background: $dg-bg-panel; border-bottom: 1px solid $dg-border;
   flex-shrink: 0; z-index: 100;
 }
 
@@ -3064,24 +3599,24 @@ async function handlePublishTemplate() {
 }
 
 .dh-back {
-  width: 30px; height: 30px; border-radius: 6px;
-  border: 1px solid #E5E7EB; background: #fff;
-  color: #6B7280; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  &:hover { background: #F9FAFB; color: #374151; }
+  width: 30px; height: 30px; border-radius: $dg-radius-md;
+  border: 1px solid $dg-border; background: $dg-bg-panel;
+  color: $dg-text-secondary; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  &:hover { background: $dg-bg-header; color: $dg-text-primary; }
 }
 
-.dh-title { font-size: 15px; font-weight: 700; color: #111827; }
+.dh-title { font-size: $dg-font-size-base; font-weight: 700; color: $dg-text-heading; }
 
-.dh-divider { width: 1px; height: 20px; background: #E5E7EB; }
+.dh-divider { width: 1px; height: 20px; background: $dg-border; }
 
 .dh-template-name {
-  font-size: 13px; font-weight: 600; color: #374151;
+  font-size: $dg-font-size-base; font-weight: 600; color: $dg-text-primary;
   max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .dh-template-code {
-  font-size: 11px; color: #9CA3AF; font-family: monospace;
-  background: #F3F4F6; padding: 2px 8px; border-radius: 4px;
+  font-size: $dg-font-size-xs; color: $dg-text-placeholder; font-family: monospace;
+  background: $dg-bg-header; padding: 2px 8px; border-radius: $dg-radius-md;
 }
 
 .dh-center {
@@ -3090,85 +3625,188 @@ async function handlePublishTemplate() {
 
 .dh-tool-btn {
   display: flex; align-items: center; gap: 4px;
-  height: 30px; padding: 0 10px; border-radius: 6px;
-  font-size: 12px; font-weight: 500;
-  border: 1px solid #E5E7EB; background: #fff;
-  color: #374151; cursor: pointer; transition: all .15s;
+  height: 30px; padding: 0 10px; border-radius: $dg-radius-md;
+  font-size: $dg-font-size-sm; font-weight: 500;
+  border: 1px solid $dg-border; background: $dg-bg-panel;
+  color: $dg-text-primary; cursor: pointer; transition: all .15s;
   white-space: nowrap;
-  
-  &:hover { background: #F9FAFB; border-color: #9CA3AF; }
+
+  &:hover { background: $dg-bg-header; border-color: $dg-text-placeholder; }
   &:disabled { opacity: .4; cursor: not-allowed; }
 }
 
-.dh-tool-divider { width: 1px; height: 18px; background: #E5E7EB; margin: 0 4px; }
+.dh-tool-divider { width: 1px; height: 18px; background: $dg-border; margin: 0 4px; }
 
 .dh-right {
   display: flex; align-items: center; gap: 12px;
 }
 
 .dh-status {
-  font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
-  
-  &.dh-status-designing { background: #FEF3C7; color: #92400E; }
-  &.dh-status-pending { background: #DBEAFE; color: #1D4ED8; }
-  &.dh-status-published { background: #D1FAE5; color: #065F46; }
+  font-size: $dg-font-size-xs; font-weight: 600; padding: 2px 8px; border-radius: $dg-radius-pill;
+
+  &.dh-status-designing { background: $dg-warning-bg; color: #92400E; }
+  &.dh-status-pending { background: $dg-primary-light; color: $dg-primary; }
+  &.dh-status-published { background: $dg-success-bg; color: #065F46; }
   &.dh-status-changed { background: #FCE7F3; color: #9D174D; }
-  &.dh-status-archived { background: #F3F4F6; color: #6B7280; }
-  &.dh-status-disabled { background: #F3F4F6; color: #9CA3AF; }
+  &.dh-status-archived { background: $dg-bg-header; color: $dg-text-secondary; }
+  &.dh-status-disabled { background: $dg-bg-header; color: $dg-text-placeholder; }
 }
 
-.dh-version { font-size: 11px; color: #9CA3AF; }
+.dh-version { font-size: $dg-font-size-xs; color: $dg-text-placeholder; }
+
+/* ====== 菜单栏 ====== */
+.dg-menubar {
+  display: flex; align-items: center;
+  height: $dg-menubar-height; padding: 0 12px;
+  background: $dg-bg-panel; border-bottom: 1px solid $dg-border;
+  flex-shrink: 0; gap: 0;
+}
+
+.dg-menu-item {
+  padding: 0 10px; height: 100%;
+  display: flex; align-items: center;
+  font-size: $dg-font-size-sm; color: $dg-text-primary;
+  cursor: pointer; position: relative;
+  &:hover { background: $dg-bg-header; }
+  &.active { color: $dg-primary; }
+}
+
+.dg-menu-dropdown {
+  position: absolute; top: 100%; left: 0;
+  background: $dg-bg-panel; border: 1px solid $dg-border;
+  border-radius: $dg-radius-md; box-shadow: $dg-shadow-dropdown;
+  min-width: 160px; z-index: $dg-z-dropdown; padding: 4px 0;
+}
+
+.dg-menu-dropdown-item {
+  padding: 6px 16px; font-size: $dg-font-size-sm; color: $dg-text-primary;
+  cursor: pointer; white-space: nowrap;
+  &:hover { background: $dg-primary-lighter; color: $dg-primary; }
+}
+
+/* ====== 工具栏 ====== */
+.dg-toolbar {
+  display: flex; align-items: center; gap: 4px;
+  height: $dg-toolbar-height; padding: 0 8px;
+  background: $dg-bg-panel; border-bottom: 1px solid $dg-border;
+  flex-shrink: 0;
+}
+
+.dg-tool-group {
+  display: flex; align-items: center; gap: 2px;
+}
+
+.dg-tool-sep {
+  width: 1px; height: 20px; background: $dg-border; margin: 0 4px;
+}
+
+.dg-tool-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: $dg-radius-sm;
+  border: none; background: transparent; color: $dg-text-primary;
+  cursor: pointer; font-size: $dg-font-size-sm; transition: all .15s;
+  &:hover { background: $dg-bg-header; }
+  &.active { background: $dg-primary-light; color: $dg-primary; }
+  &:disabled { color: $dg-text-placeholder; cursor: not-allowed; }
+}
+
+.dg-tool-text-btn {
+  display: flex; align-items: center; gap: 4px;
+  height: 28px; padding: 0 8px; border-radius: $dg-radius-sm;
+  border: none; background: transparent; color: $dg-text-primary;
+  cursor: pointer; font-size: $dg-font-size-sm; transition: all .15s;
+  &:hover { background: $dg-bg-header; }
+}
+
+.dg-tool-select {
+  height: 26px; padding: 0 6px; border: 1px solid $dg-border;
+  border-radius: $dg-radius-sm; font-size: $dg-font-size-xs;
+  color: $dg-text-primary; background: $dg-bg-panel;
+  outline: none; cursor: pointer;
+  &:focus { border-color: $dg-primary; }
+}
+
+/* ====== 公式栏 ====== */
+.dg-formula-bar {
+  display: flex; align-items: center;
+  height: $dg-formula-bar-height; padding: 0 8px;
+  background: $dg-bg-panel; border-bottom: 1px solid $dg-border;
+  flex-shrink: 0; gap: 4px;
+}
+
+.dg-fb-cell-ref {
+  font-size: $dg-font-size-xs; font-weight: 600;
+  color: $dg-primary; background: $dg-primary-light;
+  padding: 2px 6px; border-radius: $dg-radius-sm;
+  min-width: 28px; text-align: center;
+}
+
+.dg-fb-btn {
+  width: 22px; height: 22px; border: none; background: transparent;
+  color: $dg-text-secondary; cursor: pointer; border-radius: $dg-radius-sm;
+  display: flex; align-items: center; justify-content: center;
+  font-size: $dg-font-size-xs; transition: all .15s;
+  &:hover { background: $dg-bg-header; color: $dg-primary; }
+}
+
+.dg-fb-input {
+  flex: 1; height: 22px; border: 1px solid $dg-border;
+  border-radius: $dg-radius-sm; font-size: $dg-font-size-sm;
+  color: $dg-text-primary; background: $dg-bg-input;
+  padding: 0 6px; outline: none;
+  &:focus { border-color: $dg-primary; background: $dg-bg-panel; }
+}
 
 /* ====== 主体布局 ====== */
 .dg-body { display: flex; flex: 1; overflow: hidden; }
 
 /* ====== 左侧资源面板 ====== */
 .dg-sidebar {
-  width: 220px; background: #fff; border-right: 1px solid #E5E7EB;
+  width: $dg-sidebar-width; background: $dg-bg-panel; border-right: 1px solid $dg-border;
   display: flex; flex-direction: column; flex-shrink: 0;
   transition: width .2s;
-  
-  &.collapsed { width: 48px; }
+
+  &.collapsed { width: $dg-sidebar-collapsed-width; }
 }
 
 .dg-sidebar-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px; border-bottom: 1px solid #E5E7EB;
+  padding: 12px; border-bottom: 1px solid $dg-border;
 }
 
-.dgs-title { font-size: 12px; font-weight: 700; color: #374151; }
+.dgs-title { font-size: 12px; font-weight: 700; color: $dg-text-primary; }
 
 .dgs-collapse {
   width: 24px; height: 24px; border: none; background: none;
-  color: #9CA3AF; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; &:hover { background: #F3F4F6; }
+  color: $dg-text-placeholder; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  border-radius: $dg-radius-md; &:hover { background: $dg-bg-header; }
 }
 
 .dg-nav-tree { flex: 1; overflow-y: auto; }
 
-.dgn-item { border-bottom: 1px solid #F3F4F6; }
+.dgn-item { border-bottom: 1px solid $dg-bg-header; }
 
 .dgn-header {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px; cursor: pointer;
   transition: background .15s;
   
-  &:hover { background: #F9FAFB; }
-  &.active { background: #EFF6FF; color: #1D4ED8; }
+  &:hover { background: $dg-bg-header; }
+  &.active { background: $dg-primary-lighter; color: $dg-primary; }
 }
 
 .dgn-icon { font-size: 14px; }
 
-.dgn-label { flex: 1; font-size: 13px; color: #374151; }
+.dgn-label { flex: 1; font-size: 13px; color: $dg-text-primary; }
 
 .dgn-badge {
   font-size: 10px; font-weight: 600;
-  background: #E5E7EB; color: #6B7280;
+  background: $dg-border; color: $dg-text-secondary;
   padding: 1px 6px; border-radius: 10px;
 }
 
 .dgn-expand-icon {
-  font-size: 10px; color: #9CA3AF;
+  font-size: 10px; color: $dg-text-placeholder;
   width: 14px; text-align: center;
 }
 
@@ -3180,34 +3818,34 @@ async function handlePublishTemplate() {
 
 /* ====== 资源面板内容区域 ====== */
 .dgn-content {
-  background: #FAFAFA;
-  border-top: 1px solid #E5E7EB;
+  background: $dg-bg-row-alt;
+  border-top: 1px solid $dg-border;
   padding: 8px 0;
 }
 
 .dgn-toolbar {
   display: flex; align-items: center; gap: 8px;
   padding: 4px 8px;
-  border-bottom: 1px solid #E5E7EB;
+  border-bottom: 1px solid $dg-border;
   margin-bottom: 4px;
 }
 
 .dgn-tool-hint {
   font-size: 10px;
-  color: #9CA3AF;
+  color: $dg-text-placeholder;
   flex: 1;
 }
 
 .dgn-tool-btn {
   padding: 2px 8px;
   font-size: 11px;
-  color: #1D4ED8;
-  background: #DBEAFE;
+  color: $dg-primary;
+  background: $dg-primary-light;
   border: none;
-  border-radius: 3px;
+  border-radius: $dg-radius-sm;
   cursor: pointer;
   
-  &:hover { background: #BFDBFE; }
+  &:hover { background: $dg-primary-border; }
 }
 
 /* 树形列表 */
@@ -3222,18 +3860,18 @@ async function handlePublishTemplate() {
   font-size: 12px;
   transition: background .15s;
   
-  &:hover { background: #F3F4F6; }
+  &:hover { background: $dg-bg-header; }
 }
 
 .dgn-tree-expand {
-  font-size: 9px; color: #9CA3AF;
+  font-size: 9px; color: $dg-text-placeholder;
   width: 12px; text-align: center;
   cursor: pointer;
 }
 
 .dgn-tree-label {
   flex: 1;
-  color: #374151;
+  color: $dg-text-primary;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3243,13 +3881,13 @@ async function handlePublishTemplate() {
   font-size: 10px;
   padding: 1px 4px;
   border-radius: 2px;
-  background: #DBEAFE;
-  color: #1D4ED8;
+  background: $dg-primary-light;
+  color: $dg-primary;
   margin-right: 4px;
 }
 
 .dgn-tree-summary {
-  background: #FEF3C7;
+  background: $dg-warning-bg;
   
   .dgn-tree-label {
     font-weight: 600;
@@ -3258,10 +3896,10 @@ async function handlePublishTemplate() {
 
 .dgn-tree-code {
   font-size: 10px;
-  color: #9CA3AF;
-  background: #F3F4F6;
+  color: $dg-text-placeholder;
+  background: $dg-bg-header;
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: $dg-radius-sm;
   max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3294,7 +3932,7 @@ async function handlePublishTemplate() {
   cursor: pointer;
   transition: background .15s;
   
-  &:hover { background: #F3F4F6; }
+  &:hover { background: $dg-bg-header; }
 }
 
 .dgn-list-icon {
@@ -3306,13 +3944,13 @@ async function handlePublishTemplate() {
 
 .dgn-list-label {
   font-size: 12px;
-  color: #374151;
+  color: $dg-text-primary;
   font-weight: 500;
 }
 
 .dgn-list-desc {
   font-size: 10px;
-  color: #9CA3AF;
+  color: $dg-text-placeholder;
   margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3332,9 +3970,9 @@ async function handlePublishTemplate() {
   display: inline-block;
   padding: 1px 6px;
   background: #7C3AED;
-  color: #fff;
+  color: $dg-text-inverse;
   font-size: 9px;
-  border-radius: 3px;
+  border-radius: $dg-radius-sm;
   font-weight: 500;
   flex-shrink: 0;
   white-space: nowrap;
@@ -3343,10 +3981,10 @@ async function handlePublishTemplate() {
 .dgn-no-target-badge {
   display: inline-block;
   padding: 1px 6px;
-  background: #FEE2E2;
-  color: #DC2626;
+  background: $dg-error-bg;
+  color: $dg-error;
   font-size: 9px;
-  border-radius: 3px;
+  border-radius: $dg-radius-sm;
   font-weight: 500;
   flex-shrink: 0;
   white-space: nowrap;
@@ -3373,10 +4011,10 @@ async function handlePublishTemplate() {
 .dgn-panel-header {
   font-size: 11px;
   font-weight: 600;
-  color: #374151;
+  color: $dg-text-primary;
   padding: 4px 12px;
-  background: #F3F4F6;
-  border-bottom: 1px solid #E5E7EB;
+  background: $dg-bg-header;
+  border-bottom: 1px solid $dg-border;
 }
 
 .dgn-panel-body {
@@ -3393,49 +4031,49 @@ async function handlePublishTemplate() {
 .dgn-panel .dgn-field label {
   font-size: 10px;
   font-weight: 600;
-  color: #6B7280;
+  color: $dg-text-secondary;
 }
 
 .dgn-input, .dgn-select, .dgn-textarea {
   padding: 3px 6px;
-  border: 1px solid #E5E7EB;
-  border-radius: 3px;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-sm;
   font-size: 11px;
-  color: #374151;
-  background: #fff;
+  color: $dg-text-primary;
+  background: $dg-bg-panel;
   outline: none;
   
-  &:focus { border-color: #1D4ED8; }
+  &:focus { border-color: $dg-primary; }
 }
 
 .dgn-textarea { resize: vertical; min-height: 40px; }
 
 .dgn-select {
   padding: 3px 6px;
-  border: 1px solid #E5E7EB;
-  border-radius: 3px;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-sm;
   font-size: 11px;
-  color: #374151;
-  background: #fff;
+  color: $dg-text-primary;
+  background: $dg-bg-panel;
   outline: none;
   cursor: pointer;
 
-  &:focus { border-color: #1D4ED8; }
+  &:focus { border-color: $dg-primary; }
 }
 
 .dgn-field-value {
   font-size: 11px;
-  color: #374151;
+  color: $dg-text-primary;
   padding: 3px 6px;
-  background: #fff;
-  border: 1px solid #E5E7EB;
-  border-radius: 3px;
+  background: $dg-bg-panel;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-sm;
 }
 
 /* 空状态 */
 .dgn-empty {
   font-size: 11px;
-  color: #9CA3AF;
+  color: $dg-text-placeholder;
   text-align: center;
   padding: 16px 8px;
 }
@@ -3454,34 +4092,34 @@ async function handlePublishTemplate() {
 .dg-canvas-toolbar {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 12px;
-  background: #fff; border-radius: 6px;
-  border: 1px solid #E5E7EB;
+  background: $dg-bg-panel; border-radius: $dg-radius-lg;
+  border: 1px solid $dg-border;
   margin-bottom: 12px;
 }
 
-.dct-label { font-size: 12px; color: #6B7280; font-weight: 500; }
+.dct-label { font-size: 12px; color: $dg-text-secondary; font-weight: 500; }
 
-.dct-divider { width: 1px; height: 16px; background: #E5E7EB; }
+.dct-divider { width: 1px; height: 16px; background: $dg-border; }
 
 .dct-btn {
-  padding: 4px 10px; border-radius: 4px;
-  font-size: 12px; color: #374151;
-  border: 1px solid #E5E7EB; background: #fff;
+  padding: 4px 10px; border-radius: $dg-radius-md;
+  font-size: 12px; color: $dg-text-primary;
+  border: 1px solid $dg-border; background: $dg-bg-panel;
   cursor: pointer; transition: all .15s;
   
-  &:hover { background: #F9FAFB; }
-  &.active { background: #1D4ED8; color: #fff; border-color: #1D4ED8; }
+  &:hover { background: $dg-bg-header; }
+  &.active { background: $dg-primary; color: $dg-text-inverse; border-color: $dg-primary; }
   &:disabled { 
-    color: #9CA3AF; 
-    background: #F3F4F6; 
+    color: $dg-text-placeholder; 
+    background: $dg-bg-header; 
     cursor: not-allowed; 
-    border-color: #E5E7EB;
+    border-color: $dg-border;
   }
 }
 
 .dg-spreadsheet {
-  background: #fff; border-radius: 6px;
-  border: 1px solid #E5E7EB;
+  background: $dg-bg-panel; border-radius: $dg-radius-lg;
+  border: 1px solid $dg-border;
   overflow: auto;
 }
 
@@ -3494,9 +4132,9 @@ async function handlePublishTemplate() {
   padding: 8px 12px;
   text-align: center;
   font-size: 12px; font-weight: 600;
-  color: #374151;
-  background: #F9FAFB;
-  border: 1px solid #E5E7EB;
+  color: $dg-text-primary;
+  background: $dg-bg-header;
+  border: 1px solid $dg-border;
   white-space: nowrap;
   position: sticky; top: 0;
   z-index: 10;
@@ -3504,62 +4142,62 @@ async function handlePublishTemplate() {
 
 .dg-th-corner {
   width: 40px;
-  background: #F3F4F6;
+  background: $dg-bg-header;
 }
 
 .dg-th-row-header {
   width: 120px;
-  background: #E5E7EB;
+  background: $dg-border;
   font-weight: 700;
-  color: #374151;
+  color: $dg-text-primary;
   position: sticky;
   left: 0;
   z-index: 15;
-  border-right: 2px solid #D1D5DB;
+  border-right: 2px solid $dg-border-strong;
 }
 
 .dg-th-group {
-  background: #F3F4F6;
+  background: $dg-bg-header;
   font-weight: 700;
-  color: #1F2937;
+  color: $dg-text-heading;
 }
 
 .dg-col-label { display: block; }
 
 .dg-fx-badge {
   font-size: 10px; font-weight: 700;
-  color: #1D4ED8; background: #DBEAFE;
-  padding: 1px 4px; border-radius: 3px;
+  color: $dg-primary; background: $dg-primary-light;
+  padding: 1px 4px; border-radius: $dg-radius-sm;
   margin-left: 4px;
 }
 
 .dg-td {
   padding: 8px 12px;
-  border: 1px solid #E5E7EB;
+  border: 1px solid $dg-border;
   font-size: 13px;
   min-width: 80px;
   white-space: nowrap;
   vertical-align: middle;
   
-  &:hover { background: #F9FAFB; }
-  &.dg-td-selected { background: #EFF6FF; box-shadow: inset 0 0 0 2px #3B82F6; }
+  &:hover { background: $dg-bg-header; }
+  &.dg-td-selected { background: $dg-primary-lighter; box-shadow: inset 0 0 0 2px $dg-primary; }
   &.dg-td-editing { padding: 0; }
-  &.dg-td-readonly { background: #F9FAFB; color: #9CA3AF; }
-  &.dg-td-formula { background: #F0F9FF; }
-  &.dg-td-merged { background: #DBEAFE; text-align: center; font-weight: 600; }
-  &.dg-td-in-range { background: #DBEAFE; }
+  &.dg-td-readonly { background: $dg-bg-header; color: $dg-text-placeholder; }
+  &.dg-td-formula { background: $dg-primary-lighter; }
+  &.dg-td-merged { background: $dg-primary-light; text-align: center; font-weight: 600; }
+  &.dg-td-in-range { background: $dg-primary-light; }
 }
 
 .dg-td-row-label {
-  background: #F9FAFB;
+  background: $dg-bg-header;
   font-weight: 600;
-  color: #374151;
+  color: $dg-text-primary;
   position: sticky; left: 0;
   z-index: 5;
   cursor: pointer;
   user-select: none;
   
-  &:hover { background: #F3F4F6; }
+  &:hover { background: $dg-bg-header; }
 }
 
 .dg-tree-cell {
@@ -3576,11 +4214,11 @@ async function handlePublishTemplate() {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: #6B7280;
+  color: $dg-text-secondary;
   cursor: pointer;
   transition: transform 0.2s;
   
-  &:hover { color: #3B82F6; }
+  &:hover { color: $dg-primary; }
 }
 
 .dg-tree-toggle-placeholder {
@@ -3596,23 +4234,23 @@ async function handlePublishTemplate() {
 }
 
 .dg-td-group {
-  background: #F3F4F6;
+  background: $dg-bg-header;
   font-weight: 700;
-  color: #1F2937;
+  color: $dg-text-heading;
   vertical-align: middle;
-  border-right: 2px solid #D1D5DB;
+  border-right: 2px solid $dg-border-strong;
 }
 
 .dg-row-summary {
-  background: #EFF6FF !important;
+  background: $dg-primary-lighter !important;
   font-weight: 600;
   
-  .dg-td { background: #EFF6FF; }
+  .dg-td { background: $dg-primary-lighter; }
 }
 
 .dg-summary-tag {
-  font-size: 10px; color: #1D4ED8;
-  background: #DBEAFE; padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; color: $dg-primary;
+  background: $dg-primary-light; padding: 1px 6px; border-radius: $dg-radius-md;
   margin-left: 6px;
 }
 
@@ -3621,36 +4259,36 @@ async function handlePublishTemplate() {
   border: none; outline: none;
   padding: 8px 12px;
   font-size: 13px;
-  background: #fff;
+  background: $dg-bg-panel;
 }
 
 .dg-fx-indicator {
   display: inline-block;
   font-size: 10px; font-weight: 700;
-  color: #1D4ED8;
+  color: $dg-primary;
   margin-right: 4px;
 }
 
 /* ====== 右侧属性面板 ====== */
 .dg-properties {
-  width: 280px; background: #fff; border-left: 1px solid #E5E7EB;
+  width: $dg-props-width; background: $dg-bg-panel; border-left: 1px solid $dg-border;
   display: flex; flex-direction: column; flex-shrink: 0;
   transition: width .2s;
   
-  &.collapsed { width: 48px; }
+  &.collapsed { width: $dg-props-collapsed-width; }
 }
 
 .dg-properties-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px; border-bottom: 1px solid #E5E7EB;
+  padding: 12px; border-bottom: 1px solid $dg-border;
 }
 
-.dgp-title { font-size: 12px; font-weight: 700; color: #374151; }
+.dgp-title { font-size: 12px; font-weight: 700; color: $dg-text-primary; }
 
 .dgp-collapse {
   width: 24px; height: 24px; border: none; background: none;
-  color: #9CA3AF; cursor: pointer; display: flex; align-items: center; justify-content: center;
-  border-radius: 4px; &:hover { background: #F3F4F6; }
+  color: $dg-text-placeholder; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  border-radius: $dg-radius-md; &:hover { background: $dg-bg-header; }
 }
 
 .dg-properties-content {
@@ -3666,9 +4304,9 @@ async function handlePublishTemplate() {
 
 .dgp-section-title {
   font-size: 12px; font-weight: 700;
-  color: #374151; margin-bottom: 12px;
+  color: $dg-text-primary; margin-bottom: 12px;
   padding-bottom: 6px;
-  border-bottom: 1px solid #E5E7EB;
+  border-bottom: 1px solid $dg-border;
 }
 
 .dgp-form { display: flex; flex-direction: column; gap: 10px; }
@@ -3682,28 +4320,28 @@ async function handlePublishTemplate() {
 
 .dgp-field label {
   font-size: 11px; font-weight: 600;
-  color: #6B7280;
+  color: $dg-text-secondary;
 }
 
 .dgp-input, .dgp-select, .dgp-textarea {
   padding: 6px 10px;
-  border: 1px solid #E5E7EB;
-  border-radius: 4px;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-md;
   font-size: 12px;
-  color: #374151;
-  background: #fff;
+  color: $dg-text-primary;
+  background: $dg-bg-panel;
   outline: none;
   
-  &:focus { border-color: #1D4ED8; }
+  &:focus { border-color: $dg-primary; }
 }
 
 .dgp-textarea { resize: vertical; }
 
 .dgp-field-value {
-  font-size: 12px; color: #374151;
+  font-size: 12px; color: $dg-text-primary;
   padding: 6px 10px;
-  background: #F9FAFB;
-  border-radius: 4px;
+  background: $dg-bg-header;
+  border-radius: $dg-radius-md;
 }
 
 .dgp-radio-group {
@@ -3713,21 +4351,21 @@ async function handlePublishTemplate() {
 .dgp-radio-btn {
   flex: 1;
   padding: 4px 8px;
-  border: 1px solid #E5E7EB;
-  border-radius: 4px;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-md;
   font-size: 12px;
-  color: #374151;
-  background: #fff;
+  color: $dg-text-primary;
+  background: $dg-bg-panel;
   cursor: pointer;
   
-  &:hover { background: #F9FAFB; }
-  &.active { background: #1D4ED8; color: #fff; border-color: #1D4ED8; }
+  &:hover { background: $dg-bg-header; }
+  &.active { background: $dg-primary; color: $dg-text-inverse; border-color: $dg-primary; }
 }
 
 .dgp-color {
   width: 100%; height: 32px;
-  border: 1px solid #E5E7EB;
-  border-radius: 4px;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-md;
   cursor: pointer;
 }
 
@@ -3735,27 +4373,66 @@ async function handlePublishTemplate() {
 .dg-properties.collapsed .dgp-title { display: none; }
 
 /* ====== 底部状态栏 ====== */
+
+/* ====== 工作表标签 ====== */
+.dg-sheet-tabs {
+  display: flex; align-items: center;
+  height: $dg-sheet-tabs-height; padding: 0 8px;
+  background: $dg-bg-panel; border-top: 1px solid $dg-border;
+  gap: 0; flex-shrink: 0;
+}
+
+.dg-sheet-tab {
+  padding: 0 14px; height: 100%;
+  display: flex; align-items: center;
+  font-size: $dg-font-size-sm; color: $dg-text-secondary;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all .15s; white-space: nowrap;
+
+  &:hover { color: $dg-text-primary; background: $dg-bg-header; }
+  &.active {
+    color: $dg-primary; border-bottom-color: $dg-primary;
+    font-weight: 500;
+  }
+}
+
+.dg-sheet-add {
+  width: 28px; height: 28px; border: 1px solid $dg-border;
+  border-radius: $dg-radius-sm; background: $dg-bg-panel;
+  color: $dg-text-secondary; cursor: pointer; margin-left: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; transition: all .15s;
+  &:hover { background: $dg-bg-header; color: $dg-primary; border-color: $dg-primary; }
+}
+
+/* ====== 底部状态栏（续） ====== */
 .dg-footer {
   display: flex; align-items: center; justify-content: space-between;
-  height: 32px; padding: 0 16px;
-  background: #fff; border-top: 1px solid #E5E7EB;
+  height: $dg-footer-height; padding: 0 16px;
+  background: $dg-bg-panel; border-top: 1px solid $dg-border;
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: $dg-font-size-xs;
 }
 
 .df-left, .df-right { display: flex; align-items: center; gap: 16px; }
 
+.df-status-indicator {
+  display: flex; align-items: center; gap: 4px;
+  &::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: $dg-success; }
+  color: $dg-text-secondary; font-weight: 500;
+}
+
 .df-item { display: flex; align-items: center; gap: 4px; }
 
-.df-label { color: #9CA3AF; }
+.df-label { color: $dg-text-placeholder; }
 
-.df-value { color: #374151; font-weight: 500; }
+.df-value { color: $dg-text-primary; font-weight: 500; }
 
 /* ====== 右键菜单 ====== */
 .dg-context-menu {
   position: fixed; z-index: 1000;
-  background: #fff; border: 1px solid #E5E7EB;
-  border-radius: 6px;
+  background: $dg-bg-panel; border: 1px solid $dg-border;
+  border-radius: $dg-radius-lg;
   box-shadow: 0 4px 12px rgba(0,0,0,.1);
   padding: 4px;
   min-width: 140px;
@@ -3765,17 +4442,17 @@ async function handlePublishTemplate() {
   width: 100%;
   padding: 6px 12px;
   border: none; background: none;
-  font-size: 12px; color: #374151;
+  font-size: 12px; color: $dg-text-primary;
   cursor: pointer;
   text-align: left;
-  border-radius: 4px;
+  border-radius: $dg-radius-md;
   transition: background .15s;
   
-  &:hover { background: #F3F4F6; }
+  &:hover { background: $dg-bg-header; }
 }
 
 .dcm-divider {
-  height: 1px; background: #E5E7EB;
+  height: 1px; background: $dg-border;
   margin: 4px 0;
 }
 
@@ -3791,7 +4468,7 @@ async function handlePublishTemplate() {
     display: block;
     font-size: 13px;
     font-weight: 600;
-    color: #374151;
+    color: $dg-text-primary;
     margin-bottom: 8px;
   }
 }
@@ -3807,23 +4484,23 @@ async function handlePublishTemplate() {
   flex-direction: column;
   align-items: center;
   padding: 16px;
-  border: 2px solid #E5E7EB;
+  border: 2px solid $dg-border;
   border-radius: 8px;
-  background: #fff;
+  background: $dg-bg-panel;
   cursor: pointer;
   transition: all .2s;
   
   &:hover {
-    border-color: #93C5FD;
-    background: #EFF6FF;
+    border-color: $dg-primary-border;
+    background: $dg-primary-lighter;
   }
   
   &.active {
-    border-color: #1D4ED8;
-    background: #DBEAFE;
+    border-color: $dg-primary;
+    background: $dg-primary-light;
     
     .ard-type-label {
-      color: #1D4ED8;
+      color: $dg-primary;
     }
   }
 }
@@ -3836,12 +4513,12 @@ async function handlePublishTemplate() {
 .ard-type-label {
   font-size: 14px;
   font-weight: 600;
-  color: #374151;
+  color: $dg-text-primary;
 }
 
 .ard-type-desc {
   font-size: 12px;
-  color: #9CA3AF;
+  color: $dg-text-placeholder;
   margin-top: 4px;
 }
 
@@ -3853,38 +4530,38 @@ async function handlePublishTemplate() {
 
 .ard-summary-btn {
   padding: 8px 16px;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-lg;
+  background: $dg-bg-panel;
   font-size: 13px;
-  color: #374151;
+  color: $dg-text-primary;
   cursor: pointer;
   transition: all .2s;
   
   &:hover {
-    border-color: #93C5FD;
-    background: #EFF6FF;
+    border-color: $dg-primary-border;
+    background: $dg-primary-lighter;
   }
   
   &.active {
-    border-color: #1D4ED8;
-    background: #DBEAFE;
-    color: #1D4ED8;
+    border-color: $dg-primary;
+    background: $dg-primary-light;
+    color: $dg-primary;
   }
 }
 
 .ard-input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-lg;
   font-size: 13px;
-  color: #374151;
+  color: $dg-text-primary;
   
   &:focus {
     outline: none;
-    border-color: #1D4ED8;
-    box-shadow: 0 0 0 2px #DBEAFE;
+    border-color: $dg-primary;
+    box-shadow: 0 0 0 2px $dg-primary-light;
   }
 }
 
@@ -3900,7 +4577,7 @@ async function handlePublishTemplate() {
     display: block;
     font-size: 13px;
     font-weight: 600;
-    color: #374151;
+    color: $dg-text-primary;
     margin-bottom: 8px;
   }
 }
@@ -3908,15 +4585,15 @@ async function handlePublishTemplate() {
 .nd-input {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-lg;
   font-size: 13px;
-  color: #374151;
+  color: $dg-text-primary;
   
   &:focus {
     outline: none;
-    border-color: #1D4ED8;
-    box-shadow: 0 0 0 2px #DBEAFE;
+    border-color: $dg-primary;
+    box-shadow: 0 0 0 2px $dg-primary-light;
   }
 }
 
@@ -3931,23 +4608,23 @@ async function handlePublishTemplate() {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border: 2px solid #E5E7EB;
+  border: 2px solid $dg-border;
   border-radius: 8px;
-  background: #fff;
+  background: $dg-bg-panel;
   cursor: pointer;
   transition: all .2s;
   
   &:hover {
-    border-color: #93C5FD;
-    background: #EFF6FF;
+    border-color: $dg-primary-border;
+    background: $dg-primary-lighter;
   }
   
   &.active {
-    border-color: #1D4ED8;
-    background: #DBEAFE;
+    border-color: $dg-primary;
+    background: $dg-primary-light;
     
     .nd-type-label {
-      color: #1D4ED8;
+      color: $dg-primary;
     }
   }
 }
@@ -3959,7 +4636,7 @@ async function handlePublishTemplate() {
 .nd-type-label {
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: $dg-text-primary;
 }
 
 .nd-summary-options {
@@ -3970,23 +4647,23 @@ async function handlePublishTemplate() {
 
 .nd-summary-btn {
   padding: 8px 16px;
-  border: 1px solid #E5E7EB;
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-lg;
+  background: $dg-bg-panel;
   font-size: 13px;
-  color: #374151;
+  color: $dg-text-primary;
   cursor: pointer;
   transition: all .2s;
   
   &:hover {
-    border-color: #93C5FD;
-    background: #EFF6FF;
+    border-color: $dg-primary-border;
+    background: $dg-primary-lighter;
   }
   
   &.active {
-    border-color: #1D4ED8;
-    background: #DBEAFE;
-    color: #1D4ED8;
+    border-color: $dg-primary;
+    background: $dg-primary-light;
+    color: $dg-primary;
   }
 }
 
@@ -4001,7 +4678,7 @@ async function handlePublishTemplate() {
   position: relative;
   
   &:hover {
-    background: #F3F4F6;
+    background: $dg-bg-header;
     
     .dgn-tree-actions {
       opacity: 1;
@@ -4010,7 +4687,7 @@ async function handlePublishTemplate() {
 }
 
 .dgn-tree-node.dgn-tree-summary {
-  background: #FEF3C7;
+  background: $dg-warning-bg;
   
   &:hover {
     background: #FDE68A;
@@ -4019,7 +4696,7 @@ async function handlePublishTemplate() {
 
 .dgn-tree-expand {
   font-size: 10px;
-  color: #9CA3AF;
+  color: $dg-text-placeholder;
   width: 14px;
   text-align: center;
   cursor: pointer;
@@ -4029,7 +4706,7 @@ async function handlePublishTemplate() {
 .dgn-tree-label {
   flex: 1;
   font-size: 12px;
-  color: #374151;
+  color: $dg-text-primary;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4038,16 +4715,16 @@ async function handlePublishTemplate() {
 .dgn-tree-summary-tag {
   display: inline-block;
   padding: 1px 4px;
-  background: #3B82F6;
-  color: #fff;
+  background: $dg-primary;
+  color: $dg-text-inverse;
   font-size: 10px;
-  border-radius: 3px;
+  border-radius: $dg-radius-sm;
   margin-left: 4px;
 }
 
 .dgn-tree-code {
   font-size: 10px;
-  color: #9CA3AF;
+  color: $dg-text-placeholder;
   flex-shrink: 0;
 }
 
@@ -4069,19 +4746,19 @@ async function handlePublishTemplate() {
   background: transparent;
   font-size: 12px;
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: $dg-radius-sm;
   transition: all .15s;
   
   &:hover {
-    background: #E5E7EB;
+    background: $dg-border;
   }
 }
 
 .dgn-tree-btn.dgn-tree-add {
-  color: #1D4ED8;
+  color: $dg-primary;
   
   &:hover {
-    background: #DBEAFE;
+    background: $dg-primary-light;
   }
 }
 
@@ -4093,7 +4770,7 @@ async function handlePublishTemplate() {
   font-size: 11px;
   
   &:hover {
-    background: #FEE2E2;
+    background: $dg-error-bg;
   }
 }
 
@@ -4105,14 +4782,14 @@ async function handlePublishTemplate() {
 .dg-toast {
   position: fixed; top: 20px; right: 20px;
   padding: 10px 20px;
-  border-radius: 6px;
+  border-radius: $dg-radius-lg;
   font-size: 13px; font-weight: 500;
   z-index: 2000;
   box-shadow: 0 4px 12px rgba(0,0,0,.1);
   
-  &.dg-toast-success { background: #D1FAE5; color: #065F46; }
-  &.dg-toast-error { background: #FEE2E2; color: #991B1B; }
-  &.dg-toast-warning { background: #FEF3C7; color: #92400E; }
+  &.dg-toast-success { background: $dg-success-bg; color: #065F46; }
+  &.dg-toast-error { background: $dg-error-bg; color: #991B1B; }
+  &.dg-toast-warning { background: $dg-warning-bg; color: #92400E; }
 }
 
 .dg-toast-enter-active, .dg-toast-leave-active { transition: all .3s; }
@@ -4132,16 +4809,16 @@ async function handlePublishTemplate() {
 }
 
 .cd-icon-danger {
-  color: #EF4444;
+  color: $dg-error;
 }
 
 .cd-icon-info {
-  color: #3B82F6;
+  color: $dg-primary;
 }
 
 .cd-message {
   font-size: 14px;
-  color: #374151;
+  color: $dg-text-primary;
   text-align: center;
   line-height: 1.6;
 }
@@ -4150,5 +4827,142 @@ async function handlePublishTemplate() {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+}
+
+// ==================== 右侧面板 Tab & 公式工作台 ====================
+.dgp-tabs {
+  display: flex;
+  border-bottom: 1px solid $dg-border;
+  padding: 0 8px;
+}
+.dgp-tab {
+  padding: 8px 16px;
+  font-size: $dg-font-size-sm;
+  font-weight: 500;
+  color: $dg-text-secondary;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover { color: $dg-text-primary; }
+  &.active {
+    color: $dg-primary;
+    border-bottom-color: $dg-primary;
+    font-weight: 600;
+  }
+}
+.dgp-formula-workbench {
+  padding: 8px;
+}
+.dgp-fw-tabs {
+  display: flex;
+  gap: 2px;
+  background: $dg-bg-input;
+  border-radius: $dg-radius-md;
+  padding: 2px;
+  margin-bottom: 8px;
+}
+.dgp-fw-tab {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: $dg-font-size-xs;
+  font-weight: 500;
+  color: $dg-text-secondary;
+  background: none;
+  border: none;
+  border-radius: $dg-radius-sm;
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover { color: $dg-text-primary; }
+  &.active {
+    background: $dg-bg-panel;
+    color: $dg-primary;
+    box-shadow: $dg-shadow-sm;
+  }
+}
+.dgp-fw-content {
+  padding: 4px 0;
+}
+.dgp-cell-tabs {
+  display: flex;
+  gap: 2px;
+  background: $dg-bg-input;
+  border-radius: $dg-radius-md;
+  padding: 2px;
+  margin-bottom: 8px;
+}
+.dgp-cell-tab {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: $dg-font-size-xs;
+  font-weight: 500;
+  color: $dg-text-secondary;
+  background: none;
+  border: none;
+  border-radius: $dg-radius-sm;
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover { color: $dg-text-primary; }
+  &.active {
+    background: $dg-bg-panel;
+    color: $dg-primary;
+    box-shadow: $dg-shadow-sm;
+  }
+}
+.dgp-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: $dg-font-size-sm;
+  font-weight: 500;
+  color: $dg-primary;
+  background: $dg-primary-light;
+  border: 1px solid $dg-primary-border;
+  border-radius: $dg-radius-md;
+  cursor: pointer;
+  transition: all 0.2s;
+  &:hover { background: $dg-bg-selected; }
+}
+.dgp-formula-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  font-size: $dg-font-size-sm;
+  color: $dg-text-primary;
+  border-radius: $dg-radius-sm;
+  cursor: pointer;
+  transition: background 0.15s;
+  &:hover { background: $dg-bg-hover; }
+  .formula-name { font-weight: 500; }
+  .formula-type { font-size: $dg-font-size-xs; color: $dg-text-secondary; }
+}
+.dgp-formula-name {
+  font-weight: 500;
+  font-size: $dg-font-size-sm;
+  color: $dg-text-primary;
+  margin-right: 8px;
+}
+.dgp-formula-expr {
+  font-size: $dg-font-size-xs;
+  color: $dg-text-secondary;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dgp-formula-target {
+  font-size: $dg-font-size-xs;
+  color: $dg-primary;
+  margin-left: 4px;
+}
+.dgp-validate-status {
+  font-size: $dg-font-size-xs;
+  font-weight: 500;
+  &.valid { color: $dg-success; }
+  &.error { color: $dg-error; }
+  &.warning { color: $dg-warning; }
 }
 </style>
