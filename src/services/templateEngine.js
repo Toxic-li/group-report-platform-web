@@ -379,6 +379,9 @@ export class FormulaEngine {
   /**
    * 从公式字符串中提取引用的单元格坐标
    * 支持: C2:C10, A1, SUM(C2:C10), 算术表达式中的坐标
+   *
+   * 注意：colToNum 是 1-based（A=1, B=2, C=3），但 cellData 的列索引是 0-based
+   * 所以需要 colToNum(col) - 1 来匹配正确的 cellData key
    */
   extractDependencies(formulaStr) {
     const deps = new Set()
@@ -390,14 +393,16 @@ export class FormulaEngine {
     while ((match = cellRefPattern.exec(formulaStr)) !== null) {
       const col = match[1]
       const row = parseInt(match[2])
-      deps.add(`${row}-${this.colToNum(col)}`)
+      // colToNum 是 1-based，cellData 列索引是 0-based，需要减 1
+      deps.add(`${row}-${this.colToNum(col) - 1}`)
     }
 
     // 匹配范围引用如 C2:C10
     const rangePattern = /([A-Z])(\d+):([A-Z])(\d+)/g
     while ((match = rangePattern.exec(formulaStr)) !== null) {
       const startRow = parseInt(match[2]), endRow = parseInt(match[4])
-      const startCol = this.colToNum(match[1]), endCol = this.colToNum(match[3])
+      // colToNum 是 1-based，cellData 列索引是 0-based，需要减 1
+      const startCol = this.colToNum(match[1]) - 1, endCol = this.colToNum(match[3]) - 1
       for (let r = startRow; r <= endRow; r++) {
         for (let c = startCol; c <= endCol; c++) {
           deps.add(`${r}-${c}`)
@@ -530,11 +535,15 @@ export class FormulaEngine {
   /**
    * 带单元格引用的算术表达式求值
    * 将 C2 这样的引用替换为实际值后再计算
+   *
+   * 注意：colToNum 是 1-based（A=1, B=2, C=3），但 cellData 的列索引是 0-based
+   * 所以需要 colToNum(col) - 1 来匹配正确的 cellData key
    */
   evalArithmeticWithRefs(expr) {
     // 替换单元格引用为实际值
     const resolvedExpr = expr.replace(/([A-Z]+)(\d+)/g, (_, col, row) => {
-      const key = `${row}-${this.colToNum(col)}`
+      // colToNum 是 1-based，cellData 列索引是 0-based，需要减 1
+      const key = `${row}-${this.colToNum(col) - 1}`
       const cell = this.cellData[key]
       if (!cell) return '0'
       const num = parseFloat(String(cell.v).replace(/,/g, ''))
@@ -544,10 +553,14 @@ export class FormulaEngine {
     return this.evalArithmetic(resolvedExpr)
   }
 
+  /**
+   * 范围计算方法
+   * 注意：colToNum 是 1-based，cellData 列索引是 0-based
+   */
   calcRangeSum(startCol, startRow, endCol, endRow) {
     let sum = 0
     for (let r = startRow; r <= endRow; r++) {
-      for (let c = this.colToNum(startCol); c <= this.colToNum(endCol); c++) {
+      for (let c = this.colToNum(startCol) - 1; c <= this.colToNum(endCol) - 1; c++) {
         const key = `${r}-${c}`
         const cell = this.cellData[key]
         if (cell && typeof cell.v === 'number') {
@@ -564,7 +577,7 @@ export class FormulaEngine {
   calcRangeAvg(startCol, startRow, endCol, endRow) {
     let sum = 0, count = 0
     for (let r = startRow; r <= endRow; r++) {
-      for (let c = this.colToNum(startCol); c <= this.colToNum(endCol); c++) {
+      for (let c = this.colToNum(startCol) - 1; c <= this.colToNum(endCol) - 1; c++) {
         const key = `${r}-${c}`
         const cell = this.cellData[key]
         if (cell && typeof cell.v === 'number') { sum += cell.v; count++ }
@@ -581,7 +594,7 @@ export class FormulaEngine {
     let max = -Infinity
     let hasValue = false
     for (let r = startRow; r <= endRow; r++) {
-      for (let c = this.colToNum(startCol); c <= this.colToNum(endCol); c++) {
+      for (let c = this.colToNum(startCol) - 1; c <= this.colToNum(endCol) - 1; c++) {
         const key = `${r}-${c}`
         const cell = this.cellData[key]
         const num = cell ? parseFloat(String(cell.v).replace(/,/g, '')) : NaN
@@ -595,7 +608,7 @@ export class FormulaEngine {
     let min = Infinity
     let hasValue = false
     for (let r = startRow; r <= endRow; r++) {
-      for (let c = this.colToNum(startCol); c <= this.colToNum(endCol); c++) {
+      for (let c = this.colToNum(startCol) - 1; c <= this.colToNum(endCol) - 1; c++) {
         const key = `${r}-${c}`
         const cell = this.cellData[key]
         const num = cell ? parseFloat(String(cell.v).replace(/,/g, '')) : NaN
@@ -608,7 +621,7 @@ export class FormulaEngine {
   calcRangeCount(startCol, startRow, endCol, endRow) {
     let count = 0
     for (let r = startRow; r <= endRow; r++) {
-      for (let c = this.colToNum(startCol); c <= this.colToNum(endCol); c++) {
+      for (let c = this.colToNum(startCol) - 1; c <= this.colToNum(endCol) - 1; c++) {
         const key = `${r}-${c}`
         const cell = this.cellData[key]
         if (cell && cell.v !== '' && cell.v != null) count++

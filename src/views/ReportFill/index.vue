@@ -125,8 +125,13 @@
             </colgroup>
             <thead>
               <tr v-for="(hRow, hi) in headerRows" :key="'hr'+hi" :class="'fr-hr-l' + hRow.level">
-                <th v-if="hi === 0" :rowspan="headerRows.length" class="fr-th fr-th-corner">#</th>
-                <th v-if="hi === 0" :rowspan="headerRows.length" class="fr-th fr-th-metric">指标</th>
+                <!-- 每行都渲染冻结列，第一行显示内容，后续行为占位 -->
+                <th class="fr-th fr-th-corner" :class="{ 'fr-th-placeholder': hi > 0 }">
+                  <span v-if="hi === 0">#</span>
+                </th>
+                <th class="fr-th fr-th-metric" :class="{ 'fr-th-placeholder': hi > 0 }">
+                  <span v-if="hi === 0">指标</span>
+                </th>
                 <template v-for="(cell, ci) in hRow.cells" :key="'hc'+hi+ci">
                   <th v-show="!isColHidden(cell.colIdx)" class="fr-th" :class="'fr-th-l' + cell.level"
                     :colspan="cell.colspan || 1" :rowspan="cell.rowspan || 1"
@@ -1027,41 +1032,57 @@ function buildConfigFromV2(parser) {
     return count
   }
 
-  // ✅ 正确填充多级表头（基于列树层级结构）
+  // ✅ 正确填充多级表头（递归遍历列树结构）
   const maxHeaderLevel = template.columnTree ? getMaxLevel(template.columnTree) : 1
 
-  // 构建每一层的表头单元格
-  for (let level = 0; level < Math.min(frozenRows, maxHeaderLevel + 1); level++) {
-    const levelCells = getNodesAtLevel(template.columnTree || [], level)
-    let colOffset = 2 // 从第3列开始（跳过 # 和 指标列）
+  // 递归遍历树结构，填充表头单元格
+  function fillHeaderCells(nodes, level, startCol) {
+    let colOffset = startCol
 
-    levelCells.forEach((node, ni) => {
-      // 计算该节点的列跨度（叶子节点数量）
+    for (const node of nodes) {
+      // 计算该节点的叶子节点数量（列跨度）
       const leafCount = countLeafNodes(node)
       const colSpan = leafCount || 1
 
-      // ✅ 填充起始位置的表头单元格
+      // 检查是否有子节点（用于计算 rowspan）
+      const hasChildren = node.children && node.children.length > 0
+      // 如果没有子节点，rowspan = 总层级数 - 当前层级
+      const rowSpan = hasChildren ? 1 : (maxHeaderLevel - level + 1)
+
+      // 填充起始位置的表头单元格
       cellData[`${level}-${colOffset}`] = {
         v: node.title || node.name || '',
         headerLevel: level + 1,
-        colSpan: colSpan,
-        rowSpan: 1,
-        isHeaderStart: true  // 标记为合并单元格的起始位置
+        colSpan: hasChildren ? colSpan : 1,
+        rowSpan: rowSpan,
+        isHeaderStart: true
       }
 
-      // ✅ 填充合并范围内的其他列（标记为被合并，不显示文本）
-      for (let i = 1; i < colSpan; i++) {
-        cellData[`${level}-${colOffset + i}`] = {
-          v: '',  // 空文本
-          headerLevel: level + 1,
-          colSpan: 0,  // 0 表示被合并
-          rowSpan: 1,
-          isHeaderMerged: true  // 标记为被合并的单元格
+      // 填充合并范围内的其他列（仅对有子节点的分组）
+      if (hasChildren && colSpan > 1) {
+        for (let i = 1; i < colSpan; i++) {
+          cellData[`${level}-${colOffset + i}`] = {
+            v: '',
+            headerLevel: level + 1,
+            colSpan: 0,
+            rowSpan: 1,
+            isHeaderMerged: true
+          }
         }
       }
 
+      // 递归处理子节点
+      if (hasChildren) {
+        fillHeaderCells(node.children, level + 1, colOffset)
+      }
+
       colOffset += colSpan
-    })
+    }
+  }
+
+  // 从 level 0、列 2 开始填充
+  if (template.columnTree && template.columnTree.length > 0) {
+    fillHeaderCells(template.columnTree, 0, 2)
   }
 
   // 填充数据行
@@ -3044,6 +3065,13 @@ $anomaly-bg: #FEF2F2; $anomaly-border: #FECACA;
   &.fr-th-l4 { background: $h4-bg; }
   &.fr-th-corner { background: $h1-bg; width: 36px; min-width: 36px; }
   &.fr-th-metric { background: $h1-bg; width: 180px; min-width: 180px; text-align: left; }
+  &.fr-th-placeholder {
+    background: transparent;
+    border-bottom: none;
+    border-top: none;
+    padding: 0;
+    height: 0;
+  }
   .fr-th-text { cursor: default; }
   .fr-th-hint {
     margin-left: 4px; font-size: 10px; cursor: help; opacity: .6;
