@@ -90,6 +90,12 @@
           </div>
         </div>
         <div class="template-grid">
+          <!-- 加载中 -->
+          <div v-if="templatesLoading" class="tc-loading">
+            <div class="loading-spinner"></div>
+            <span>正在加载模板...</span>
+          </div>
+
           <!-- 新建报表入口 -->
           <router-link to="/designer" class="template-card tc-new-card">
             <span class="tc-icon tc-add-icon">+</span>
@@ -156,7 +162,7 @@
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     编辑
                   </button>
-                  <button v-permission="'template:publish'" v-if="tpl.status !== 'published'" @click="publishTemplate(tpl)">
+                  <button v-permission="'template:publish'" v-if="tpl.status !== 'published'" @click="handlePublish(tpl)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
                     发布
                   </button>
@@ -227,15 +233,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useReportStore } from '@/stores/reportStore.js'
 import ReportHeader from '@/components/ReportHeader.vue'
 import Toolbar from '@/components/Toolbar.vue'
 import UniverReport from '@/components/UniverReport.vue'
 import OrgTree from '@/components/OrgTree.vue'
-import { getTemplateList as getMockTemplates } from '@/mock/templates.js'
-import { getTemplateList, deleteTemplate } from '@/api/reportDesigner.js'
+import { getTemplateList, deleteTemplate, publishTemplate } from '@/api/reportDesigner.js'
 
 const store = useReportStore()
 const router = useRouter()
@@ -253,37 +258,35 @@ const currentUser = computed(() => {
   }
 })
 
-// 模板列表（原有模板 + 已发布API模板）// 模板数据
-const originalTemplates = ref([])
-const publishedTemplates = ref([])
+// 模板列表（全部来自API）
+const allTemplates = ref([])
+const templatesLoading = ref(false)
 
 // 筛选
-const filterType = ref(0)     // 0-全部, 1-统计, 2-填报, 3-汇总
-const filterStatus = ref('')  // ''-全部, draft-草稿, published-已发布, disabled-已停用
+const filterType = ref(0)     
+const filterStatus = ref('')  
 
-// ⭐ 更多菜单
+// 更多菜单
 const openMoreId = ref(null)
 
-// ✅ 组织和周期选择器
+// 组织和周期选择器
 const selectedOrgId = ref('')
 const selectedPeriod = ref('')
 
-// ✅ 扁平化的组织列表（用于下拉选择）
+// 扁平化的组织列表（用于下拉选择）
 const flatOrgList = computed(() => {
   return flattenOrgTree(store.orgTree)
 })
 
-// ✅ 周期列表（动态生成最近12个月+4个季度）
+// 周期列表（动态生成最近12个月+4个季度）
 const periodList = computed(() => {
   const periods = []
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth() + 1
   
-  // 添加月度周期（最近6个月）
   for (let i = 0; i < 6; i++) {
     const m = month - i
-    const y = year - Math.ceil((i + 1 - month) / 12)
     const actualMonth = ((m - 1) % 12 + 12) % 12 + 1
     const actualYear = m <= 0 ? year - 1 : year
     periods.push({
@@ -292,7 +295,6 @@ const periodList = computed(() => {
     })
   }
   
-  // 添加季度周期（最近4个季度）
   const currentQ = Math.ceil(month / 3)
   for (let i = 0; i < 4; i++) {
     const q = currentQ - i
@@ -306,7 +308,6 @@ const periodList = computed(() => {
   return periods
 })
 
-// ✅ 扁平化组织树（用于下拉选择）
 function flattenOrgTree(tree, level = 0) {
   const result = []
   for (const node of tree) {
@@ -323,9 +324,8 @@ function flattenOrgTree(tree, level = 0) {
   return result
 }
 
-// 监听筛选变化，重新请求 API
 watch([filterType, filterStatus], () => {
-  loadApiTemplates()
+  loadTemplates()
 })
 
 const typeFilters = [
@@ -341,67 +341,28 @@ const statusFilters = [
   { label: '已停用', value: 'disabled' }
 ]
 
-const allTemplates = computed(() => {
-  // 原有模板（前端筛选，因为不走API）
-  let original = originalTemplates.value
-  if (filterType.value !== 0) original = original.filter(t => t.templateType === filterType.value)
-  if (filterStatus.value) original = original.filter(t => t.status === filterStatus.value)
-
-  // API模板（已由后端筛选）
-  const api = publishedTemplates.value
-
-  return [...original, ...api]
-})
-
-// 加载模板数据
 async function loadTemplates() {
-  // 加载原有模板（内置模板）
-  originalTemplates.value = getMockTemplates()
-  
-  // 加载 API 模板
-  await loadApiTemplates()
-}
-
-// ✅ 从接口加载模板（带筛选参数）
-async function loadApiTemplates() {
+  templatesLoading.value = true
   try {
     const params = {
       current: 1,
       size: 100
     }
-    // ✅ 将筛选条件传给后端
     if (filterType.value !== 0) params.templateType = filterType.value
     if (filterStatus.value) params.status = ({ draft: 0, published: 1, disabled: 2 }[filterStatus.value] ?? undefined)
     
-    console.log('[loadApiTemplates] 请求参数:', params)
     const res = await getTemplateList(params)
-    console.log('[loadApiTemplates] API响应:', res)
-
-    // ✅ 兼容多种数据格式：res.data.records / res.data / res.list / res本身
+    
     let templates = []
     if (Array.isArray(res)) {
       templates = res
-    } else if (res?.data) {
-      // 分页格式：{ data: { records: [...], total: N } }
-      templates = res.data.records ||  []
-    } 
-    console.log(`[loadApiTemplates] 解析到 ${templates.length} 个模板`)
-    
-    // ✅ 调试：打印第一个模板的原始数据
-    if (templates.length > 0) {
-      console.log('[loadApiTemplates] 第一个模板原始数据:', templates[0])
-      console.log('[loadApiTemplates] 字段检查:', {
-        orgId: templates[0].orgId,
-        orgName: templates[0].orgName,
-        organizationId: templates[0].organizationId,
-        organizationName: templates[0].organizationName,
-        org_id: templates[0].org_id,
-        org_name: templates[0].org_name
-      })
+    } else if (res?.records) {
+      templates = res.records
+    } else if (res?.data?.records) {
+      templates = res.data.records
     }
 
-    // ✅ 数据转换：统一为前端标准格式
-    publishedTemplates.value = templates.map(tpl => ({
+    allTemplates.value = templates.map(tpl => ({
       id: tpl.id,
       code: tpl.templateCode || '',
       name: tpl.templateName || '未命名报表',
@@ -409,47 +370,42 @@ async function loadApiTemplates() {
       description: tpl.description || '',
       category: tpl.category || 'custom',
       icon: tpl.icon || '📊',
-      version: tpl.version || 2,
-      status: tpl.status || 'published',
-      rowTree: tpl.rowTree || [],
-      columnTree: transformColumnTree(tpl.columnTree || []),
-      metrics: tpl.metrics || [],
-      layout: tpl.layout || getDefaultLayout(),
-      // ✅ 添加单位信息字段映射
-      orgId: tpl.orgId || tpl.organizationId || tpl.org_id || null,
-      orgName: tpl.orgName || tpl.organizationName || tpl.org_name || null,
-      creatorName: tpl.creatorName || tpl.creator || tpl.createByName || null,
-      createdBy: tpl.createdBy || tpl.createBy || null,
-      useCount: tpl.useCount || tpl.use_count || 0,
+      version: tpl.version || 1,
+      status: mapStatus(tpl.status),
+      rowTree: [],
+      columnTree: [],
+      metrics: [],
+      layout: getDefaultLayout(),
+      orgId: tpl.orgId || null,
+      orgName: tpl.orgName || null,
+      creatorName: tpl.creatorName || null,
+      createdBy: tpl.createdBy || null,
+      useCount: tpl.useCount || 0,
       _rawData: tpl,
       _isPublishedApi: true
     }))
 
-    console.log('[loadApiTemplates] 模板加载成功:', publishedTemplates.value.length)
-
-    // ✅ 关键：将API模板缓存到全局（供填报页面使用）
-    if (publishedTemplates.value.length > 0) {
+    if (allTemplates.value.length > 0) {
       window.__V2_TEMPLATES = window.__V2_TEMPLATES || {}
-      publishedTemplates.value.forEach(tpl => {
+      allTemplates.value.forEach(tpl => {
         const code = tpl.code || tpl.id
-        if (!code) return
-
-        // ✅ 直接使用原始code/id缓存，不再添加 CUSTOM- 前缀
-        window.__V2_TEMPLATES[code] = tpl
-        if (tpl.id) window.__V2_TEMPLATES[tpl.id] = tpl
-        
-        // ✅ 如果有完整数据，也缓存原始数据
-        if (tpl._rawData) {
-          window.__V2_TEMPLATES[`RAW-${code}`] = tpl._rawData
-          if (tpl._rawData.id) window.__V2_TEMPLATES[`RAW-${tpl._rawData.id}`] = tpl._rawData
+        if (code) {
+          window.__V2_TEMPLATES[code] = tpl
+          window.__V2_TEMPLATES[tpl.id] = tpl
         }
       })
-      console.log(`[TemplateCache] 已缓存 ${publishedTemplates.value.length} 个API模板`)
     }
   } catch (err) {
-    console.warn('[getTemplateList] 模板列表加载失败:', err)
-    publishedTemplates.value = []
+    console.warn('[loadTemplates] 模板列表加载失败:', err)
+    allTemplates.value = []
+  } finally {
+    templatesLoading.value = false
   }
+}
+
+function mapStatus(status) {
+  if (status === null || status === undefined) return 'draft'
+  return ({ 0: 'draft', 1: 'published', 2: 'disabled' }[status] || 'draft')
 }
 
 // ✅ 转换列树格式（后端 → 前端）
@@ -526,9 +482,15 @@ function editTemplate(tpl) {
     router.push(`/designer/${tpl.id}`)
 }
 
-async function publishTemplate(tpl) {
+async function handlePublish(tpl) {
   openMoreId.value = null
-  ElMessage.info('发布功能：调用 /api/report-designer/template/{id}/publish')
+  try {
+    await publishTemplate(tpl.id)
+    ElMessage.success('模板已发布')
+    loadTemplates()
+  } catch (err) {
+    ElMessage.error(`发布失败: ${err.message}`)
+  }
 }
 
 function showPermDialog(tpl) {
@@ -538,27 +500,30 @@ function showPermDialog(tpl) {
 
 async function confirmDelete(tpl) {
   openMoreId.value = null
-  if (!confirm(`确定删除模板 "${tpl.name}" 吗？此操作不可撤销。`)) {
-    return
-  }
 
   try {
-    if (tpl._isPublishedApi) {
-      await deleteTemplate(tpl.id)
-      publishedTemplates.value = publishedTemplates.value.filter(t => t.id !== tpl.id)
-      if (window.__V2_TEMPLATES) {
-        delete window.__V2_TEMPLATES[tpl.id]
-        delete window.__V2_TEMPLATES[tpl.code]
+    await ElMessageBox.confirm(
+      `确定删除报表 "${tpl.name}" 吗？\n\n删除后将清除该报表的所有数据（包括行、列、公式配置），此操作不可撤销。`,
+      '删除确认',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+        customClass: 'delete-confirm-dialog'
       }
-    } else {
-      const saved = JSON.parse(localStorage.getItem('rpt_custom_templates') || '[]')
-      const filtered = saved.filter(t => t.id !== tpl.id && t.code !== tpl.code)
-      localStorage.setItem('rpt_custom_templates', JSON.stringify(filtered))
-      originalTemplates.value = originalTemplates.value.filter(t => t.id !== tpl.id)
+    )
+
+    await deleteTemplate(tpl.id)
+    allTemplates.value = allTemplates.value.filter(t => t.id !== tpl.id)
+    if (window.__V2_TEMPLATES) {
+      delete window.__V2_TEMPLATES[tpl.id]
+      delete window.__V2_TEMPLATES[tpl.code]
     }
-    ElMessage.success(`模板 "${tpl.name}" 已删除`)
+    ElMessage.success(`报表 "${tpl.name}" 已删除`)
   } catch (err) {
-    ElMessage.error(`删除失败: ${err.message}`)
+    if (err !== 'cancel') {
+      ElMessage.error(`删除失败: ${err.message || err}`)
+    }
   }
 }
 

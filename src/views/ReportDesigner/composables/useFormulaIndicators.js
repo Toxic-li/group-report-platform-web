@@ -61,7 +61,10 @@ export function useFormulaIndicators(props) {
     if (props.template) {
       const extracted = formulaService.extractIndicatorsFromTemplate(props.template)
       if (extracted && extracted.length > 0) {
-        allIndicators.value = [...allIndicators.value, ...extracted]
+        // 去重：避免与 props.indicators 中的数据重复
+        const existingIds = new Set(allIndicators.value.map(i => i.id || i.code))
+        const newOnes = extracted.filter(e => !existingIds.has(e.id || e.code))
+        allIndicators.value = [...allIndicators.value, ...newOnes]
       }
     }
 

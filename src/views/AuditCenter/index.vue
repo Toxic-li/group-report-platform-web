@@ -256,6 +256,13 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from '@/utils/toast.js'
+import { 
+  getSubmitList, 
+  getSubmitDetail, 
+  getPendingAudits, 
+  approveAudit, 
+  rejectAudit 
+} from '@/api/reportSubmit.js'
 
 const router = useRouter()
 
@@ -315,8 +322,6 @@ async function loadSubmissions() {
   loading.value = true
   
   try {
-    const { getSubmissionsPage, getPendingAudits } = await import('@/api/reportDesigner.js')
-    
     const params = {
       page: currentPage.value,
       size: pageSize.value
@@ -327,14 +332,12 @@ async function loadSubmissions() {
     
     let res
     
-    // 如果筛选待审核，使用专门的接口
     if (filters.status === 'pending') {
       res = await getPendingAudits(params)
     } else {
-      res = await getSubmissionsPage(params)
+      res = await getSubmitList(params)
     }
     
-    // 兼容多种返回格式
     if (Array.isArray(res)) {
       submissions.value = res
       total.value = res.length
@@ -343,6 +346,7 @@ async function loadSubmissions() {
       total.value = res.total || res.count || submissions.value.length
     }
     
+    updateStats()
     console.log('[AuditCenter] 加载完成:', submissions.value.length, '条')
     
   } catch (err) {
@@ -351,6 +355,16 @@ async function loadSubmissions() {
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * ✅ 更新统计数据
+ */
+function updateStats() {
+  stats.pending = submissions.value.filter(s => s.status === 'pending' || s.status === 0).length
+  stats.approved = submissions.value.filter(s => s.status === 'approved' || s.status === 2).length
+  stats.rejected = submissions.value.filter(s => s.status === 'rejected' || s.status === 3).length
+  stats.total = submissions.value.length
 }
 
 /**
@@ -376,9 +390,7 @@ async function handleApprove(item) {
   if (!confirm(`确认通过「${item.templateName}」的审核？`)) return
   
   try {
-    const { approveAudit } = await import('@/api/reportDesigner.js')
-    
-    await approveAudit(item.id, '')
+    await approveAudit(item.id)
     
     showToast('审核通过', 'success')
     loadSubmissions()
@@ -406,8 +418,6 @@ async function handleReject() {
   }
   
   try {
-    const { rejectAudit } = await import('@/api/reportDesigner.js')
-    
     await rejectAudit(rejectDialog.targetItem.id, rejectDialog.reason)
     
     showToast('已驳回', 'success')
@@ -423,14 +433,11 @@ async function handleReject() {
  */
 async function viewDetail(item) {
   try {
-    const { getSubmissionById } = await import('@/api/reportDesigner.js')
-    
-    const data = await getSubmissionById(item.id)
+    const data = await getSubmitDetail(item.id)
     
     detailDialog.data = { ...item, ...data }
     detailDialog.visible = true
   } catch (err) {
-    // 如果详情接口失败，直接用列表数据显示
     detailDialog.data = item
     detailDialog.visible = true
   }

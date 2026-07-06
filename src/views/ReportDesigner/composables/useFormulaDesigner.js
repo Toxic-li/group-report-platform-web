@@ -115,11 +115,18 @@ export function useFormulaDesigner(props, emit) {
   }
 
   function handleValidate() {
-    if (!formulaData.expression) {
+    let expr = (formulaData.expression || '').trim()
+    // 去掉 Excel 风格的等号前缀
+    if (expr.startsWith('=')) {
+      expr = expr.slice(1).trim()
+    }
+    if (!expr) {
       validationResult.value = null
+      formulaStatus.value = 'unknown'
       return
     }
-    validationResult.value = formulaService.validateFormula(formulaData.expression)
+    validationResult.value = formulaService.validateFormula(expr)
+    formulaStatus.value = validationResult.value.valid ? 'valid' : 'invalid'
     if (validationResult.value.dependencies.length > 0) {
       updateDependencyTree()
     }

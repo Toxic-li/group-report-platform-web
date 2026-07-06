@@ -14,6 +14,10 @@ export default {
     if (!code) return
 
     const checkPermission = () => {
+      if (!userStore.permissions.length) {
+        el.style.display = ''
+        return
+      }
       let hasPerm = false
       if (Array.isArray(code)) {
         hasPerm = code.some(c => userStore.hasPermission(c))

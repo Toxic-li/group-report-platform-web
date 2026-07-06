@@ -314,7 +314,7 @@
                   <button class="dgn-tool-btn" @click.stop="addFormula()">+ 添加</button>
                 </div>
                 <div class="dgn-list-items">
-                  <div v-for="(formula, index) in tpl.aggregates" :key="'formula-'+index" class="dgn-list-item">
+                  <div v-for="(formula, index) in formulaList" :key="'formula-'+index" class="dgn-list-item">
                     <span class="dgn-list-icon">fx</span>
                     <div class="dgn-list-info">
                       <div class="dgn-list-label">{{ formula.label }}</div>
@@ -329,7 +329,7 @@
                     <button class="dgn-list-edit" @click.stop="editFormula(index)" title="编辑公式">✏️</button>
                     <button class="dgn-list-delete" @click.stop="deleteFormula(index)" title="删除公式">🗑️</button>
                   </div>
-                  <div v-if="tpl.aggregates.length === 0" class="dgn-empty">暂无公式，请选中单元格后点击"+ 添加"</div>
+                  <div v-if="formulaList.length === 0" class="dgn-empty">暂无公式，请选中单元格后点击"+ 添加"</div>
                 </div>
               </div>
 
@@ -515,6 +515,7 @@
                   <td 
                     class="dg-td dg-td-row-label"
                     @click="toggleRowExpand(ri)"
+                    @dblclick="startRowLabelEdit(ri)"
                   >
                     <div class="dg-tree-cell" :style="{ paddingLeft: (row.level * 18 + 8) + 'px' }">
                       <span 
@@ -530,8 +531,19 @@
                         </svg>
                       </span>
                       <span v-else class="dg-tree-toggle-placeholder"></span>
-                      <span class="dg-tree-label">{{ row.label }}</span>
-                      <span v-if="row.isSummary" class="dg-summary-tag">{{ row.summaryType }}</span>
+                      <input 
+                        v-if="editingRowLabel.rowIndex === ri" 
+                        v-model="editingRowLabel.value" 
+                        class="dg-row-label-input"
+                        @blur="commitRowLabelEdit"
+                        @keydown.enter="commitRowLabelEdit"
+                        @keydown.escape="cancelRowLabelEdit"
+                        autofocus
+                      />
+                      <template v-else>
+                        <span class="dg-tree-label">{{ row.label }}</span>
+                        <span v-if="row.isSummary" class="dg-summary-tag">{{ row.summaryType }}</span>
+                      </template>
                     </div>
                   </td>
                   <template v-for="(cell, ci) in row.cells" :key="'c'+ri+ci">
@@ -626,12 +638,12 @@
 
               <!-- 公式列表 -->
               <div v-if="formulaWorkbenchTab === 'list'" class="dgp-fw-content">
-                <div v-for="(agg, idx) in tpl.aggregates" :key="idx" class="dgp-formula-item" @click="editFormula(idx)">
+                <div v-for="(agg, idx) in formulaList" :key="idx" class="dgp-formula-item" @click="editFormula(idx)">
                   <span class="dgp-formula-name">{{ agg.label || agg.formulaId }}</span>
                   <span class="dgp-formula-expr">{{ agg.expression }}</span>
                   <span class="dgp-formula-target">{{ getCellLabelByTarget(agg.targetCell) }}</span>
                 </div>
-                <div v-if="!tpl.aggregates?.length" class="dgn-empty">暂无公式</div>
+                <div v-if="!formulaList?.length" class="dgn-empty">暂无公式</div>
               </div>
 
               <!-- 校验结果 -->
@@ -1107,18 +1119,33 @@
       </template>
     </el-dialog>
 
-    <!-- 公式编辑器 -->
-    <FormulaEditor
-      v-if="formulaEditorDialog.visible"
-      :cell-info="formulaCellInfo"
-      :initial-value="formulaEditorDialog.expression"
-      :fields="formulaFields"
-      :row-fields="formulaRowFields"
-      :valid-field-ids="formulaValidFieldIds"
-      :template-id="tpl.id"
-      @apply="onFormulaApply"
-      @close="formulaEditorDialog.visible = false"
-    />
+    <!-- 公式设计器弹窗 -->
+    <el-dialog
+      v-model="formulaEditorDialog.visible"
+      title="公式设计器"
+      width="90%"
+      top="5vh"
+      :show-close="true"
+      :close-on-click-modal="false"
+      :close-on-press-escape="true"
+      destroy-on-close
+      append-to-body
+      class="formula-designer-dialog"
+    >
+      <FormulaDesigner
+        ref="formulaDesignerRef"
+        :indicators="formulaIndicators"
+        :template="formulaTemplateData"
+        :cells="formulaCells"
+        :initial-formula="formulaInitialData"
+        @save="onFormulaDesignerSave"
+        @close="formulaEditorDialog.visible = false"
+      />
+      <template #footer>
+        <el-button @click="formulaEditorDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="onFormulaDesignerConfirm">确认并应用</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1126,10 +1153,20 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, defineComponent, h } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { loadTemplate, saveTemplate, updateTemplate, publishTemplate } from '@/api/reportDesigner.js'
-import FormulaEditor from '@/components/FormulaEditor.vue'
+import FormulaDesigner from './FormulaDesigner.vue'
 
 const router = useRouter()
 const route = useRoute()
+
+// 公式设计器组件引用（用于调用 el-dialog footer 上的"确认并应用"）
+const formulaDesignerRef = ref(null)
+
+function onFormulaDesignerConfirm() {
+  // 调用 FormulaDesigner 内部暴露的方法：先验证，通过后保存 + 关闭
+  if (formulaDesignerRef.value && typeof formulaDesignerRef.value.confirmAndApply === 'function') {
+    formulaDesignerRef.value.confirmAndApply()
+  }
+}
 
 // ==================== 递归树形组件 ====================
 // 行维度树形组件
@@ -1150,7 +1187,6 @@ const RowTreeItem = defineComponent({
         class: ['dgn-tree-node', { 'dgn-tree-summary': props.node.isSummary }],
         style: { paddingLeft: `${paddingLeft}px` }
       }, [
-        // 展开/收起图标
         h('span', {
           class: 'dgn-tree-expand',
           onClick: (e) => {
@@ -1159,18 +1195,15 @@ const RowTreeItem = defineComponent({
           }
         }, hasChildren ? (props.node.expanded ? '▼' : '▶') : ''),
         
-        // 节点标签
+        h('span', { class: 'dgn-tree-dim-icon' }, '☰'),
+        
         h('span', { class: 'dgn-tree-label' }, props.node.label),
         
-        // 汇总类型标签
         props.node.isSummary ? h('span', { class: 'dgn-tree-summary-tag' }, props.node.summaryType) : null,
         
-        // 节点编码
         h('span', { class: 'dgn-tree-code' }, props.node.code),
         
-        // 操作按钮组
         h('div', { class: 'dgn-tree-actions' }, [
-          // 添加子节点
           h('button', {
             class: 'dgn-tree-btn dgn-tree-add',
             title: '添加子节点',
@@ -1179,7 +1212,6 @@ const RowTreeItem = defineComponent({
               emit('add-child', props.path)
             }
           }, '+'),
-          // 编辑
           h('button', {
             class: 'dgn-tree-btn dgn-tree-edit',
             title: '编辑',
@@ -1187,8 +1219,7 @@ const RowTreeItem = defineComponent({
               e.stopPropagation()
               emit('edit', props.path)
             }
-          }, '✏️'),
-          // 删除
+          }, '✏'),
           h('button', {
             class: 'dgn-tree-btn dgn-tree-delete',
             title: '删除',
@@ -1196,10 +1227,9 @@ const RowTreeItem = defineComponent({
               e.stopPropagation()
               emit('delete', props.path)
             }
-          }, '🗑️')
+          }, '✕')
         ]),
         
-        // 子节点（递归）
         hasChildren && props.node.expanded ? 
           h('div', { class: 'dgn-tree-children' },
             props.node.children.map((child, idx) => 
@@ -1235,10 +1265,9 @@ const ColTreeItem = defineComponent({
       const hasChildren = props.node.children?.length > 0
       
       return h('div', { 
-        class: 'dgn-tree-node',
+        class: ['dgn-tree-node', { 'dgn-tree-summary': props.node.isSummary }],
         style: { paddingLeft: `${paddingLeft}px` }
       }, [
-        // 展开/收起图标
         h('span', {
           class: 'dgn-tree-expand',
           onClick: (e) => {
@@ -1247,15 +1276,15 @@ const ColTreeItem = defineComponent({
           }
         }, hasChildren ? (props.node.expanded ? '▼' : '▶') : ''),
         
-        // 节点标签
+        h('span', { class: 'dgn-tree-dim-icon' }, '☷'),
+        
         h('span', { class: 'dgn-tree-label' }, props.node.label),
         
-        // 节点编码
+        props.node.isSummary ? h('span', { class: 'dgn-tree-summary-tag' }, props.node.summaryType) : null,
+        
         h('span', { class: 'dgn-tree-code' }, props.node.code),
         
-        // 操作按钮组
         h('div', { class: 'dgn-tree-actions' }, [
-          // 添加子节点
           h('button', {
             class: 'dgn-tree-btn dgn-tree-add',
             title: '添加子节点',
@@ -1264,7 +1293,6 @@ const ColTreeItem = defineComponent({
               emit('add-child', props.path)
             }
           }, '+'),
-          // 编辑
           h('button', {
             class: 'dgn-tree-btn dgn-tree-edit',
             title: '编辑',
@@ -1272,8 +1300,7 @@ const ColTreeItem = defineComponent({
               e.stopPropagation()
               emit('edit', props.path)
             }
-          }, '✏️'),
-          // 删除
+          }, '✏'),
           h('button', {
             class: 'dgn-tree-btn dgn-tree-delete',
             title: '删除',
@@ -1281,10 +1308,9 @@ const ColTreeItem = defineComponent({
               e.stopPropagation()
               emit('delete', props.path)
             }
-          }, '🗑️')
+          }, '✕')
         ]),
         
-        // 子节点（递归）
         hasChildren && props.node.expanded ? 
           h('div', { class: 'dgn-tree-children' },
             props.node.children.map((child, idx) => 
@@ -1444,6 +1470,7 @@ watch(formulaWorkbenchExpr, (expr) => {
   }
 })
 
+const selectedCell = reactive({ row: null, col: null })
 // 选中单元格变化时更新公式工作台
 watch(() => [selectedCell.row, selectedCell.col], () => {
   if (selectedCell.row === null || selectedCell.col === null) return
@@ -1530,8 +1557,8 @@ const navItems = computed(() => [
   { key: 'datasource', label: '数据源', icon: '🔌', badge: '' },
   { key: 'rows', label: '行维度', icon: '📊', badge: rowCount },
   { key: 'cols', label: '列维度', icon: '📈', badge: colCount },
-  { key: 'metrics', label: '指标', icon: '📉', badge: tpl.metrics?.length || 0 },
-  { key: 'formulas', label: '公式', icon: 'fx', badge: tpl.metrics?.length || 0 },
+  { key: 'metrics', label: '指标', icon: '📉', badge: tpl.metrics?.filter(m => !m.expression).length || 0 },
+  { key: 'formulas', label: '公式', icon: 'fx', badge: formulaList?.length || 0 },
   { key: 'validators', label: '校验规则', icon: '✅', badge: tpl.validators?.length || 0 },
   { key: 'style', label: '样式', icon: '🎨', badge: '' },
   { key: 'permissions', label: '权限控制', icon: '🔒', badge: '' },
@@ -1590,6 +1617,11 @@ const statusLabel = computed(() => ({
   changed: '已变更', archived: '已归档', disabled: '已停用'
 }[tpl.status] || tpl.status))
 
+// 公式列表（从 metrics 中筛选出有 expression 的公式）
+const formulaList = computed(() => {
+  return tpl.metrics.filter(m => m.expression)
+})
+
 // 公式编辑器字段列表
 const formulaFields = computed(() => {
   return tpl.metrics.map(m => ({
@@ -1635,6 +1667,155 @@ const formulaCellInfo = computed(() => {
   const colCode = getColCode(col)
   return `${cellLabel} (${rowCode} / ${colCode})`
 })
+
+// ==================== 公式设计器数据映射 ====================
+function flattenTreeNodes(nodes, type) {
+  const result = []
+  const walk = (list) => {
+    for (const n of list) {
+      result.push({
+        id: n.id || n.code,
+        name: n.label || n.name,
+        code: n.code || n.id,
+        type: type,
+        category: 'dimension',
+        isSummary: n.isSummary || false
+      })
+      if (n.children?.length) walk(n.children)
+    }
+  }
+  walk(nodes || [])
+  return result
+}
+
+const formulaIndicators = computed(() => {
+  const metrics = tpl.metrics.map(m => ({
+    id: m.id || m.code,
+    name: m.label || m.name,
+    code: m.code || m.id,
+    type: m.type || 'metric',
+    category: 'basic'
+  }))
+  const rowDims = flattenTreeNodes(tpl.rowTree, 'row')
+  const colDims = flattenTreeNodes(tpl.columnTree, 'col')
+  return [...rowDims, ...colDims, ...metrics]
+})
+
+const formulaTemplateData = computed(() => {
+  const result = {
+    id: tpl.id,
+    name: tpl.name,
+    rowTree: tpl.rowTree,
+    columnTree: tpl.columnTree,
+    columnHeaders: columnHeaders.value,
+    metrics: tpl.metrics
+  }
+  return result
+})
+
+const formulaCells = computed(() => {
+  const cells = []
+  const cols = columnHeaders.value || []
+  for (let r = 0; r < rows.value.length; r++) {
+    const rowData = rows.value[r]
+    for (let c = 0; c < (rowData?.cells?.length || 0); c++) {
+      const cell = rowData.cells[c]
+      if (cell) {
+        const colHeader = cols[c] || {}
+        cells.push({
+          row: r + 1,
+          col: c + 1,
+          rowLabel: rowData.label || `行${r + 1}`,
+          colLabel: colHeader.label || `列${c + 1}`,
+          excelRef: convertToExcelRef(r + 1, c + 1),
+          label: getCellLabel(r, c),
+          value: cell.value || '',
+          isFormula: cell.isFormula || false,
+          formula: cell.formula || '',
+          readOnly: cell.readOnly || false
+        })
+      }
+    }
+  }
+  return cells
+})
+
+const formulaInitialData = computed(() => ({
+  id: formulaEditorDialog.formulaId || '',
+  label: formulaEditorDialog.formulaLabel || formulaEditorDialog.formulaName || '新公式',
+  expression: formulaEditorDialog.expression || '',
+  fieldName: formulaEditorDialog.formulaName || '',
+  resultType: formulaEditorDialog.resultType || 'number',
+  targetCell: formulaEditorDialog.targetCell
+    ? `${formulaEditorDialog.targetCell.row}-${formulaEditorDialog.targetCell.col}`
+    : null
+}))
+
+function onFormulaDesignerSave(data) {
+  const expr = data.expression || ''
+  const targetCell = formulaEditorDialog.targetCell
+  const applyToRow = formulaDesignerRef.value?.applyToRow || false
+
+  if (formulaEditorDialog.mode === 'add') {
+    if (applyToRow && targetCell) {
+      const colCount = rows.value[targetCell.row]?.cells?.length || 0
+      const targetRow = targetCell.row
+      let addedCount = 0
+      for (let c = 0; c < colCount; c++) {
+        const newFormula = {
+          id: generateId('formula'),
+          label: `${data.label || '新公式'}_${c + 1}`,
+          fieldName: `${data.fieldName || 'formula'}_${c + 1}`,
+          expression: expr.replace(/^=/, ''),
+          resultType: data.resultType || data.dataType || 'number',
+          type: 'custom',
+          order: formulaList.value.length + addedCount + 1,
+          dependencies: data.dependencies || [],
+          targetCell: `${targetRow}-${c}`,
+          targetRow: getRowCode(targetRow),
+          targetCol: getColCode(c)
+        }
+        tpl.metrics.push(newFormula)
+        addedCount++
+      }
+      showToast(`已为整行 ${colCount} 列添加公式`, 'success')
+    } else {
+      const newFormula = {
+        id: data.fieldName || generateId('formula'),
+        label: data.label || '新公式',
+        fieldName: data.fieldName || '',
+        expression: expr.replace(/^=/, ''),
+        resultType: data.resultType || data.dataType || 'number',
+        type: 'custom',
+        order: formulaList.value.length + 1,
+        dependencies: data.dependencies || [],
+        targetCell: targetCell ? `${targetCell.row}-${targetCell.col}` : null,
+        targetRow: targetCell ? getRowCode(targetCell.row) : null,
+        targetCol: targetCell ? getColCode(targetCell.col) : null
+      }
+      tpl.metrics.push(newFormula)
+      showToast('公式添加成功', 'success')
+    }
+  } else {
+    const formulaId = formulaEditorDialog.formulaId
+    const formula = tpl.metrics.find(m => m.id === formulaId)
+    if (formula) {
+      formula.id = data.fieldName || formula.id
+      formula.label = data.label || formula.label
+      formula.fieldName = data.fieldName || ''
+      formula.expression = expr.replace(/^=/, '')
+      formula.resultType = data.resultType || data.dataType || 'number'
+      formula.dependencies = data.dependencies || []
+      formula.targetCell = targetCell ? `${targetCell.row}-${targetCell.col}` : formula.targetCell
+      formula.targetRow = targetCell ? getRowCode(targetCell.row) : formula.targetRow
+      formula.targetCol = targetCell ? getColCode(targetCell.col) : formula.targetCol
+      showToast('公式修改成功', 'success')
+    }
+  }
+
+  applyFormulasToCells()
+  formulaEditorDialog.visible = false
+}
 
 function countNodes(nodes) {
   let c = 0
@@ -1763,10 +1944,6 @@ function buildRows() {
     return
   }
 
-  // ✅ 调试日志：检查 tpl.rowTree 的结构
-  console.log('[buildRows] tpl.rowTree:', tpl.rowTree)
-  console.log('[buildRows] tpl.rowTree.length:', tpl.rowTree.length)
-
   function walkRows(rowTree, level = 0, treePath = []) {
     for (let idx = 0; idx < rowTree.length; idx++) {
       const row = rowTree[idx]
@@ -1774,15 +1951,6 @@ function buildRows() {
       const hasChildren = row.children?.length > 0
       const isExpanded = row.expanded !== undefined ? row.expanded : false
       const currentPath = [...treePath, idx]
-
-      // ✅ 调试日志：每个节点的详细信息
-      console.log(`[buildRows] 节点 ${idx} (level ${level}):`, {
-        label,
-        hasChildren,
-        childrenCount: row.children?.length || 0,
-        children: row.children,
-        treePath: currentPath
-      })
 
       const cells = Array(colCount).fill(null).map((_, ci) => {
         if (row.isSummary && ci > 0) {
@@ -1813,17 +1981,12 @@ function buildRows() {
       })
 
       if (hasChildren && isExpanded) {
-        console.log(`[buildRows] 展开节点 "${label}" 的子节点，level + 1`)
         walkRows(row.children, level + 1, currentPath)
       }
     }
   }
 
   walkRows(tpl.rowTree)
-
-  // ✅ 调试日志：最终的 rows 数组
-  console.log('[buildRows] 最终 rows 数组:', result)
-  console.log('[buildRows] rows.length:', result.length)
 
   rows.value = result
 }
@@ -1833,6 +1996,23 @@ function rebuildTable() {
   buildMultiLevelHeaders()
   buildRowHeaderRows()
   buildRows()
+  applyFormulasToCells()
+}
+
+function applyFormulasToCells() {
+  const formulas = tpl.metrics?.filter(m => m.expression && m.targetCell) || []
+  for (const f of formulas) {
+    const parts = f.targetCell.split('-').map(Number)
+    if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) continue
+    const [rowIdx, colIdx] = parts
+    const row = rows.value[rowIdx]
+    const cell = row?.cells?.[colIdx]
+    if (cell) {
+      cell.isFormula = true
+      cell.formula = f.expression?.startsWith('=') ? f.expression : '=' + f.expression
+      cell.readOnly = true
+    }
+  }
 }
 
 watch(() => [tpl.rowTree, tpl.columnTree], () => {
@@ -1950,9 +2130,10 @@ function splitCells() {
 }
 
 // ==================== 编辑状态 ====================
-const selectedCell = reactive({ row: null, col: null })
+
 const selectedCellType = ref('cell')
 const editingCell = reactive({ row: null, col: null })
+const editingRowLabel = reactive({ rowIndex: null, value: '', originalValue: '' })
 
 // 撤销/重做
 const undoStack = ref([])
@@ -2217,16 +2398,17 @@ function confirmNodeDialog() {
     }
     showToast('节点添加成功', 'success')
   } else {
-    // 编辑模式
-    const node = getNodeByPath(nodeDialog.type === 'row' ? tpl.rowTree : tpl.columnTree, nodeDialog.path)
-    if (node) {
-      node.code = newNode.code
-      node.label = newNode.label
-      node.isSummary = newNode.isSummary
-      node.summaryType = newNode.summaryType
+      // 编辑模式
+      const node = getNodeByPath(nodeDialog.type === 'row' ? tpl.rowTree : tpl.columnTree, nodeDialog.path)
+      if (node) {
+        node.code = newNode.code
+        node.label = newNode.label
+        node.isSummary = newNode.isSummary
+        node.summaryType = newNode.summaryType
+      }
+      showToast('节点修改成功', 'success')
+      rebuildTable()
     }
-    showToast('节点修改成功', 'success')
-  }
   
   nodeDialog.visible = false
 }
@@ -2253,6 +2435,7 @@ function deleteRowNodeByPath(path) {
         }
       }
       showToast('行维度删除成功', 'success')
+      rebuildTable()
     }
   })
 }
@@ -2296,6 +2479,7 @@ function deleteColNodeByPath(path) {
         }
       }
       showToast('列维度删除成功', 'success')
+      rebuildTable()
     }
   })
 }
@@ -2347,27 +2531,61 @@ function deleteColChild(parentIndex, childIndex) {
 
 // 指标操作
 function addMetric() {
-  const newMetric = {
-    id: generateId('metric'),
-    field: prompt('请输入字段名:', 'new_field'),
-    label: prompt('请输入指标名称:', '新指标'),
-    unit: prompt('请输入单位:', ''),
-    type: 'number',
-    decimals: 0,
-    format: 'number'
-  }
-  if (newMetric.field && newMetric.label) {
+  ElMessageBox.prompt('请输入字段名:', '添加指标', {
+    inputValue: 'new_field',
+    confirmButtonText: '下一步',
+    cancelButtonText: '取消'
+  }).then(async ({ value: field }) => {
+    if (!field) return
+    const { value: label } = await ElMessageBox.prompt('请输入指标名称:', '添加指标', {
+      inputValue: '新指标',
+      confirmButtonText: '下一步',
+      cancelButtonText: '取消'
+    })
+    if (!label) return
+    const { value: unit } = await ElMessageBox.prompt('请输入单位:', '添加指标', {
+      inputValue: '',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    const newMetric = {
+      id: generateId('metric'),
+      field,
+      label,
+      unit: unit || '',
+      type: 'number',
+      decimals: 0,
+      format: 'number'
+    }
     tpl.metrics.push(newMetric)
     showToast('指标添加成功', 'success')
-  }
+  }).catch(() => {})
 }
 
 function editMetric(index) {
   const metric = tpl.metrics[index]
-  metric.field = prompt('修改字段名:', metric.field) || metric.field
-  metric.label = prompt('修改指标名称:', metric.label) || metric.label
-  metric.unit = prompt('修改单位:', metric.unit) || metric.unit
-  showToast('指标修改成功', 'success')
+  ElMessageBox.prompt('修改字段名:', '编辑指标', {
+    inputValue: metric.field,
+    confirmButtonText: '下一步',
+    cancelButtonText: '取消'
+  }).then(async ({ value: field }) => {
+    if (!field) return
+    const { value: label } = await ElMessageBox.prompt('修改指标名称:', '编辑指标', {
+      inputValue: metric.label,
+      confirmButtonText: '下一步',
+      cancelButtonText: '取消'
+    })
+    if (!label) return
+    const { value: unit } = await ElMessageBox.prompt('修改单位:', '编辑指标', {
+      inputValue: metric.unit || '',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    metric.field = field
+    metric.label = label
+    metric.unit = unit || ''
+    showToast('指标修改成功', 'success')
+  }).catch(() => {})
 }
 
 function deleteMetric(index) {
@@ -2400,7 +2618,8 @@ function addFormula() {
 }
 
 function editFormula(index) {
-  const formula = tpl.aggregates[index]
+  const formula = formulaList.value[index]
+  if (!formula) return
   formulaEditorDialog.visible = true
   formulaEditorDialog.mode = 'edit'
   formulaEditorDialog.index = index
@@ -2436,63 +2655,106 @@ function onFormulaApply(formulaData) {
       expression: expr.replace(/^=/, ''),
       resultType: formulaData.resultType || 'number',
       type: 'custom',
-      order: tpl.aggregates.length + 1,
+      order: formulaList.value.length + 1,
       dependencies: formulaData.dependencies || [],
       targetCell: targetCell ? `${targetCell.row}-${targetCell.col}` : null,
       targetRow: targetCell ? getRowCode(targetCell.row) : null,
       targetCol: targetCell ? getColCode(targetCell.col) : null
     }
-    tpl.aggregates.push(newFormula)
+    tpl.metrics.push(newFormula)
     showToast('公式添加成功', 'success')
   } else {
-    const formula = tpl.aggregates[formulaEditorDialog.index]
-    formula.id = formulaData.fieldName || formula.id
-    formula.label = formulaData.label || formula.label
-    formula.fieldName = formulaData.fieldName || ''
-    formula.expression = expr.replace(/^=/, '')
-    formula.resultType = formulaData.resultType || 'number'
-    formula.dependencies = formulaData.dependencies || []
-    formula.targetCell = targetCell ? `${targetCell.row}-${targetCell.col}` : formula.targetCell
-    formula.targetRow = targetCell ? getRowCode(targetCell.row) : formula.targetRow
-    formula.targetCol = targetCell ? getColCode(targetCell.col) : formula.targetCol
-    showToast('公式修改成功', 'success')
+    const formulaId = formulaEditorDialog.formulaId
+    const formula = tpl.metrics.find(m => m.id === formulaId)
+    if (formula) {
+      formula.id = formulaData.fieldName || formula.id
+      formula.label = formulaData.label || formula.label
+      formula.fieldName = formulaData.fieldName || ''
+      formula.expression = expr.replace(/^=/, '')
+      formula.resultType = formulaData.resultType || 'number'
+      formula.dependencies = formulaData.dependencies || []
+      formula.targetCell = targetCell ? `${targetCell.row}-${targetCell.col}` : formula.targetCell
+      formula.targetRow = targetCell ? getRowCode(targetCell.row) : formula.targetRow
+      formula.targetCol = targetCell ? getColCode(targetCell.col) : formula.targetCol
+      showToast('公式修改成功', 'success')
+    }
   }
   
   formulaEditorDialog.visible = false
 }
 
 function deleteFormula(index) {
-  showConfirmDialog(`确定删除公式 "${tpl.aggregates[index].label}"?`, {
+  const formula = formulaList.value[index]
+  if (!formula) return
+  showConfirmDialog(`确定删除公式 "${formula.label}"?`, {
     type: 'danger',
     okText: '删除',
     onOk: () => {
-      tpl.aggregates.splice(index, 1)
-      showToast('公式删除成功', 'success')
+      const idx = tpl.metrics.findIndex(m => m.id === formula.id)
+      if (idx > -1) {
+        tpl.metrics.splice(idx, 1)
+        applyFormulasToCells()
+        showToast('公式删除成功', 'success')
+      }
     }
   })
 }
 
 // 校验规则操作
 function addValidator() {
-  const newValidator = {
-    id: generateId('validator'),
-    label: prompt('请输入规则名称:', '新规则'),
-    type: 'custom',
-    expression: prompt('请输入校验表达式:', ''),
-    message: prompt('请输入错误提示:', '校验失败')
-  }
-  if (newValidator.label && newValidator.expression) {
+  ElMessageBox.prompt('请输入规则名称:', '添加校验规则', {
+    inputValue: '新规则',
+    confirmButtonText: '下一步',
+    cancelButtonText: '取消'
+  }).then(async ({ value: label }) => {
+    if (!label) return
+    const { value: expression } = await ElMessageBox.prompt('请输入校验表达式:', '添加校验规则', {
+      inputValue: '',
+      confirmButtonText: '下一步',
+      cancelButtonText: '取消'
+    })
+    if (!expression) return
+    const { value: message } = await ElMessageBox.prompt('请输入错误提示:', '添加校验规则', {
+      inputValue: '校验失败',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    const newValidator = {
+      id: generateId('validator'),
+      label,
+      type: 'custom',
+      expression,
+      message: message || '校验失败'
+    }
     tpl.validators.push(newValidator)
     showToast('校验规则添加成功', 'success')
-  }
+  }).catch(() => {})
 }
 
 function editValidator(index) {
   const validator = tpl.validators[index]
-  validator.label = prompt('修改规则名称:', validator.label) || validator.label
-  validator.expression = prompt('修改校验表达式:', validator.expression) || validator.expression
-  validator.message = prompt('修改错误提示:', validator.message) || validator.message
-  showToast('校验规则修改成功', 'success')
+  ElMessageBox.prompt('修改规则名称:', '编辑校验规则', {
+    inputValue: validator.label,
+    confirmButtonText: '下一步',
+    cancelButtonText: '取消'
+  }).then(async ({ value: label }) => {
+    if (!label) return
+    const { value: expression } = await ElMessageBox.prompt('修改校验表达式:', '编辑校验规则', {
+      inputValue: validator.expression,
+      confirmButtonText: '下一步',
+      cancelButtonText: '取消'
+    })
+    if (!expression) return
+    const { value: message } = await ElMessageBox.prompt('修改错误提示:', '编辑校验规则', {
+      inputValue: validator.message || '校验失败',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    validator.label = label
+    validator.expression = expression
+    validator.message = message || '校验失败'
+    showToast('校验规则修改成功', 'success')
+  }).catch(() => {})
 }
 
 function deleteValidator(index) {
@@ -2550,6 +2812,52 @@ function startEdit(row, col) {
   editingCell.col = col
 }
 
+function startRowLabelEdit(rowIndex) {
+  const row = rows.value[rowIndex]
+  if (!row) return
+  
+  editingRowLabel.rowIndex = rowIndex
+  editingRowLabel.value = row.label
+  editingRowLabel.originalValue = row.label
+}
+
+function commitRowLabelEdit() {
+  if (editingRowLabel.rowIndex === null) return
+  
+  const row = rows.value[editingRowLabel.rowIndex]
+  if (!row) {
+    cancelRowLabelEdit()
+    return
+  }
+  
+  const newValue = editingRowLabel.value.trim()
+  if (!newValue) {
+    showToast('行标签不能为空', 'warning')
+    return
+  }
+  
+  saveToUndoStack()
+  
+  row.label = newValue
+  
+  const node = getNodeByPath(tpl.rowTree, row.treePath)
+  if (node) {
+    node.label = newValue
+  }
+  
+  editingRowLabel.rowIndex = null
+  editingRowLabel.value = ''
+  editingRowLabel.originalValue = ''
+  
+  showToast('行维度标签修改成功', 'success')
+}
+
+function cancelRowLabelEdit() {
+  editingRowLabel.rowIndex = null
+  editingRowLabel.value = ''
+  editingRowLabel.originalValue = ''
+}
+
 function commitEdit() {
   const row = editingCell.row
   const col = editingCell.col
@@ -2605,6 +2913,16 @@ function getCellLabel(row, col) {
   if (row === null || col === null) return '-'
   const colLetter = String.fromCharCode(65 + col)
   return `${colLetter}${row + 1}`
+}
+
+function convertToExcelRef(row, col) {
+  let colLetter = ''
+  let c = col
+  while (c > 0) {
+    colLetter = String.fromCharCode(64 + (c % 26)) + colLetter
+    c = Math.floor(c / 26)
+  }
+  return `${colLetter}${row}`
 }
 
 /** 根据 targetCell 字符串（如 "3-5"）生成可读标签 */
@@ -2667,18 +2985,22 @@ function deleteSelectedRow() {
     return
   }
   
-  if (!confirm(`确定删除行 "${row.label}"?`)) return
-  
-  saveToUndoStack()
-  rows.value.splice(rowIndex, 1)
-  
-  // 同时从左侧资源面板删除
-  if (rowIndex < tpl.rowTree.length) {
-    tpl.rowTree.splice(rowIndex, 1)
-  }
-  
-  selectedCell.row = null
-  showToast('行已删除', 'success')
+  ElMessageBox.confirm(`确定删除行 "${row.label}"?`, '确认删除', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    saveToUndoStack()
+    rows.value.splice(rowIndex, 1)
+    
+    // 同时从左侧资源面板删除
+    if (rowIndex < tpl.rowTree.length) {
+      tpl.rowTree.splice(rowIndex, 1)
+    }
+    
+    selectedCell.row = null
+    showToast('行已删除', 'success')
+  }).catch(() => {})
 }
 
 function deleteSelectedCol() {
@@ -2700,20 +3022,24 @@ function deleteSelectedCol() {
     return
   }
   
-  if (!confirm(`确定删除列 "${col.label}"?`)) return
-  
-  saveToUndoStack()
-  columnHeaders.value.splice(colIndex, 1)
-  rows.value.forEach(row => row.cells.splice(colIndex, 1))
-  
-  // 同时从左侧资源面板删除（排除合计列）
-  const colNodeIndex = colIndex - 1 // 因为第0列是"指标"
-  if (colNodeIndex >= 0 && colNodeIndex < tpl.columnTree.length) {
-    tpl.columnTree.splice(colNodeIndex, 1)
-  }
-  
-  selectedCell.col = null
-  showToast('列已删除', 'success')
+  ElMessageBox.confirm(`确定删除列 "${col.label}"?`, '确认删除', {
+    confirmButtonText: '删除',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    saveToUndoStack()
+    columnHeaders.value.splice(colIndex, 1)
+    rows.value.forEach(row => row.cells.splice(colIndex, 1))
+    
+    // 同时从左侧资源面板删除（排除合计列）
+    const colNodeIndex = colIndex - 1 // 因为第0列是"指标"
+    if (colNodeIndex >= 0 && colNodeIndex < tpl.columnTree.length) {
+      tpl.columnTree.splice(colNodeIndex, 1)
+    }
+    
+    selectedCell.col = null
+    showToast('列已删除', 'success')
+  }).catch(() => {})
 }
 
 function insertSummaryRow() {
@@ -3242,7 +3568,6 @@ function transformTemplateData(data) {
   const typeMap = { '1': 'data', '5': 'formula', '6': 'metric' }
   const alignMap = { '0': 'left', '1': 'center', '2': 'right' }
 
-  // ✅ 修复：检查是否是扁平化结构（所有节点都没有 children）
   function isFlatStructure(arr) {
     if (!arr?.length) return false
 
@@ -3387,8 +3712,19 @@ function transformTemplateData(data) {
     status: data.status || 'designing',
     rowTree: transformRows(data.rowTree),
     columnTree: transformCols(data.columnTree),
+    metrics: (data.metrics || []).map(m => ({
+      ...m,
+      id: m.id || generateId('metric'),
+      label: m.label || m.name || '',
+      field: m.field || m.fieldName || '',
+      expression: m.expression || m.customFormula || '',
+      resultType: m.resultType || 'number',
+      targetCell: m.targetCell || '',
+      targetRow: m.targetRow || m.targetRowCode || '',
+      targetCol: m.targetCol || m.targetColCode || '',
+      type: m.type || 'metric'
+    })),
     aggregates: (data.metrics || data.aggregates || []).map(fromBackendAggregate),
-    metrics: [],
     layout: data.layout || tpl.layout,
     validators: data.validators || [],
     conditionalFormats: data.conditionalFormats || []
@@ -3478,17 +3814,18 @@ function transformToBackendFormat(data) {
     description: data.description || '',
     rowTree: transformRowTreeToBackend(data.rowTree || []),
     columnTree: transformColumnTreeToBackend(data.columnTree || []),
-    metrics: (data.aggregates || []).map(a => ({
-      id: a.id || '',
-      label: a.label || '',
-      field: a.fieldName || '',
-      expression: a.expression || '',
-      resultType: a.resultType || 'number',
-      targetCell: a.targetCell || '',
-      targetRow: a.targetRow || '',
-      targetCol: a.targetCol || '',
-      dependencies: a.dependencies || [],
-      priority: a.order || 0
+    metrics: (data.metrics || []).map(m => ({
+      id: m.id || '',
+      label: m.label || m.name || '',
+      field: m.field || m.fieldName || '',
+      expression: m.expression || '',
+      resultType: m.resultType || 'number',
+      targetCell: m.targetCell || '',
+      targetRow: m.targetRow || '',
+      targetCol: m.targetCol || '',
+      dependencies: m.dependencies || [],
+      priority: m.order || 0,
+      type: m.type || 'metric'
     }))
   }
 }
@@ -3821,6 +4158,9 @@ async function handlePublishTemplate() {
   background: $dg-bg-row-alt;
   border-top: 1px solid $dg-border;
   padding: 8px 0;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .dgn-toolbar {
@@ -4262,6 +4602,24 @@ async function handlePublishTemplate() {
   background: $dg-bg-panel;
 }
 
+.dg-row-label-input {
+  flex: 1;
+  min-width: 60px;
+  border: 1px solid $dg-primary;
+  border-radius: $dg-radius-sm;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: $dg-text-primary;
+  background: $dg-bg-panel;
+  outline: none;
+  
+  &:focus {
+    border-color: $dg-primary;
+    box-shadow: 0 0 0 2px $dg-primary-light;
+  }
+}
+
 .dg-fx-indicator {
   display: inline-block;
   font-size: 10px; font-weight: 700;
@@ -4671,14 +5029,18 @@ async function handlePublishTemplate() {
 .dgn-tree-node {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   padding: 6px 8px;
   cursor: pointer;
   transition: background .15s;
   position: relative;
+  border-radius: 4px;
+  margin-bottom: 2px;
+  flex-wrap: wrap;
+  min-height: 32px;
   
   &:hover {
-    background: $dg-bg-header;
+    background: rgba(18, 100, 232, 0.08);
     
     .dgn-tree-actions {
       opacity: 1;
@@ -4687,58 +5049,84 @@ async function handlePublishTemplate() {
 }
 
 .dgn-tree-node.dgn-tree-summary {
-  background: $dg-warning-bg;
+  background: rgba(251, 191, 36, 0.15);
   
   &:hover {
-    background: #FDE68A;
+    background: rgba(251, 191, 36, 0.25);
   }
 }
 
 .dgn-tree-expand {
   font-size: 10px;
-  color: $dg-text-placeholder;
+  color: #999;
   width: 14px;
+  height: 14px;
+  line-height: 14px;
   text-align: center;
   cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 3px;
+  transition: all .15s;
+  
+  &:hover {
+    background: rgba(0,0,0,0.05);
+    color: #666;
+  }
+}
+
+.dgn-tree-dim-icon {
+  font-size: 11px;
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 3px;
+  background: rgba(18, 100, 232, 0.1);
+  color: #1264e8;
   flex-shrink: 0;
 }
 
 .dgn-tree-label {
   flex: 1;
   font-size: 12px;
-  color: $dg-text-primary;
+  color: #333;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 500;
 }
 
 .dgn-tree-summary-tag {
-  display: inline-block;
-  padding: 1px 4px;
-  background: $dg-primary;
-  color: $dg-text-inverse;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  background: #1264e8;
+  color: #fff;
   font-size: 10px;
-  border-radius: $dg-radius-sm;
-  margin-left: 4px;
+  font-weight: 500;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .dgn-tree-code {
   font-size: 10px;
-  color: $dg-text-placeholder;
+  color: #999;
   flex-shrink: 0;
+  font-family: monospace;
 }
 
 .dgn-tree-actions {
   display: flex;
-  gap: 2px;
+  gap: 4px;
   opacity: 0;
   transition: opacity .2s;
   flex-shrink: 0;
 }
 
 .dgn-tree-btn {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4746,36 +5134,47 @@ async function handlePublishTemplate() {
   background: transparent;
   font-size: 12px;
   cursor: pointer;
-  border-radius: $dg-radius-sm;
+  border-radius: 4px;
   transition: all .15s;
   
   &:hover {
-    background: $dg-border;
+    background: rgba(0,0,0,0.08);
   }
 }
 
 .dgn-tree-btn.dgn-tree-add {
-  color: $dg-primary;
+  color: #10b981;
   
   &:hover {
-    background: $dg-primary-light;
+    background: rgba(16, 185, 129, 0.15);
   }
 }
 
 .dgn-tree-btn.dgn-tree-edit {
   font-size: 11px;
+  color: #666;
+  
+  &:hover {
+    background: rgba(0,0,0,0.1);
+    color: #333;
+  }
 }
 
 .dgn-tree-btn.dgn-tree-delete {
   font-size: 11px;
+  color: #ef4444;
   
   &:hover {
-    background: $dg-error-bg;
+    background: rgba(239, 68, 68, 0.15);
   }
 }
 
 .dgn-tree-children {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  flex-basis: 100%;
 }
 
 /* ====== Toast ====== */
@@ -4964,5 +5363,19 @@ async function handlePublishTemplate() {
   &.valid { color: $dg-success; }
   &.error { color: $dg-error; }
   &.warning { color: $dg-warning; }
+}
+</style>
+
+<style>
+.formula-designer-dialog .el-dialog__body {
+  padding: 0;
+  height: 75vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.formula-designer-dialog .formula-designer {
+  flex: 1;
+  min-height: 0;
 }
 </style>

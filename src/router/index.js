@@ -38,6 +38,12 @@ const routes = [
     name: 'Login',
     component: () => import('@/views/Login/index.vue')
   },
+  {
+    path: '/wordToExcel',
+    name: 'WordToExcel',
+    component: () => import('@/views/wordToExcel/DocxToXlsx.vue'),
+    meta: { perm: 'menu:wordToExcel' }
+  },
   // ⭐ 管理后台
   {
     path: '/admin',

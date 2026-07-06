@@ -67,6 +67,10 @@ export class FormulaService {
     if (indicator.code) {
       this.indicators.set(indicator.code, indicator)
     }
+    // 额外按 name 索引，便于验证器通过 name 查找到指标（行/列维度常用）
+    if (indicator.name) {
+      this.indicators.set(indicator.name, indicator)
+    }
     return this
   }
 
@@ -93,10 +97,27 @@ export class FormulaService {
   }
 
   /**
-   * 获取所有指标
+   * 获取所有指标（去重）
    */
   getAllIndicators() {
-    return Array.from(this.indicators.values())
+    const seen = new Set()
+    return Array.from(this.indicators.values()).filter(i => {
+      if (seen.has(i.id)) return false
+      seen.add(i.id)
+      return true
+    })
+  }
+
+  /**
+   * 搜索指标（按名称或编码匹配）
+   */
+  searchIndicators(keyword) {
+    if (!keyword) return this.getAllIndicators()
+    const lower = keyword.toLowerCase()
+    return this.getAllIndicators().filter(i =>
+      (i.name && i.name.toLowerCase().includes(lower)) ||
+      (i.code && i.code.toLowerCase().includes(lower))
+    )
   }
 
   /**
@@ -272,8 +293,11 @@ export class FormulaService {
    */
   validateFormula(expression) {
     try {
-      // 词法分析
-      const lexer = new FormulaLexer(expression)
+      // 词法分析（传入指标查找函数，用于识别纯数字行/列维度名）
+      const self = this
+      const lexer = new FormulaLexer(expression, {
+        indicatorLookup: (name) => self.indicators.get(name)
+      })
       const { tokens, errors: lexerErrors } = lexer.tokenize()
 
       if (lexerErrors.length > 0) {
@@ -393,9 +417,41 @@ export class FormulaService {
   extractIndicatorsFromTemplate(template) {
     if (!template) return []
 
-    // 简化实现：返回空数组
-    // 实际应用中可以从模板的 metrics、colTree、rowTree 等提取指标
-    return []
+    const indicators = []
+
+    function flattenTree(nodes, type, category) {
+      if (!nodes || !nodes.length) return
+      for (const n of nodes) {
+        indicators.push({
+          id: n.id || n.code,
+          name: n.label || n.name,
+          code: n.code || n.id,
+          type: type,
+          category: category,
+          isSummary: n.isSummary || false
+        })
+        if (n.children?.length) {
+          flattenTree(n.children, type, category)
+        }
+      }
+    }
+
+    flattenTree(template.rowTree, 'row', 'dimension')
+    flattenTree(template.columnTree, 'col', 'dimension')
+
+    if (template.metrics && template.metrics.length) {
+      for (const m of template.metrics) {
+        indicators.push({
+          id: m.id || m.code,
+          name: m.label || m.name,
+          code: m.code || m.id,
+          type: m.type || 'metric',
+          category: 'basic'
+        })
+      }
+    }
+
+    return indicators
   }
 
   /**

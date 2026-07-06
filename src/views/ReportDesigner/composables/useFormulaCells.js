@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 export function useFormulaCells(props, formulaData) {
   const leftPanelTab = ref('indicators')
@@ -19,7 +19,10 @@ export function useFormulaCells(props, formulaData) {
   })
 
   function initializeCellData() {
-    if (props.template && props.template.rowTree && props.template.columnTree) {
+    const hasRowTree = props.template?.rowTree && props.template.rowTree.length > 0
+    const hasColTree = props.template?.columnTree && props.template.columnTree.length > 0
+
+    if (hasRowTree && hasColTree) {
       const rowLeaves = extractTreeLeaves(props.template.rowTree, 'row')
       const colLeaves = extractTreeLeaves(props.template.columnTree, 'col')
 
@@ -94,7 +97,8 @@ export function useFormulaCells(props, formulaData) {
     const leaves = []
     function traverse(node, depth = 0) {
       if (!node) return
-      if (!node.children || node.children.length === 0) {
+      const hasChildren = node.children && Array.isArray(node.children) && node.children.length > 0
+      if (!hasChildren) {
         leaves.push({ ...node, depth, type })
       } else {
         node.children.forEach(child => traverse(child, depth + 1))
@@ -102,9 +106,9 @@ export function useFormulaCells(props, formulaData) {
     }
     if (Array.isArray(tree)) {
       tree.forEach(node => traverse(node))
-    } else if (tree.children && Array.isArray(tree.children)) {
+    } else if (tree && tree.children && Array.isArray(tree.children)) {
       traverse(tree)
-    } else {
+    } else if (tree) {
       leaves.push({ ...tree, depth: 0, type })
     }
     return leaves
@@ -282,6 +286,10 @@ export function useFormulaCells(props, formulaData) {
       }
     })
   }
+
+  watch(() => [props.template?.rowTree, props.template?.columnTree, props.cells], () => {
+    initializeCellData()
+  }, { deep: true })
 
   return {
     leftPanelTab,

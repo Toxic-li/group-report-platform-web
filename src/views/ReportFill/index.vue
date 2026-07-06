@@ -75,11 +75,6 @@
           </button>
           <button class="fr-action-btn" @click="expandAllGroups">展开列</button>
           <span class="fr-divider"></span>
-          <button class="fr-action-btn fr-fx-btn" :disabled="!selectedCell" @click="openFormulaForSelected" title="为当前单元格添加/编辑公式">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><text x="1" y="13" font-size="12" font-weight="bold" font-style="italic" fill="#7C3AED">fx</text></svg>
-            添加公式
-          </button>
-          <span class="fr-divider"></span>
           <button class="fr-action-btn fr-add-row-btn" @click="addNewRow" title="在末尾新增一行">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -107,6 +102,16 @@
               <path d="M4 11h8M5 13h6" stroke="currentColor" stroke-width="1.2"/>
             </svg>
             提交审核
+          </button>
+          <span class="fr-divider"></span>
+          <!-- ✅ 导出Excel按钮 -->
+          <button class="fr-action-btn" @click="handleExportExcel" title="导出Excel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            导出Excel
           </button>
         </div>
       </header>
@@ -171,7 +176,6 @@
                     :style="conditionalFormatStyle(val, row)"
                     @dblclick="startEdit(val, row, vi, $event)" @contextmenu.prevent="openDetail(val, row, $event)">
                     {{ fmtVal(val) }}
-                    <button v-if="!row.isSummary" class="fr-cell-fx" title="添加公式" @click.stop="openFormulaEditor(val, row, vi)">fx</button>
                   </td>
                 </tr>
 
@@ -205,7 +209,6 @@
                       @keydown="onEditInputKeydown($event, val, row, vi)" autofocus />
                     <template v-else>
                       {{ fmtVal(val) }}
-                      <button class="fr-cell-fx" title="添加公式" @click.stop="openFormulaEditor(val, row, vi)">fx</button>
                     </template>
                   </td>
                 </tr>
@@ -262,7 +265,7 @@
                   <div v-for="h in drawer.history" :key="h.period" class="fr-hist-item">
                     <span class="fr-hist-period">{{ h.period }}</span>
                     <span :class="['fr-hist-val', h.trend]">{{ h.value }}</span>
-                    <span v-if="h.diff !== undefined" :class="['fr-hist-diff', h.diff >= 0 ? 'up' : 'down']">
+                    <span v-if="h.diff !== undefined && h.diff !== null" :class="['fr-hist-diff', h.diff >= 0 ? 'up' : 'down']">
                       {{ h.diff >= 0 ? '+' : '' }}{{ h.diff.toFixed(2) }}%</span>
                   </div>
                 </div>
@@ -316,18 +319,16 @@
 import { ref, computed, watch, nextTick, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useReportStore } from '@/stores/reportStore.js'
-import { TemplateParser, FormulaEngine, AggregateEngine } from '@/services/templateEngine.js'
+import { TemplateParser, AggregateEngine } from '@/services/templateEngine.js'
+import { FormulaEngine } from '@/services/engines/FormulaEngine.js'
 import { ValidationEngine } from '@/services/engines/ValidationEngine.js'
 import { ConditionalFormatEngine } from '@/services/engines/ConditionalFormatEngine.js'
 import { PermissionEngine } from '@/services/engines/PermissionEngine.js'
 import { ReportFactory } from '@/services/ReportFactory.js'
 import { TemplateManager } from '@/services/TemplateManager.js'
-import { initTemplates } from '@/mock/templates.js'
-// V2 JSON模板支持
-import { getV2Template, getAllV2Templates, TEMPLATES_V2 } from '@/data/templates-v2.js'
+import { getTemplateById, getOrgTree, exportToExcel } from '@/api/reportDesigner.js'
 import { ReportTemplateParser } from '@/services/TemplateParser.js'
 import FormulaEditor from '@/components/FormulaEditor.vue'
-import { getOrgTree } from '@/api/reportDesigner.js'
 
 const route = useRoute()
 const props = defineProps({
@@ -731,73 +732,56 @@ async function loadReport(templateId) {
   loadingText.value = `正在加载模板 ${templateId}...`
 
   try {
-    // 检查是否为V2 JSON模板（优先使用V2）
-    const v2Tpl = await getV2Template(templateId)
-    console.log('[ReportLoad] V2模板查询结果:', templateId, v2Tpl ? '✅ 找到' : '❌ 未找到')
+    // ========== 优先从后端API加载模板 ==========
+    let apiTemplate = null
+    try {
+      apiTemplate = await getTemplateById(templateId)
+      console.log('[ReportLoad] 后端API模板加载成功')
+    } catch (apiErr) {
+      console.warn('[ReportLoad] 后端API加载失败，尝试本地模板:', apiErr.message)
+    }
 
-    if (v2Tpl) {
-      // ========== V2 JSON 模板模式 ==========
+    if (apiTemplate && apiTemplate.id) {
+      // ========== 后端API模板模式 ==========
       useV2.value = true
-      v2TemplateCode.value = templateId
-      loadingText.value = '正在解析JSON模板...'
+      v2TemplateCode.value = apiTemplate.code || templateId
+      loadingText.value = '正在解析后端模板...'
 
       try {
-        // 使用V2解析器
         const parser = new ReportTemplateParser()
-        parser.load(v2Tpl).parse()
+        parser.load(apiTemplate).parse()
         v2Parser.value = parser
 
-        // 将V2模板对象设置为currentTemplate（兼容现有逻辑）
         currentTemplate.value = parser.getTemplate()
-
-        // 构建兼容的config结构
         config.value = buildConfigFromV2(parser)
 
-        // ✅ 填充API返回的 cellData（之前填报的数据）
-        if (v2Tpl.cellData) {
-          populateCellDataFromApi(v2Tpl.cellData)
+        if (apiTemplate.cellData) {
+          populateCellDataFromApi(apiTemplate.cellData)
         }
       } catch (parseErr) {
-        console.error('[ReportFill] V2模板解析失败:', parseErr)
-        throw new Error(`V2模板解析错误: ${parseErr.message}`)
+        console.error('[ReportFill] API模板解析失败:', parseErr)
+        throw new Error(`模板解析错误: ${parseErr.message}`)
       }
 
-
     } else {
-      // ========== V1 代码模板模式（原有逻辑） ==========
+      // ========== 本地模板模式（降级方案） ==========
       useV2.value = false
 
-      // 1. 初始化模板管理器 & 注册内置模板
       const tm = new TemplateManager()
-      initTemplates(tm)
-
-      // 2. 创建工厂并加载报表
-      reportFactory = new ReportFactory({
-        templateManager: tm,
-        dataLoader: generateMockData
-      })
 
       loadingText.value = `正在构建报表结构...`
       await nextTick()
 
-      // 3. 获取模板对象
       let tpl = tm.get(templateId)
-      if (!tpl) throw new Error(`模板不存在: ${templateId}，请检查模板配置`)
+      if (!tpl) throw new Error(`模板不存在: ${templateId}`)
 
-      // 4. 设置到本地状态
       currentTemplate.value = tpl
-
-      // 5. 解析并渲染
       parseAndRender(tpl)
     }
 
-    // 初始化子引擎
     initEngines(currentTemplate.value)
 
-    // ✅ 加载条件格式规则
     await loadConditionalFormats(templateId)
-    
-    // ✅ 加载校验规则
     await loadValidationRules(templateId)
 
     loading.value = false
@@ -1131,9 +1115,9 @@ function parseAndRender(tpl) {
     console.error('[ReportFill] 模板对象:', JSON.stringify(tpl, (k, v) => typeof v === 'function' ? '[Function]' : v, 2))
     throw new Error(`模板解析错误: ${parseErr.message}\n堆栈: ${parseErr.stack}`)
   }
-  formulaEngine = new FormulaEngine(config.value.cellData)
+  formulaEngine = new FormulaEngine({ cellData: config.value.cellData })
   aggregateEngine = new AggregateEngine({ template: tpl, cellData: config.value.cellData })
-  
+
   const formulas = buildFormulaConfigs(tpl)
   formulaEngine.setFormulas(formulas)
   
@@ -1224,6 +1208,7 @@ function applyFormulaConfigsToCellData(tpl) {
   const rowIdToIdx = new Map(rows.map((r, i) => [r.id, i]))
   const colIdToIdx = new Map(cols.map((c, i) => [c.id, i]))
 
+  const convertedFormulas = []
   let appliedCount = 0
   for (const fc of configs) {
     if (!fc.expression || !fc.targetCell) continue
@@ -1279,21 +1264,39 @@ function applyFormulaConfigsToCellData(tpl) {
         return `${numToColLetter(targetCi + 2)}${frozenRows + ri}`
       }).filter(Boolean)
       if (parts.length > 0) {
-        setFormulaCell(key, '=' + parts.join('+'), fc, targetRi, targetCi, rows)
-        console.log('[FormulaDebug] 行求和:', key, '←', '=' + parts.join('+'))
+        const expr = '=' + parts.join('+')
+        setFormulaCell(key, expr, fc, targetRi, targetCi, rows)
+        convertedFormulas.push({
+          id: fc.id,
+          expression: expr,
+          targetCell: key,
+          fieldName: fc.fieldName || '',
+          dependencies: fc.dependencies || []
+        })
+        console.log('[FormulaDebug] 行求和:', key, '←', expr)
+        appliedCount++
+        continue
       }
-      appliedCount++
-      continue
     }
 
-    // 普通公式：shiftFormulaCols 解决 colToNum 1-based 偏移
-    let expr = shiftFormulaCols(fc.expression, -1)
+    // 普通公式：偏移行号和列号以匹配填报页面 cellData 的 key 格式
+    const rowOffset = frozenRows - 1
+    const colOffset = 1
+    let expr = shiftFormulaRefs(fc.expression, rowOffset, colOffset)
     if (!expr.startsWith('=')) expr = '=' + expr
     setFormulaCell(key, expr, fc, targetRi, targetCi, rows)
+    convertedFormulas.push({
+      id: fc.id,
+      expression: expr,
+      targetCell: key,
+      fieldName: fc.fieldName || '',
+      dependencies: fc.dependencies || []
+    })
     console.log('[FormulaDebug] 公式:', key, '←', expr)
     appliedCount++
   }
   console.log(`[FormulaDebug] 总共应用 ${appliedCount} 个单元格公式`)
+  return convertedFormulas
 }
 
 function setFormulaCell(key, formulaStr, fc, targetRi, targetCi, rows) {
@@ -1309,13 +1312,24 @@ function setFormulaCell(key, formulaStr, fc, targetRi, targetCi, rows) {
 }
 
 // 从表达式中提取行 ID 列表：SUM(row_a,row_b) → [row_a, row_b]
+// 注意：SUM(B1:C1) 这种 Excel 范围引用不应被识别为行 ID
+// 行名称可以是纯数字（如"11"、"22"），需要在调用时检查是否存在于行列表中
 function extractRowListExpr(expr) {
   if (!expr) return null
   const inner = expr.trim().replace(/^(SUM|AVERAGE|MAX|MIN)\((.*)\)$/i, '$2').trim()
+
+  // Excel 范围引用（如 B1:C1, A1:B5）不是行 ID
+  if (/^[A-Z]+\d+:[A-Z]+\d+$/.test(inner)) return null
+
   const parts = inner.split(/[,，]\s*/)
+
+  // 如果包含 Excel 范围引用，也不是行 ID
+  if (parts.some(p => /^[A-Z]+\d+:[A-Z]+\d+$/.test(p.trim()))) return null
+
   const hasRowIds = parts.some(p => {
     const t = p.trim()
-    return t && !/^\d+$/.test(t) && !/^[A-Z]+\d+$/.test(t)
+    // 行 ID：不是单个 Excel 单元格引用，也不是范围引用
+    return t && !/^[A-Z]+\d+$/.test(t)
   })
   return hasRowIds ? parts.map(p => p.trim()).filter(Boolean) : null
 }
@@ -1329,6 +1343,17 @@ function shiftFormulaCols(expr, offset) {
     return `${numToColLetter(n)}${row}`
   })
 }
+
+// 公式行号和列号同时偏移
+function shiftFormulaRefs(expr, rowOffset, colOffset) {
+  if (!expr || (rowOffset === 0 && colOffset === 0)) return expr
+  return expr.replace(/([A-Z]+)(\d+)/g, (_, col, row) => {
+    const colNum = colToNum(col) + colOffset
+    const rowNum = parseInt(row) + rowOffset
+    if (colNum < 0 || rowNum < 0) return `${col}${row}`
+    return `${numToColLetter(colNum)}${rowNum}`
+  })
+}
 function colToNum(col) {
   let n = 0
   for (let i = 0; i < col.length; i++) n = n * 26 + (col.charCodeAt(i) - 65)
@@ -1340,7 +1365,7 @@ function numToColLetter(n) {
   return s
 }
 
-// cellData.v → rows.values.v
+// cellData.v → rows.values.v（同步公式信息）
 function syncCellDataToRows() {
   const rows = config.value?.rows || []
   const frozenRows = config.value?.frozenRowCount || 4
@@ -1354,6 +1379,10 @@ function syncCellDataToRows() {
       if (cell && row.values[c]) {
         row.values[c].v = cell.v !== undefined ? cell.v : row.values[c].v
         row.values[c].raw = cell.raw !== undefined ? cell.raw : row.values[c].raw
+        // 同步公式信息（用于详情面板显示）
+        if (cell.f !== undefined) row.values[c].f = cell.f
+        if (cell.formula !== undefined) row.values[c].formula = cell.formula
+        if (cell.readOnly !== undefined) row.values[c].readOnly = cell.readOnly
       }
     }
   }
@@ -1392,14 +1421,18 @@ function initEngines(tpl) {
   // 权限引擎
   permissionEngine = new PermissionEngine({ template: tpl, currentRole: 'filler' })
 
-  // 公式引擎（V2路径也需要初始化）
+  // 公式引擎
   if (!formulaEngine) {
-    formulaEngine = new FormulaEngine(config.value.cellData)
+    formulaEngine = new FormulaEngine({ cellData: config.value.cellData })
   }
-  applyFormulaConfigsToCellData(tpl)
+  const convertedFormulas = applyFormulaConfigsToCellData(tpl)
+  console.log('[FormulaDebug] 转换后公式数量:', convertedFormulas.length, '内容:', JSON.stringify(convertedFormulas))
+  formulaEngine.setFormulas(convertedFormulas)
   formulaEngine.invalidateCache()
   const calcResults = formulaEngine.calculateAll()
   console.log('[FormulaDebug] calculateAll 结果:', calcResults)
+  console.log('[FormulaDebug] formulaEngine.formulas 大小:', formulaEngine.formulas?.size)
+  console.log('[FormulaDebug] formulaEngine.calcOrder:', formulaEngine.calcOrder)
 
   // 将 cellData 计算后的值同步到 rows[].values[]（渲染链路）
   syncCellDataToRows()
@@ -1484,10 +1517,12 @@ function buildRowValues(rowIndex) {
       values.push({
         v: cell.v, raw: cell.v,
         readOnly: !!cell.readOnly || !!cell.f,
-        colIdx: c, colTitle: getColTitle(c), formula: cell.f || null,
+        colIdx: c, colTitle: getColTitle(c), 
+        formula: cell.formula || cell.f || null,
+        f: cell.f || null
       })
     } else {
-      values.push({ v: '', raw: '', readOnly: false, colIdx: c, colTitle: getColTitle(c) || '', formula: null })
+      values.push({ v: '', raw: '', readOnly: false, colIdx: c, colTitle: getColTitle(c) || '', formula: null, f: null })
     }
   }
   return values
@@ -1732,27 +1767,99 @@ function setCellRef(el, rowId, colIdx) { /* DOM引用 */ }
 
 /** 打开公式编辑器 */
 function openFormulaEditor(val, row, colIdx) {
-  // 收集列指标字段（当前模板的叶子列）
-  const leafCols = currentTemplate.value?.getLeafColumns?.() || []
-  const fields = leafCols.map(col => ({
-    id: col.id,
-    title: col.title || col.id,
-    type: col.type
-  }))
-
-  // 收集行指标字段（当前模板的扁平行）
-  const flatRows = currentTemplate.value?.getFlatRows?.() || []
-  const rowFields = flatRows.filter(r => !r.isSummary).map(r => ({
-    id: r.id,
-    name: r.name,
-    type: r.isSummary ? 'aggregate' : ''
-  }))
+  let fields = []
+  let rowFields = []
+  
+  console.log('[openFormulaEditor] useV2:', useV2.value, 'v2Parser:', !!v2Parser.value)
+  
+  if (useV2.value && v2Parser.value) {
+    const template = v2Parser.value.getTemplate()
+    const rowTree = template?.rowTree || []
+    const colTree = template?.columnTree || []
+    
+    console.log('[openFormulaEditor] rowTree.length:', rowTree.length, 'colTree.length:', colTree.length)
+    
+    fields = extractLeafColumns(colTree)
+    rowFields = extractFlatRows(rowTree).filter(r => !r.isSummary)
+    
+    console.log('[openFormulaEditor] extracted:', { fields: fields.length, rowFields: rowFields.length })
+    
+    if (fields.length === 0 && colTree.length > 0) {
+      console.warn('[openFormulaEditor] 从树结构未提取到字段，尝试从解析器获取')
+      const leafCols = v2Parser.value.getLeafColumns() || []
+      fields = leafCols.map(col => ({
+        id: col.id || col.code,
+        title: col.name || col.title || col.id,
+        type: col.type || col.columnType || 'data'
+      }))
+      console.log('[openFormulaEditor] 从解析器获取字段:', fields.length)
+    }
+    
+    if (rowFields.length === 0 && rowTree.length > 0) {
+      const flatRows = v2Parser.value.getFlatRows() || []
+      rowFields = flatRows.filter(r => !r.isSummary).map(r => ({
+        id: r.id || r.code,
+        name: r.name,
+        type: r.isSummary ? 'aggregate' : 'data'
+      }))
+    }
+    
+    // ✅ 兜底方案：从config中提取
+    if (fields.length === 0 && config.value?.columnData) {
+      console.warn('[openFormulaEditor] 从解析器也未提取到字段，尝试从config提取')
+      fields = config.value.columnData.slice(2).map(col => ({
+        id: col.id || col.code,
+        title: col.title || col.name || col.id,
+        type: col.type || 'data'
+      }))
+    }
+    
+    if (rowFields.length === 0 && config.value?.rows) {
+      rowFields = config.value.rows.filter(r => !r.isSummary).map(r => ({
+        id: r.id || r.code,
+        name: r.name,
+        type: r.isSummary ? 'aggregate' : 'data'
+      }))
+    }
+    
+  } else if (currentTemplate.value?.getLeafColumns) {
+    // ========== 本地模板对象：调用方法获取 ==========
+    const leafCols = currentTemplate.value.getLeafColumns() || []
+    fields = leafCols.map(col => ({
+      id: col.id,
+      title: col.title || col.id,
+      type: col.type
+    }))
+    
+    const flatRows = currentTemplate.value.getFlatRows() || []
+    rowFields = flatRows.filter(r => !r.isSummary).map(r => ({
+      id: r.id,
+      name: r.name,
+      type: r.isSummary ? 'aggregate' : ''
+    }))
+    
+  } else if (config.value?.columnData && config.value?.rows) {
+    // ========== 从 config 提取（兜底方案） ==========
+    fields = config.value.columnData.slice(2).map(col => ({
+      id: col.id || col.code,
+      title: col.title || col.name || col.id,
+      type: col.type || 'data'
+    }))
+    
+    rowFields = config.value.rows.filter(r => !r.isSummary).map(r => ({
+      id: r.id || r.code,
+      name: r.name,
+      type: r.isSummary ? 'aggregate' : 'data'
+    }))
+  }
 
   // 合并所有有效ID（行+列）
   const validIds = [
     ...fields.map(f => f.id),
     ...rowFields.map(f => f.id)
   ]
+  
+  console.log('[FormulaEditor] 字段提取:', { fields: fields.length, rowFields: rowFields.length, validIds: validIds.length })
 
   formulaEditor.visible = true
   formulaEditor.cellInfo = `${row.name} / ${val.colTitle || `列${colIdx}`}`
@@ -1761,6 +1868,41 @@ function openFormulaEditor(val, row, colIdx) {
   formulaEditor.rowFields = rowFields
   formulaEditor.validFieldIds = validIds
   formulaEditor.targetCell = { rowIdx: row.depth, colIdx, val, row }
+}
+
+/** 递归提取叶子列节点 */
+function extractLeafColumns(tree) {
+  const result = []
+  for (const node of tree) {
+    if (node.children && node.children.length > 0) {
+      result.push(...extractLeafColumns(node.children))
+    } else {
+      result.push({
+        id: node.id || node.code,
+        title: node.name || node.title || node.id,
+        type: node.type || node.columnType || 'data'
+      })
+    }
+  }
+  return result
+}
+
+/** 扁平化行节点 */
+function extractFlatRows(tree, level = 0) {
+  const result = []
+  for (const node of tree) {
+    result.push({
+      id: node.id || node.code,
+      name: node.name,
+      isSummary: node.isSummary || false,
+      level,
+      type: node.isSummary ? 'aggregate' : 'data'
+    })
+    if (node.children && node.children.length > 0) {
+      result.push(...extractFlatRows(node.children, level + 1))
+    }
+  }
+  return result
 }
 
 /** 应用公式（接收结构化对象） */
@@ -2618,6 +2760,17 @@ function showSaveStatus(text, type) {
   saveStatus.visible = true 
 }
 
+/**
+ * ✅ 导出Excel
+ */
+function handleExportExcel() {
+  if (!selectedOrgId.value || !selectedPeriod.value) {
+    showToast('请先选择组织和周期', 'warning')
+    return
+  }
+  exportToExcel(props.templateId, selectedOrgId.value, selectedPeriod.value)
+}
+
 // ========================================
 // 【六】公式引擎
 // ========================================
@@ -2676,7 +2829,8 @@ function openDetail(val, row, event) {
   drawer.displayValue = fmtVal(val)
   drawer.rawValue = String(val.raw ?? val.v)
   drawer.valClass = !isNaN(n) && /率|增长率/.test(val.colTitle) ? (n > 0 ? 'fr-up' : n < 0 ? 'fr-down' : '') : ''
-  drawer.formula = val.formula || ''
+  // 兼容 formula（原始表达式）和 f（偏移后的公式）
+  drawer.formula = val.formula || val.f || ''
   drawer.source = val.readOnly ? '系统自动计算（公式/汇总）' : '手工填报'
   drawer.templateId = currentTemplate.value?.id || '-'
 

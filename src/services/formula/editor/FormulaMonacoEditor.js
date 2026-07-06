@@ -38,27 +38,23 @@ export class FormulaMonacoEditor {
     if (this.initialized) return
 
     try {
-      // 配置 loader
       loader.config({
         paths: {
-          vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
+          vs: '/node_modules/monaco-editor/min/vs'
         }
       })
 
-      // 加载 Monaco Editor
       this.monaco = await loader.init()
 
-      // 初始化语言定义
       await this.initLanguage()
 
-      // 初始化所有 Providers
       await this.initProviders()
 
       this.initialized = true
       console.log('Monaco Editor initialized successfully')
     } catch (error) {
-      console.error('Failed to initialize Monaco Editor:', error)
-      throw error
+      console.warn('Failed to initialize Monaco Editor, using fallback:', error)
+      this.initialized = false
     }
   }
 

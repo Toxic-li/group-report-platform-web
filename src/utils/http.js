@@ -1,6 +1,7 @@
 /**
  * HTTP 客户端 - 封装 fetch API
  * ✅ 自动携带 token 认证
+ * ✅ 自动解析后端统一 Result<T> 格式，直接返回 data
  */
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -17,7 +18,7 @@ function getToken() {
  * 通用请求方法
  * @param {string} url - 请求地址（不含 base URL）
  * @param {RequestInit} options - fetch 选项
- * @returns {Promise<any>}
+ * @returns {Promise<any>} 返回后端 Result.data 中的数据
  */
 async function request(url, options = {}) {
   const fullUrl = url.startsWith('http') ? url : `${BASE_URL}${url}`
@@ -27,10 +28,10 @@ async function request(url, options = {}) {
   const defaultOptions = {
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `${token}` } : {}),  // ✅ 添加 Authorization 头
+      ...(token ? { 'Authorization': `${token}` } : {}),
       ...options.headers,
     },
-    credentials: 'include', // 携带 cookie
+    credentials: 'include',
   }
 
   try {
@@ -38,12 +39,10 @@ async function request(url, options = {}) {
 
     // ✅ 处理认证失败（401）
     if (response.status === 401) {
-      // 清除本地认证信息
       sessionStorage.removeItem('rpt_token')
       sessionStorage.removeItem('rpt_user')
       localStorage.removeItem('rpt_token')
       
-      // 跳转到登录页（如果不在登录页）
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname)
       }
@@ -51,21 +50,32 @@ async function request(url, options = {}) {
       throw new Error('登录已过期，请重新登录')
     }
 
-    // 处理非 2xx 响应
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      const error = new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      const error = new Error(errorData.message || errorData.msg || `HTTP ${response.status}: ${response.statusText}`)
       error.status = response.status
       error.data = errorData
       throw error
     }
 
-    // 204 No Content 或返回空的情况
     if (response.status === 204 || response.headers.get('content-length') === '0') {
       return null
     }
 
-    return await response.json()
+    // ✅ 解析后端统一 Result<T> 格式
+    const result = await response.json()
+    
+    // 如果是 Result 格式（包含 code, message, data），直接返回 data
+    if (result && typeof result === 'object' && 'code' in result) {
+      if (result.code === 200 || result.code === 0) {
+        return result.data
+      } else {
+        throw new Error(result.message || result.msg || '请求失败')
+      }
+    }
+    
+    // 如果不是 Result 格式，直接返回原始响应
+    return result
   } catch (error) {
     console.error('[HTTP] 请求失败:', error)
     throw error

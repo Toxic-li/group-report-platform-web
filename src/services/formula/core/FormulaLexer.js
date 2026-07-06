@@ -11,17 +11,20 @@ import { Token, TokenType, Location } from './FormulaTypes.js'
  * FormulaLexer - 词法分析器
  */
 export class FormulaLexer {
-  constructor(source) {
+  constructor(source, options = {}) {
     this.source = source
     this.tokens = []
     this.position = 0
     this.line = 1
     this.column = 0
     this.errors = []
-    
+    // 外部传入的指标查找函数：(name) => indicator | undefined
+    // 用于在数字 token 阶段识别"行维度名"等纯数字指标名
+    this.indicatorLookup = options.indicatorLookup || (() => undefined)
+
     // 关键字
     this.keywords = new Set(['IF', 'AND', 'OR', 'NOT', 'TRUE', 'FALSE'])
-    
+
     // 内置函数列表（常见函数）
     this.builtInFunctions = new Set([
       'SUM', 'AVG', 'AVERAGE', 'MAX', 'MIN', 'COUNT', 'COUNTDISTINCT',
@@ -88,6 +91,12 @@ export class FormulaLexer {
       return
     }
     
+    // 单元格引用（如 A1, B2:C3）- 必须在标识符检查之前
+    if (this.isLetter(ch) && this.isCellReferenceStart()) {
+      this.scanCellReference()
+      return
+    }
+    
     // 标识符或关键字（支持中文和特殊字符）
     if (this.isIdentifierStart(ch)) {
       this.scanIdentifier()
@@ -103,12 +112,6 @@ export class FormulaLexer {
     // 变量（如 $CurrentYear）
     if (ch === '$') {
       this.scanVariable()
-      return
-    }
-    
-    // 单元格引用（如 A1, B2:C3）
-    if (this.isLetter(ch) && this.isCellReferenceStart()) {
-      this.scanCellReference()
       return
     }
     
@@ -164,7 +167,18 @@ export class FormulaLexer {
       this.tokens.push(new Token(TokenType.NUMBER, value, { start, end }, value))
       return
     }
-    
+
+    // 检查是否为已注册的指标名（行/列维度名可以是纯数字，如 "11"、"22"）
+    // 仅在整数场景下判断，避免影响小数和科学计数法
+    if (!value.includes('.') && !value.includes('E') && !value.includes('e') && this.indicatorLookup) {
+      const indicator = this.indicatorLookup(value)
+      if (indicator) {
+        const end = this.getCurrentLocation()
+        this.tokens.push(new Token(TokenType.IDENTIFIER, value, { start, end }, value))
+        return
+      }
+    }
+
     const end = this.getCurrentLocation()
     this.tokens.push(new Token(TokenType.NUMBER, parseFloat(value), { start, end }, value))
   }

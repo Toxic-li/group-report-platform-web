@@ -20,6 +20,28 @@ export function useFormulaEditor(formulaData, handleFormulaChange, showNotificat
   }
 
   function insertTextAtCursor(text) {
+    let expr = formulaData.expression || ''
+    if (expr.includes('?')) {
+      formulaData.expression = expr.replace('?', text)
+      if (monacoEditor) {
+        monacoEditor.setValue(formulaData.expression)
+        monacoEditor.focus()
+      }
+      handleFormulaChange()
+      return true
+    }
+
+    const trimmed = expr.trimEnd()
+    if (trimmed.endsWith(')')) {
+      formulaData.expression = trimmed.slice(0, -1) + ', ' + text + ')'
+      if (monacoEditor) {
+        monacoEditor.setValue(formulaData.expression)
+        monacoEditor.focus()
+      }
+      handleFormulaChange()
+      return true
+    }
+
     if (monacoEditor) {
       const position = monacoEditor.getPosition()
       monacoEditor.executeEdits('', [{
@@ -29,9 +51,8 @@ export function useFormulaEditor(formulaData, handleFormulaChange, showNotificat
       monacoEditor.focus()
       return true
     }
-    
-    formulaData.expression = formulaData.expression || ''
-    formulaData.expression += text
+
+    formulaData.expression = expr + text
     handleFormulaChange()
     return true
   }
@@ -122,13 +143,14 @@ export function useFormulaEditor(formulaData, handleFormulaChange, showNotificat
     const argsText = params.length > 0 ? '?' : ''
     const insertText = `${func.name}(${argsText})`
     insertTextAtCursor(insertText)
-    
+
     if (monacoEditor && params.length > 0) {
       const position = monacoEditor.getPosition()
       monacoEditor.setPosition({
         lineNumber: position.lineNumber,
-        column: position.column - argsText.length - 1
+        column: position.column - 2
       })
+      monacoEditor.focus()
     }
   }
 

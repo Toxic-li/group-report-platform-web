@@ -54,6 +54,35 @@ export function deleteTemplate(templateId) {
   return del(`${BASE}/template/${encodeURIComponent(templateId)}`)
 }
 
+/** 根据ID获取模板详情（兼容旧代码） */
+export function getTemplateById(templateId) {
+  return loadTemplate(templateId)
+}
+
+/** 提交报表审核 */
+export function submitForReview(data) {
+  const params = new URLSearchParams()
+  if (data.templateId) params.append('templateId', data.templateId)
+  if (data.orgId) params.append('orgId', data.orgId)
+  if (data.period) params.append('period', data.period)
+  if (data.remark) params.append('remark', data.remark)
+  return post(`${BASE}/submit?${params}`)
+}
+
+/** 导出报表为Excel */
+export function exportToExcel(templateId, orgId, period) {
+  const params = new URLSearchParams()
+  params.append('templateId', templateId)
+  if (orgId) params.append('orgId', orgId)
+  if (period) params.append('period', period)
+  return window.open(`${BASE}/export/excel?${params}`, '_blank')
+}
+
+/** 导出模板为Excel（不含数据） */
+export function exportTemplateExcel(templateId) {
+  return window.open(`${BASE}/export/template/excel?templateId=${templateId}`, '_blank')
+}
+
 /** 模板列表（分页） */
 export function getTemplateList(params = {}) {
   const q = { current: params.current || 1, size: params.size || 100 }
