@@ -381,6 +381,7 @@ import { useFormulaIndicators } from './composables/useFormulaIndicators'
 import { useFormulaEditor } from './composables/useFormulaEditor'
 import { useFormulaFunctions } from './composables/useFormulaFunctions'
 import { useFormulaCells } from './composables/useFormulaCells'
+import { toExcelRef } from '@/utils/excelRef.js'
 
 export default {
   name: 'FormulaDesigner',
@@ -495,6 +496,7 @@ export default {
     const {
       functionSearch,
       allFunctions,
+      displayFunctions,
       recentFunctions,
       favoriteFunctions,
       selectedFunction,
@@ -577,7 +579,8 @@ export default {
 
 
     const filteredFunctions = computed(() => {
-      let filtered = allFunctions.value || []
+      const source = displayFunctions.value || allFunctions.value || []
+      let filtered = source
       if (functionFilter.value && functionFilter.value !== 'all') {
         filtered = filtered.filter(f => f.category === functionFilter.value)
       }
@@ -619,15 +622,6 @@ export default {
     }
 
     // ==================== 单元格选择弹窗 ====================
-    function convertToExcelRef(row, col) {
-      let colLetter = ''
-      let c = col
-      while (c > 0) {
-        colLetter = String.fromCharCode(64 + (c % 26 || 26)) + colLetter
-        c = Math.floor((c - 1) / 26)
-      }
-      return `${colLetter}${row}`
-    }
 
     const cellPickerVisible = ref(false)
     const rangeStart = ref(null)
@@ -642,8 +636,8 @@ export default {
       const endRow = Math.max(rangeStart.value.row, rangeEnd.value.row)
       const startCol = Math.min(rangeStart.value.col, rangeEnd.value.col)
       const endCol = Math.max(rangeStart.value.col, rangeEnd.value.col)
-      const startRef = convertToExcelRef(startRow, startCol)
-      const endRef = convertToExcelRef(endRow, endCol)
+      const startRef = toExcelRef(startRow + 1, startCol + 1)
+      const endRef = toExcelRef(endRow + 1, endCol + 1)
       return startRef === endRef ? startRef : `${startRef}:${endRef}`
     })
 

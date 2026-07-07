@@ -1,4 +1,5 @@
 <template>
+  <div class="doc-converter-wrap">
   <div class="converter-page">
     <div class="header">
       <h1>Word 转 Excel 工具</h1>
@@ -61,6 +62,7 @@
         转换失败：{{ result.error }}
       </template>
     </div>
+  </div>
   </div>
 </template>
 
@@ -137,14 +139,20 @@ async function startConvert() {
 </script>
 
 <style scoped>
+.doc-converter-wrap {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+}
 .converter-page {
   max-width: 560px;
-  margin: 40px auto;
+  margin: 0 auto;
   padding: 40px;
   background: #fff;
   border-radius: 16px;
-  box-shadow: 0 10px 40px rgba(31, 78, 121, 0.12);
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #E5E7EB;
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
 }
 .header {
   text-align: center;

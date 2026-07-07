@@ -1,11 +1,6 @@
 <template>
   <div class="audit-center">
-    <!-- 页面标题 -->
-    <div class="ac-header">
-      <h1 class="ac-title">审核中心</h1>
-      <p class="ac-subtitle">管理报表提交审核流程</p>
-    </div>
-
+    <div class="app-page-inner">
     <!-- 统计卡片 -->
     <div class="ac-stats">
       <div class="ac-stat-card ac-stat-pending">
@@ -55,23 +50,56 @@
       </button>
     </div>
 
+    <!-- 批量操作栏 -->
+    <div v-if="selectedIds.length > 0" class="ac-batch-bar">
+      <span class="ac-batch-info">已选择 {{ selectedIds.length }} 项</span>
+      <div class="ac-batch-actions">
+        <button class="ac-btn ac-btn-primary" @click="batchApprove" :disabled="batchSubmitting">
+          ✓ 批量通过
+        </button>
+        <button class="ac-btn ac-btn-danger" @click="batchReject" :disabled="batchSubmitting">
+          ✕ 批量驳回
+        </button>
+        <button class="ac-btn ac-btn-secondary" @click="clearSelection">
+          取消选择
+        </button>
+      </div>
+    </div>
+
     <!-- 提交列表 -->
     <div class="ac-table-wrapper">
       <table class="ac-table" v-if="submissions.length > 0">
         <thead>
           <tr>
+            <th class="ac-col-check">
+              <input 
+                type="checkbox" 
+                :checked="isAllSelected"
+                @change="toggleSelectAll"
+                :disabled="pendingItems.length === 0"
+              />
+            </th>
             <th>序号</th>
             <th>模板名称</th>
             <th>组织</th>
             <th>周期</th>
             <th>提交人</th>
             <th>提交时间</th>
+            <th>审核人/时间</th>
             <th>状态</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(item, index) in submissions" :key="item.id" :class="'ac-row-' + item.status">
+            <tr v-for="(item, index) in submissions" :key="item.id" :class="'ac-row-' + normalizeStatus(item.status)">
+            <td class="ac-col-check">
+              <input 
+                v-if="normalizeStatus(item.status) === 'pending'"
+                type="checkbox" 
+                :value="item.id"
+                v-model="selectedIds"
+              />
+            </td>
             <td>{{ (currentPage - 1) * pageSize + index + 1 }}</td>
             <td class="ac-td-name">{{ item.templateName || '-' }}</td>
             <td>{{ item.orgName || '-' }}</td>
@@ -79,13 +107,20 @@
             <td>{{ item.submitterName || '-' }}</td>
             <td>{{ formatTime(item.submitTime) }}</td>
             <td>
-              <span :class="'ac-status ac-status-' + item.status">
+              <div class="ac-audit-info">
+                <span v-if="item.auditorName" class="ac-auditor">{{ item.auditorName }}</span>
+                <span v-if="item.auditTime" class="ac-audit-time">{{ formatTime(item.auditTime) }}</span>
+                <span v-if="!item.auditorName && !item.auditTime" class="ac-audit-empty">-</span>
+              </div>
+            </td>
+            <td>
+              <span :class="'ac-status ac-status-' + normalizeStatus(item.status)">
                 {{ statusText(item.status) }}
               </span>
             </td>
             <td class="ac-actions">
               <!-- 待审核：显示通过/驳回按钮 -->
-              <template v-if="item.status === 'pending'">
+              <template v-if="normalizeStatus(item.status) === 'pending'">
                 <button class="ac-action-btn ac-approve" @click="handleApprove(item)" title="审核通过">
                   ✓ 通过
                 </button>
@@ -95,6 +130,9 @@
                 <button class="ac-action-btn ac-detail" @click="viewDetail(item)" title="查看详情">
                   详情
                 </button>
+                <button class="ac-action-btn ac-history" @click="viewAuditHistory(item)" title="审核轨迹">
+                  轨迹
+                </button>
               </template>
               
               <!-- 已通过/驳回：只显示详情 -->
@@ -102,9 +140,12 @@
                 <button class="ac-action-btn ac-detail" @click="viewDetail(item)" title="查看详情">
                   详情
                 </button>
+                <button class="ac-action-btn ac-history" @click="viewAuditHistory(item)" title="审核轨迹">
+                  轨迹
+                </button>
                 <!-- 已撤回：可重新提交 -->
                 <button 
-                  v-if="item.status === 'withdrawn'" 
+                  v-if="normalizeStatus(item.status) === 'withdrawn'" 
                   class="ac-action-btn ac-resubmit" 
                   @click="resubmit(item)"
                   title="重新提交"
@@ -152,6 +193,62 @@
       >下一页</button>
     </div>
 
+    <!-- 审核历史弹窗 -->
+    <Teleport to="body">
+      <div v-if="historyDialog.visible" class="ac-modal-overlay" @click.self="historyDialog.visible = false">
+        <div class="ac-modal ac-modal-lg">
+          <div class="ac-modal-header">
+            <h3>审核轨迹</h3>
+            <button class="ac-modal-close" @click="historyDialog.visible = false">&times;</button>
+          </div>
+          <div class="ac-modal-body">
+            <!-- 加载中 -->
+            <div v-if="historyDialog.loading" class="ac-loading">
+              <div class="ac-spinner"></div>
+              <p>正在加载审核历史...</p>
+            </div>
+            
+            <!-- 空状态 -->
+            <div v-else-if="historyDialog.logs.length === 0" class="ac-empty">
+              <p>暂无审核轨迹记录</p>
+            </div>
+            
+            <!-- 时间线 -->
+            <div v-else class="ac-timeline">
+              <div 
+                v-for="(log, idx) in historyDialog.logs" 
+                :key="idx" 
+                class="ac-timeline-item"
+                :class="'ac-timeline-' + normalizeStatus(log.action)"
+              >
+                <div class="ac-timeline-dot"></div>
+                <div class="ac-timeline-content">
+                  <div class="ac-timeline-header">
+                    <span class="ac-timeline-action">{{ statusText(log.action) }}</span>
+                    <span class="ac-timeline-time">{{ formatTime(log.createTime || log.auditTime) }}</span>
+                  </div>
+                  <div class="ac-timeline-body">
+                    <p v-if="log.auditorName || log.operatorName" class="ac-timeline-operator">
+                      操作人：{{ log.auditorName || log.operatorName }}
+                    </p>
+                    <p v-if="log.remark || log.reason" class="ac-timeline-remark">
+                      备注：{{ log.remark || log.reason }}
+                    </p>
+                    <p v-if="log.comment" class="ac-timeline-comment">
+                      {{ log.comment }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ac-modal-footer">
+            <button class="ac-btn ac-btn-primary" @click="historyDialog.visible = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- 驳回原因弹窗 -->
     <Teleport to="body">
       <div v-if="rejectDialog.visible" class="ac-modal-overlay" @click.self="rejectDialog.visible = false">
@@ -177,6 +274,37 @@
               :disabled="!rejectDialog.reason.trim()"
             >
               确认驳回
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    
+    <!-- 审核通过弹窗 -->
+    <Teleport to="body">
+      <div v-if="approveDialog.visible" class="ac-modal-overlay" @click.self="approveDialog.visible = false">
+        <div class="ac-modal">
+          <div class="ac-modal-header">
+            <h3>审核通过</h3>
+            <button class="ac-modal-close" @click="approveDialog.visible = false">&times;</button>
+          </div>
+          <div class="ac-modal-body">
+            <p class="ac-confirm-text">确认通过「{{ approveDialog.targetItem?.templateName }}」的审核？</p>
+            <label class="ac-label">审核意见（可选）</label>
+            <textarea 
+              v-model="approveDialog.remark" 
+              class="ac-textarea" 
+              placeholder="请输入审核意见..."
+              rows="3"
+            ></textarea>
+          </div>
+          <div class="ac-modal-footer">
+            <button class="ac-btn ac-btn-secondary" @click="approveDialog.visible = false">取消</button>
+            <button 
+              class="ac-btn ac-btn-primary" 
+              @click="confirmApprove"
+            >
+              确认通过
             </button>
           </div>
         </div>
@@ -215,7 +343,7 @@
               </div>
               <div class="ac-detail-item">
                 <span class="ac-detail-label">当前状态</span>
-                <span :class="'ac-status ac-status-' + detailDialog.data.status">
+                <span :class="'ac-status ac-status-' + normalizeStatus(detailDialog.data.status)">
                   {{ statusText(detailDialog.data.status) }}
                 </span>
               </div>
@@ -249,6 +377,7 @@
         </div>
       </div>
     </Teleport>
+    </div>
   </div>
 </template>
 
@@ -261,7 +390,11 @@ import {
   getSubmitDetail, 
   getPendingAudits, 
   approveAudit, 
-  rejectAudit 
+  rejectAudit,
+  batchApproveAudit,
+  batchRejectAudit,
+  getAuditLogs,
+  getWorkflowTasks
 } from '@/api/reportSubmit.js'
 
 const router = useRouter()
@@ -302,14 +435,44 @@ const rejectDialog = reactive({
   reason: ''
 })
 
+/** 审核通过弹窗 */
+const approveDialog = reactive({
+  visible: false,
+  targetItem: null,
+  remark: ''
+})
+
 /** 详情弹窗 */
 const detailDialog = reactive({
   visible: false,
   data: null
 })
 
+/** 审核历史弹窗 */
+const historyDialog = reactive({
+  visible: false,
+  submitId: null,
+  logs: [],
+  loading: false
+})
+
+/** 批量选择 */
+const selectedIds = ref([])
+const batchSubmitting = ref(false)
+
 // 计算属性
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
+
+/** 待审核项 */
+const pendingItems = computed(() => 
+  submissions.value.filter(item => normalizeStatus(item.status) === 'pending')
+)
+
+/** 是否全选 */
+const isAllSelected = computed(() => {
+  if (pendingItems.value.length === 0) return false
+  return pendingItems.value.every(item => selectedIds.value.includes(item.id))
+})
 
 // ========================================
 // 方法
@@ -319,6 +482,7 @@ const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
  * ✅ 加载提交列表
  */
 async function loadSubmissions() {
+  currentPage.value = 1
   loading.value = true
   
   try {
@@ -339,15 +503,16 @@ async function loadSubmissions() {
     }
     
     if (Array.isArray(res)) {
-      submissions.value = res
+      submissions.value = res.map(s => ({ ...s, status: normalizeStatus(s.status) }))
       total.value = res.length
     } else if (res?.records || res?.list || res?.data) {
-      submissions.value = res.records || res.list || res.data
-      total.value = res.total || res.count || submissions.value.length
+      const raw = res.records || res.list || res.data
+      submissions.value = raw.map(s => ({ ...s, status: normalizeStatus(s.status) }))
+      total.value = res.total || res.count || raw.length
     }
     
-    updateStats()
-    console.log('[AuditCenter] 加载完成:', submissions.value.length, '条')
+    // 清空选择
+    selectedIds.value = []
     
   } catch (err) {
     console.error('[AuditCenter] 加载失败:', err)
@@ -358,13 +523,34 @@ async function loadSubmissions() {
 }
 
 /**
- * ✅ 更新统计数据
+ * ✅ 加载统计数据（从 API 获取全局统计，非当前页数据）
+ */
+async function loadStats() {
+  try {
+    const [pendingRes, approvedRes, rejectedRes, totalRes] = await Promise.all([
+      getPendingAudits({ page: 1, size: 1 }),
+      getSubmitList({ status: 'approved', page: 1, size: 1 }),
+      getSubmitList({ status: 'rejected', page: 1, size: 1 }),
+      getSubmitList({ page: 1, size: 1 })
+    ])
+    stats.pending = pendingRes?.total || 0
+    stats.approved = approvedRes?.total || 0
+    stats.rejected = rejectedRes?.total || 0
+    stats.total = totalRes?.total || 0
+  } catch (err) {
+    console.warn('[AuditCenter] 加载统计失败:', err)
+  }
+}
+
+/**
+ * ✅ 更新统计数据（本地列表统计，备用）
  */
 function updateStats() {
-  stats.pending = submissions.value.filter(s => s.status === 'pending' || s.status === 0).length
-  stats.approved = submissions.value.filter(s => s.status === 'approved' || s.status === 2).length
-  stats.rejected = submissions.value.filter(s => s.status === 'rejected' || s.status === 3).length
-  stats.total = submissions.value.length
+  const normalized = submissions.value.map(s => normalizeStatus(s.status))
+  stats.pending = normalized.filter(s => s === 'pending').length
+  stats.approved = normalized.filter(s => s === 'approved').length
+  stats.rejected = normalized.filter(s => s === 'rejected').length
+  stats.total = total.value
 }
 
 /**
@@ -384,18 +570,32 @@ function changePage(page) {
 }
 
 /**
- * ✅ 审核通过
+ * ✅ 显示审核通过弹窗
  */
-async function handleApprove(item) {
-  if (!confirm(`确认通过「${item.templateName}」的审核？`)) return
+function handleApprove(item) {
+  approveDialog.targetItem = item
+  approveDialog.remark = ''
+  approveDialog.visible = true
+}
+
+/**
+ * ✅ 确认审核通过（防重复提交）
+ */
+async function confirmApprove() {
+  if (batchSubmitting.value) return
+  batchSubmitting.value = true
   
   try {
-    await approveAudit(item.id)
+    await approveAudit(approveDialog.targetItem.id, approveDialog.remark)
     
     showToast('审核通过', 'success')
+    approveDialog.visible = false
+    loadStats()
     loadSubmissions()
   } catch (err) {
     showToast(err.message || '操作失败', 'error')
+  } finally {
+    batchSubmitting.value = false
   }
 }
 
@@ -409,11 +609,15 @@ function showRejectDialog(item) {
 }
 
 /**
- * ✅ 执行驳回
+ * ✅ 执行驳回（防重复提交）
  */
 async function handleReject() {
+  if (batchSubmitting.value) return
+  batchSubmitting.value = true
+  
   if (!rejectDialog.reason.trim()) {
     showToast('请输入驳回原因', 'warning')
+    batchSubmitting.value = false
     return
   }
   
@@ -422,9 +626,107 @@ async function handleReject() {
     
     showToast('已驳回', 'success')
     rejectDialog.visible = false
+    loadStats()
     loadSubmissions()
   } catch (err) {
     showToast(err.message || '操作失败', 'error')
+  } finally {
+    batchSubmitting.value = false
+  }
+}
+
+/**
+ * ✅ 全选/取消全选
+ */
+function toggleSelectAll() {
+  if (isAllSelected.value) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = pendingItems.value.map(item => item.id)
+  }
+}
+
+/**
+ * ✅ 清空选择
+ */
+function clearSelection() {
+  selectedIds.value = []
+}
+
+/**
+ * ✅ 批量通过（防重复提交）
+ */
+async function batchApprove() {
+  if (selectedIds.value.length === 0) {
+    showToast('请选择要审核的项', 'warning')
+    return
+  }
+  if (batchSubmitting.value) return
+  
+  if (!confirm(`确认批量通过 ${selectedIds.value.length} 项审核？`)) return
+  
+  batchSubmitting.value = true
+  try {
+    await batchApproveAudit(selectedIds.value)
+    showToast(`已通过 ${selectedIds.value.length} 项`, 'success')
+    selectedIds.value = []
+    loadStats()
+    loadSubmissions()
+  } catch (err) {
+    showToast(err.message || '批量操作失败', 'error')
+  } finally {
+    batchSubmitting.value = false
+  }
+}
+
+/**
+ * ✅ 批量驳回（防重复提交）
+ */
+async function batchReject() {
+  if (selectedIds.value.length === 0) {
+    showToast('请选择要审核的项', 'warning')
+    return
+  }
+  if (batchSubmitting.value) return
+  
+  const reason = prompt(`请输入批量驳回原因（共 ${selectedIds.value.length} 项）：`)
+  if (reason === null) return
+  if (!reason.trim()) {
+    showToast('请输入驳回原因', 'warning')
+    return
+  }
+  
+  batchSubmitting.value = true
+  try {
+    await batchRejectAudit(selectedIds.value, reason)
+    showToast(`已驳回 ${selectedIds.value.length} 项`, 'success')
+    selectedIds.value = []
+    loadStats()
+    loadSubmissions()
+  } catch (err) {
+    showToast(err.message || '批量操作失败', 'error')
+  } finally {
+    batchSubmitting.value = false
+  }
+}
+
+/**
+ * ✅ 查看审核历史/轨迹
+ */
+async function viewAuditHistory(item) {
+  historyDialog.submitId = item.id
+  historyDialog.visible = true
+  historyDialog.loading = true
+  historyDialog.logs = []
+  
+  try {
+    const logs = await getAuditLogs(item.id)
+    historyDialog.logs = Array.isArray(logs) ? logs : (logs?.records || logs?.list || [])
+  } catch (err) {
+    console.warn('[AuditCenter] 加载审核历史失败:', err)
+    historyDialog.logs = []
+  } finally {
+    historyDialog.loading = false
   }
 }
 
@@ -448,7 +750,7 @@ async function viewDetail(item) {
  */
 function resubmit(item) {
   router.push({
-    path: `/fill/${item.templateId}`,
+    path: `/report/${item.templateId}`,
     query: {
       orgId: item.orgId,
       period: item.period
@@ -457,16 +759,29 @@ function resubmit(item) {
 }
 
 /**
+ * ✅ 状态码标准化（兼容数字和字符串）
+ * 后端可能返回数字 0/2/3/4 或字符串 'pending'/'approved' 等
+ */
+function normalizeStatus(status) {
+  if (status === null || status === undefined) return 'pending'
+  if (typeof status === 'string') return status
+  const map = { 0: 'pending', 1: 'submitted', 2: 'approved', 3: 'rejected', 4: 'withdrawn' }
+  return map[status] || 'pending'
+}
+
+/**
  * ✅ 状态文本映射
  */
 function statusText(status) {
+  const normalized = normalizeStatus(status)
   const map = {
     pending: '待审核',
+    submitted: '已提交',
     approved: '已通过',
     rejected: '已驳回',
     withdrawn: '已撤回'
   }
-  return map[status] || status || '-'
+  return map[normalized] || normalized || '-'
 }
 
 /**
@@ -500,132 +815,133 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-$primary: #2563EB;
-$success: #059669;
-$danger: #DC2626;
-$warning: #D97706;
-$text: #0F172A;
-$text-secondary: #475569;
-$text-muted: #94A3B8;
-$border: #E2E8F0;
-$bg: #F8FAFC;
-
 .audit-center {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  color: var(--app-text-primary);
+}
+
+.app-page-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px;
-  font-family: "SF Pro Display", -apple-system, sans-serif;
-  color: $text;
-}
-
-/* 头部 */
-.ac-header {
-  margin-bottom: 24px;
-}
-.ac-title {
-  font-size: 24px;
-  font-weight: 700;
-  margin: 0 0 4px 0;
-}
-.ac-subtitle {
-  color: $text-muted;
-  margin: 0;
-  font-size: 14px;
 }
 
 /* 统计卡片 */
 .ac-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 14px;
+  margin-bottom: 20px;
 }
 .ac-stat-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid $border;
+  background: var(--app-surface);
+  border-radius: var(--app-card-radius);
+  padding: 18px;
+  border: 1px solid var(--app-border);
   text-align: center;
+  box-shadow: var(--app-shadow-sm);
 }
 .ac-stat-number {
-  font-size: 32px;
+  font-size: 30px;
   font-weight: 700;
   line-height: 1.2;
 }
 .ac-stat-label {
   font-size: 13px;
-  color: $text-secondary;
+  color: var(--app-text-secondary);
   margin-top: 4px;
 }
-.ac-stat-pending .ac-stat-number { color: $warning; }
-.ac-stat-approved .ac-stat-number { color: $success; }
-.ac-stat-rejected .ac-stat-number { color: $danger; }
-.ac-stat-total .ac-stat-number { color: $primary; }
+.ac-stat-pending .ac-stat-number { color: var(--app-warning); }
+.ac-stat-approved .ac-stat-number { color: var(--app-success); }
+.ac-stat-rejected .ac-stat-number { color: var(--app-danger); }
+.ac-stat-total .ac-stat-number { color: var(--app-primary); }
 
 /* 工具栏 */
 .ac-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 14px;
   flex-wrap: wrap;
 }
 .ac-filters {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex: 1;
   min-width: 300px;
 }
 .ac-select, .ac-input {
-  padding: 8px 12px;
-  border: 1px solid $border;
-  border-radius: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
   font-size: 13px;
   outline: none;
-  &:focus { border-color: $primary; }
+  background: var(--app-surface);
+  color: var(--app-text-primary);
+  transition: border-color var(--app-transition-fast);
+  &:focus { border-color: var(--app-primary); box-shadow: 0 0 0 3px var(--app-primary-bg); }
 }
 .ac-input { flex: 1; }
 
 /* 按钮 */
 .ac-btn {
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: none;
+  height: 34px;
+  padding: 0 16px;
+  border-radius: var(--app-radius-sm);
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--app-transition-fast);
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
-.ac-btn-primary { background: $primary; color: white; &:hover:not(:disabled) { background: #1D4ED8; } }
-.ac-btn-secondary { background: white; border: 1px solid $border; color: $text-secondary; &:hover:not(:disabled) { background: $bg; } }
-.ac-btn-danger { background: $danger; color: white; &:hover:not(:disabled) { background: #B91C1C; } }
+.ac-btn-primary {
+  background: var(--app-primary);
+  color: #fff;
+  border-color: var(--app-primary);
+  &:hover:not(:disabled) { background: var(--app-primary-hover); }
+}
+.ac-btn-secondary {
+  color: var(--app-text-secondary);
+  &:hover:not(:disabled) { background: var(--app-surface-hover); }
+}
+.ac-btn-danger {
+  background: var(--app-danger);
+  color: #fff;
+  border-color: var(--app-danger);
+  &:hover:not(:disabled) { background: #DC2626; }
+}
 
 /* 表格 */
 .ac-table-wrapper {
-  background: white;
-  border-radius: 12px;
-  border: 1px solid $border;
+  background: var(--app-surface);
+  border-radius: var(--app-card-radius);
+  border: 1px solid var(--app-border);
   overflow: hidden;
   min-height: 300px;
+  box-shadow: var(--app-shadow-sm);
 }
 .ac-table {
   width: 100%;
   border-collapse: collapse;
   th, td {
-    padding: 12px 16px;
+    padding: 11px 16px;
     text-align: left;
-    border-bottom: 1px solid $border;
+    border-bottom: 1px solid var(--app-border-light);
     font-size: 13px;
   }
   th {
-    background: $bg;
+    background: var(--app-bg);
     font-weight: 600;
-    color: $text-secondary;
+    color: var(--app-text-secondary);
     position: sticky;
     top: 0;
   }
-  tbody tr:hover { background: #FAFBFC; }
+  tbody tr:hover { background: var(--app-surface-hover); }
 }
 .ac-td-name { font-weight: 500; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -637,10 +953,10 @@ $bg: #F8FAFC;
   font-size: 12px;
   font-weight: 500;
 }
-.ac-status-pending { background: #FEF3C7; color: $warning; }
-.ac-status-approved { background: #D1FAE5; color: $success; }
-.ac-status-rejected { background: #FEE2E2; color: $danger; }
-.ac-status-withdrawn { background: #F1F5F9; color: $text-muted; }
+.ac-status-pending { background: var(--app-warning-bg); color: var(--app-warning); }
+.ac-status-approved { background: var(--app-success-bg); color: var(--app-success); }
+.ac-status-rejected { background: var(--app-danger-bg); color: var(--app-danger); }
+.ac-status-withdrawn { background: var(--app-surface-active); color: var(--app-text-muted); }
 
 /* 操作按钮 */
 .ac-actions { white-space: nowrap; }
@@ -651,30 +967,31 @@ $bg: #F8FAFC;
   font-size: 12px;
   cursor: pointer;
   margin-right: 4px;
-  transition: all 0.15s;
+  transition: all var(--app-transition-fast);
 }
-.ac-approve { background: #D1FAE5; color: $success; &:hover { background: #A7F3D0; } }
-.ac-reject { background: #FEE2E2; color: $danger; &:hover { background: #FECACA; } }
-.ac-detail { background: #DBEAFE; color: $primary; &:hover { background: #BFDBFE; } }
-.ac-resubmit { background: #FEF3C7; color: $warning; &:hover { background: #FDE68A; } }
+.ac-approve { background: var(--app-success-bg); color: var(--app-success); &:hover { background: #A7F3D0; } }
+.ac-reject { background: var(--app-danger-bg); color: var(--app-danger); &:hover { background: #FECACA; } }
+.ac-detail { background: var(--app-info-bg); color: var(--app-info); &:hover { background: #BFDBFE; } }
+.ac-resubmit { background: var(--app-warning-bg); color: var(--app-warning); &:hover { background: #FDE68A; } }
+.ac-history { background: var(--app-info-bg); color: var(--app-info); &:hover { background: #BFDBFE; } }
 
-/* 空状态 */
+/* 空状态/加载 */
 .ac-empty, .ac-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  color: $text-muted;
+  color: var(--app-text-muted);
 }
 .ac-spinner {
   width: 32px; height: 32px;
-  border: 3px solid $border;
-  border-top-color: $primary;
+  border: 3px solid var(--app-border);
+  border-top-color: var(--app-primary);
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: ac-spin 0.7s linear infinite;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes ac-spin { to { transform: rotate(360deg); } }
 
 /* 分页 */
 .ac-pagination {
@@ -682,68 +999,70 @@ $bg: #F8FAFC;
   justify-content: center;
   align-items: center;
   gap: 16px;
-  margin-top: 20px;
-  padding: 16px 0;
+  margin-top: 16px;
+  padding: 12px 0;
 }
 .ac-page-btn {
-  padding: 8px 16px;
-  border: 1px solid $border;
-  border-radius: 6px;
-  background: white;
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
   cursor: pointer;
   font-size: 13px;
+  color: var(--app-text-primary);
   &:disabled { opacity: 0.4; cursor: not-allowed; }
-  &:hover:not(:disabled) { border-color: $primary; color: $primary; }
+  &:hover:not(:disabled) { border-color: var(--app-primary); color: var(--app-primary); }
 }
-.ac-page-info { font-size: 13px; color: $text-secondary; }
+.ac-page-info { font-size: 13px; color: var(--app-text-secondary); }
 
 /* 弹窗 */
 .ac-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: var(--app-overlay);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
-  animation: fadeIn 0.2s ease;
+  z-index: var(--app-z-modal);
+  animation: ac-fadeIn 0.2s ease;
 }
-@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ac-fadeIn { from { opacity: 0; } to { opacity: 1; } }
 .ac-modal {
-  background: white;
-  border-radius: 16px;
+  background: var(--app-surface);
+  border-radius: var(--app-radius-lg);
   width: 480px;
   max-width: 90vw;
   max-height: 85vh;
   overflow-y: auto;
-  box-shadow: 0 25px 50px rgba(0,0,0,0.25);
-  animation: slideUp 0.3s ease;
+  box-shadow: var(--app-shadow-xl);
+  animation: ac-slideUp 0.3s ease;
 }
-@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes ac-slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .ac-modal-lg { width: 720px; }
 .ac-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid $border;
-  h3 { margin: 0; font-size: 18px; }
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--app-border-light);
+  h3 { margin: 0; font-size: 17px; color: var(--app-text-primary); }
 }
 .ac-modal-close {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: 22px;
   cursor: pointer;
-  color: $text-muted;
-  &:hover { color: $danger; }
+  color: var(--app-text-muted);
+  &:hover { color: var(--app-danger); }
 }
-.ac-modal-body { padding: 24px; }
+.ac-modal-body { padding: 22px 24px; }
 .ac-modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 24px;
-  border-top: 1px solid $border;
+  gap: 8px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--app-border-light);
 }
 
 /* 驳回表单 */
@@ -752,24 +1071,27 @@ $bg: #F8FAFC;
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 8px;
-  color: $text-secondary;
+  color: var(--app-text-secondary);
 }
 .ac-textarea {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid $border;
-  border-radius: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
   font-size: 13px;
   resize: vertical;
   font-family: inherit;
-  &:focus { outline: none; border-color: $primary; box-shadow: 0 0 0 3px rgba($primary, 0.1); }
+  outline: none;
+  background: var(--app-surface);
+  color: var(--app-text-primary);
+  &:focus { border-color: var(--app-primary); box-shadow: 0 0 0 3px var(--app-primary-bg); }
 }
 
 /* 详情网格 */
 .ac-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
+  gap: 14px;
 }
 .ac-detail-item {
   display: flex;
@@ -777,28 +1099,136 @@ $bg: #F8FAFC;
   gap: 4px;
 }
 .ac-detail-full { grid-column: span 2; }
-.ac-detail-label { font-size: 12px; color: $text-muted; }
+.ac-detail-label { font-size: 12px; color: var(--app-text-muted); }
 .ac-detail-value { font-size: 14px; font-weight: 500; word-break: break-all; }
 
 /* 数据预览 */
-.ac-data-preview { margin-top: 24px; }
-.ac-data-preview h4 { margin: 0 0 12px 0; font-size: 15px; }
+.ac-data-preview { margin-top: 20px; }
+.ac-data-preview h4 { margin: 0 0 10px 0; font-size: 14px; color: var(--app-text-primary); }
 .ac-cells-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 .ac-cell-item {
   display: flex;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: $bg;
-  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--app-bg);
+  border-radius: var(--app-radius-sm);
   font-size: 12px;
 }
-.ac-cell-label { color: $text-muted; }
+.ac-cell-label { color: var(--app-text-muted); }
 .ac-cell-value { font-weight: 500; }
-.ac-more-hint { text-align: center; color: $text-muted; font-size: 12px; margin-top: 12px; }
+.ac-more-hint { text-align: center; color: var(--app-text-muted); font-size: 12px; margin-top: 10px; }
+
+/* 批量操作栏 */
+.ac-batch-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--app-primary-bg);
+  border: 1px solid var(--app-primary);
+  border-radius: var(--app-radius-sm);
+  margin-bottom: 12px;
+}
+.ac-batch-info {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--app-primary);
+}
+.ac-batch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 复选框列 */
+.ac-col-check {
+  width: 40px;
+  text-align: center;
+}
+
+/* 审核人/时间信息 */
+.ac-audit-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ac-auditor {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--app-text-primary);
+}
+.ac-audit-time {
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+.ac-audit-empty {
+  color: var(--app-text-muted);
+}
+
+/* 审核时间线 */
+.ac-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+.ac-timeline::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--app-border);
+}
+.ac-timeline-item {
+  position: relative;
+  padding-bottom: 20px;
+}
+.ac-timeline-dot {
+  position: absolute;
+  left: -22px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--app-border);
+  border: 2px solid var(--app-surface);
+}
+.ac-timeline-pending .ac-timeline-dot { background: var(--app-warning); }
+.ac-timeline-approved .ac-timeline-dot { background: var(--app-success); }
+.ac-timeline-rejected .ac-timeline-dot { background: var(--app-danger); }
+.ac-timeline-submitted .ac-timeline-dot { background: var(--app-primary); }
+.ac-timeline-withdrawn .ac-timeline-dot { background: var(--app-text-muted); }
+.ac-timeline-content {
+  background: var(--app-bg);
+  border-radius: var(--app-radius-sm);
+  padding: 12px 14px;
+}
+.ac-timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.ac-timeline-action {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+.ac-timeline-time {
+  font-size: 12px;
+  color: var(--app-text-muted);
+}
+.ac-timeline-body p {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--app-text-secondary);
+}
+.ac-timeline-remark {
+  color: var(--app-warning) !important;
+}
 
 /* 响应式 */
 @media (max-width: 768px) {
@@ -807,5 +1237,6 @@ $bg: #F8FAFC;
   .ac-filters { flex-direction: column; width: 100%; }
   .ac-detail-grid { grid-template-columns: 1fr; }
   .ac-modal { width: 95vw; }
+  .ac-batch-bar { flex-direction: column; gap: 10px; }
 }
 </style>

@@ -103,7 +103,7 @@
     <div class="editor-status-bar">
       <div class="status-left">
         <span :class="['status-badge', formulaStatus]">{{ formulaStatusText }}</span>
-        <span class="status-text">{{ formulaData.expression.length }} 字符</span>
+        <span class="status-text">{{ (formulaData?.expression || '').length }} 字符</span>
       </div>
       <div class="status-right">
         <span class="status-text">Monaco Editor</span>

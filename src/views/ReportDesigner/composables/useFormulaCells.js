@@ -1,4 +1,5 @@
 import { ref, computed, watch } from 'vue'
+import { toExcelRef } from '@/utils/excelRef.js'
 
 export function useFormulaCells(props, formulaData) {
   const leftPanelTab = ref('indicators')
@@ -42,7 +43,7 @@ export function useFormulaCells(props, formulaData) {
             col: colIndex + 1,
             rowLabel: rowLeaf.label || rowLeaf.name || rowLeaf.fieldName || `行${rowIndex + 1}`,
             colLabel: colLeaf.label || colLeaf.name || colLeaf.fieldName || `列${colIndex + 1}`,
-            excelRef: convertToExcelRef(rowIndex + 1, colIndex + 1),
+            excelRef: toExcelRef(rowIndex + 1, colIndex + 1),
             code: rowLeaf.fieldName || rowLeaf.code || rowLeaf.id,
             fieldName: colLeaf.fieldName || colLeaf.code || colLeaf.id,
             description: `${rowNode.label} × ${colLeaf.label || colLeaf.name || `列${colIndex + 1}`}`,
@@ -127,11 +128,6 @@ export function useFormulaCells(props, formulaData) {
       default:
         return Math.floor(Math.random() * 1000 + 100)
     }
-  }
-
-  function convertToExcelRef(row, col) {
-    const colLetter = String.fromCharCode(64 + col)
-    return `${colLetter}${row}`
   }
 
   function showTargetCellSelector(showNotification) {

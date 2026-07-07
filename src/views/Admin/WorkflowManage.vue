@@ -298,6 +298,9 @@ async function toggleStatus(row) {
 
 <style lang="scss" scoped>
 .page-workflow {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
   .pw-header {
     display: flex;
     justify-content: space-between;

@@ -190,7 +190,6 @@ function resetForm() {
 }
 
 async function handleSave() {
-  console.log(selectedOrgIds,'===')
   saving.value = true
   try {
     const payload = { ...form, orgId: selectedOrgIds.value.filter(Boolean)[0] }
@@ -229,6 +228,6 @@ function openBindOrg(row) {
 </script>
 
 <style lang="scss" scoped>
-.page-user-manage { background: #fff; border-radius: 8px; padding: 20px; }
+.page-user-manage { height: 100%; overflow-y: auto; padding: 24px; }
 .pum-toolbar { display: flex; justify-content: space-between; margin-bottom: 16px; }
 </style>

@@ -2,7 +2,7 @@
  * 审批流 API
  * 后端: workflow-service
  */
-import { get, post } from '@/utils/http.js'
+import { get, post } from '@/utils/http'
 
 const WF_BASE = '/workflow'
 

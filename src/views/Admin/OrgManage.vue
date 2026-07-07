@@ -144,6 +144,6 @@ async function handleDelete(row) {
 </script>
 
 <style lang="scss" scoped>
-.page-org-manage { }
+.page-org-manage { height: 100%; overflow-y: auto; padding: 24px; }
 .om-header { display: flex; justify-content: space-between; align-items: center; }
 </style>

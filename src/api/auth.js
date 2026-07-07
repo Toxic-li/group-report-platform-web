@@ -4,7 +4,7 @@
  * 代理:/auth/* → localhost:8080/auth/*
  *       /user/* → localhost:8080/user/*
  */
-import { get, post, put, del } from '@/utils/http.js'
+import { get, post, put, del } from '@/utils/http'
 
 // ==================== 认证 ====================
 

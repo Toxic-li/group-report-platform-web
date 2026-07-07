@@ -136,7 +136,9 @@ export class FormulaValidator extends ASTVisitor {
       const indicator = this.indicators.get(node.name) || this.indicators.get(node.code)
       if (indicator) {
         node.code = indicator.code
-        node.dataType = indicator.type
+        // 行/列维度在填报时会解析为单元格引用，结果类型视为数字
+        const typeMap = { row: DataType.NUMBER, col: DataType.NUMBER, dimension: DataType.NUMBER }
+        node.dataType = typeMap[indicator.type] || indicator.type
         this.dependencies.add(indicator.id || indicator.code)
       }
     }

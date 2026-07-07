@@ -51,7 +51,8 @@ export class FormulaEngine {
       const fc = this.formulas.get(fid)
       if (!fc) continue
       try {
-        const val = this.evaluate(fc.expression)
+        // 传入 targetCell 以排除自引用单元格
+        const val = this.evaluate(fc.expression, fc.targetCell)
         results[fc.targetCell] = val
         this._writeBack(fc.targetCell, val)
       } catch (e) {
@@ -67,7 +68,7 @@ export class FormulaEngine {
     const fc = this.formulas.get(formulaId)
     if (!fc) return null
     try {
-      const val = this.evaluate(fc.expression)
+      const val = this.evaluate(fc.expression, fc.targetCell)
       this._writeBack(fc.targetCell, val)
       return val
     } catch (e) {
@@ -79,10 +80,12 @@ export class FormulaEngine {
   /**
    * 核心求值方法
    * @param {string} expr - 公式表达式，如 "=SUM(C2:C10)" 或 "C2+C3"
+   * @param {string|null} targetCell - 目标单元格 key（如 "4-2"），计算时排除该单元格防止自引用
    */
-  evaluate(expr) {
-    // 缓存命中
-    if (this.cache.has(expr)) return this.cache.get(expr)
+  evaluate(expr, targetCell = null) {
+    // 缓存命中（缓存 key 包含 targetCell，因为同一表达式对不同目标单元格结果不同）
+    const cacheKey = targetCell ? `${expr}::${targetCell}` : expr
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey)
 
     let rawExpr = expr.trim()
     if (rawExpr.startsWith('=')) rawExpr = rawExpr.substring(1).trim()
@@ -91,14 +94,14 @@ export class FormulaEngine {
     const fnMatch = rawExpr.match(/^([A-Z]+)\((.*)\)$/s)
     if (fnMatch) {
       const [, funcName, argsStr] = fnMatch
-      const result = this._callFunction(funcName, argsStr.trim())
-      this.cache.set(expr, result)
+      const result = this._callFunction(funcName, argsStr.trim(), targetCell)
+      this.cache.set(cacheKey, result)
       return result
     }
 
     // 算术表达式（含单元格引用）
-    const result = this._evalArithmetic(rawExpr)
-    this.cache.set(expr, result)
+    const result = this._evalArithmetic(rawExpr, targetCell)
+    this.cache.set(cacheKey, result)
     return result
   }
 
@@ -157,26 +160,26 @@ export class FormulaEngine {
 
   // ==================== 内部实现 ====================
 
-  _callFunction(name, argsStr) {
+  _callFunction(name, argsStr, targetCell = null) {
     switch (name.toUpperCase()) {
-      case 'SUM': return this._fnSum(argsStr)
-      case 'AVG': case 'AVERAGE': return this._fnAvg(argsStr)
-      case 'MAX': return this._fnMax(argsStr)
-      case 'MIN': return this._fnMin(argsStr)
-      case 'COUNT': return this._fnCount(argsStr)
-      case 'ROUND': return this._fnRound(argsStr)
-      case 'ABS': return this._fnAbs(argsStr)
-      case 'IF': return this._fnIf(argsStr)
-      case 'AND': return this._fnAnd(argsStr)
-      case 'OR': return this._fnOr(argsStr)
-      case 'NOT': return this._fnNot(argsStr)
-      case 'SUMIF': return this._fnSumIf(argsStr)
-      case 'AVERAGEIF': return this._fnAverageIf(argsStr)
-      case 'COUNTIF': return this._fnCountIf(argsStr)
-      case 'POWER': return this._fnPower(argsStr)
-      case 'SQRT': return this._fnSqrt(argsStr)
-      case 'CEIL': case 'CEILING': return this._fnCeil(argsStr)
-      case 'FLOOR': return this._fnFloor(argsStr)
+      case 'SUM': return this._fnSum(argsStr, targetCell)
+      case 'AVG': case 'AVERAGE': return this._fnAvg(argsStr, targetCell)
+      case 'MAX': return this._fnMax(argsStr, targetCell)
+      case 'MIN': return this._fnMin(argsStr, targetCell)
+      case 'COUNT': return this._fnCount(argsStr, targetCell)
+      case 'ROUND': return this._fnRound(argsStr, targetCell)
+      case 'ABS': return this._fnAbs(argsStr, targetCell)
+      case 'IF': return this._fnIf(argsStr, targetCell)
+      case 'AND': return this._fnAnd(argsStr, targetCell)
+      case 'OR': return this._fnOr(argsStr, targetCell)
+      case 'NOT': return this._fnNot(argsStr, targetCell)
+      case 'SUMIF': return this._fnSumIf(argsStr, targetCell)
+      case 'AVERAGEIF': return this._fnAverageIf(argsStr, targetCell)
+      case 'COUNTIF': return this._fnCountIf(argsStr, targetCell)
+      case 'POWER': return this._fnPower(argsStr, targetCell)
+      case 'SQRT': return this._fnSqrt(argsStr, targetCell)
+      case 'CEIL': case 'CEILING': return this._fnCeil(argsStr, targetCell)
+      case 'FLOOR': return this._fnFloor(argsStr, targetCell)
       default:
         throw new Error(`未知函数: ${name}`)
     }
@@ -208,8 +211,9 @@ export class FormulaEngine {
     return cells
   }
 
-  _getCellValues(cellKeys) {
+  _getCellValues(cellKeys, skipCell = null) {
     return cellKeys.map(key => {
+      if (skipCell && key === skipCell) return 0
       const cell = this.cellData[key]
       if (!cell) return 0
       const n = parseFloat(String(cell.v).replace(/,/g, ''))
@@ -217,110 +221,112 @@ export class FormulaEngine {
     })
   }
 
-  _fnSum(argsStr) {
+  _fnSum(argsStr, targetCell = null) {
     const cells = this._parseRange(argsStr)
-    const vals = this._getCellValues(cells)
+    const vals = this._getCellValues(cells, targetCell)
     return parseFloat((vals.reduce((a, b) => a + b, 0)).toFixed(4))
   }
 
-  _fnAvg(argsStr) {
+  _fnAvg(argsStr, targetCell = null) {
     const cells = this._parseRange(argsStr)
-    const vals = this._getCellValues(cells)
+    const vals = this._getCellValues(cells, targetCell)
     if (vals.length === 0) return 0
     return parseFloat((vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(4))
   }
 
-  _fnMax(argsStr) {
+  _fnMax(argsStr, targetCell = null) {
     const cells = this._parseRange(argsStr)
-    const vals = this._getCellValues(cells).filter(v => isFinite(v))
+    const vals = this._getCellValues(cells, targetCell).filter(v => isFinite(v))
     return vals.length > 0 ? parseFloat(Math.max(...vals).toFixed(4)) : 0
   }
 
-  _fnMin(argsStr) {
+  _fnMin(argsStr, targetCell = null) {
     const cells = this._parseRange(argsStr)
-    const vals = this._getCellValues(cells).filter(v => isFinite(v))
+    const vals = this._getCellValues(cells, targetCell).filter(v => isFinite(v))
     return vals.length > 0 ? parseFloat(Math.min(...vals).toFixed(4)) : 0
   }
 
-  _fnCount(argsStr) {
+  _fnCount(argsStr, targetCell = null) {
     const cells = this._parseRange(argsStr)
     return cells.filter(key => {
+      if (targetCell && key === targetCell) return false
       const cell = this.cellData[key]
       return cell && cell.v !== '' && cell.v != null
     }).length
   }
 
-  _fnRound(argsStr) {
+  _fnRound(argsStr, targetCell = null) {
     const args = this._splitArgs(argsStr)
-    const n = this._resolveValue(args[0])
-    const decimals = args[1] !== undefined ? parseInt(this._resolveValue(args[1])) : 2
+    const n = this._resolveValue(args[0], targetCell)
+    const decimals = args[1] !== undefined ? parseInt(this._resolveValue(args[1], targetCell)) : 2
     return parseFloat(Number(n).toFixed(decimals))
   }
 
-  _fnAbs(argsStr) {
-    const n = this._resolveValue(this._splitArgs(argsStr)[0])
+  _fnAbs(argsStr, targetCell = null) {
+    const n = this._resolveValue(this._splitArgs(argsStr)[0], targetCell)
     return Math.abs(parseFloat(n))
   }
 
-  _fnIf(argsStr) {
+  _fnIf(argsStr, targetCell = null) {
     // IF(condition, trueVal, falseVal) - 简化版
     const args = this._smartSplit(argsStr)
     if (args.length < 3) return 0
-    const cond = this._evalCondition(args[0].trim())
-    return cond ? this._resolveValue(args[1].trim()) : this._resolveValue(args[2].trim())
+    const cond = this._evalCondition(args[0].trim(), targetCell)
+    return cond ? this._resolveValue(args[1].trim(), targetCell) : this._resolveValue(args[2].trim(), targetCell)
   }
 
-  _fnAnd(argsStr) {
+  _fnAnd(argsStr, targetCell = null) {
     const args = this._splitArgs(argsStr)
-    return args.every(a => !!this._resolveValue(a)) ? 1 : 0
+    return args.every(a => !!this._resolveValue(a, targetCell)) ? 1 : 0
   }
 
-  _fnOr(argsStr) {
+  _fnOr(argsStr, targetCell = null) {
     const args = this._splitArgs(argsStr)
-    return args.some(a => !!this._resolveValue(a)) ? 1 : 0
+    return args.some(a => !!this._resolveValue(a, targetCell)) ? 1 : 0
   }
 
-  _fnNot(argsStr) {
-    return !this._resolveValue(this._splitArgs(argsStr)[0]) ? 1 : 0
+  _fnNot(argsStr, targetCell = null) {
+    return !this._resolveValue(this._splitArgs(argsStr)[0], targetCell) ? 1 : 0
   }
 
-  _fnSumIf(argsStr) {
+  _fnSumIf(argsStr, targetCell = null) {
     // SUMIF(range, criteria, sumRange) - 简化版，暂按全量SUM处理
     const args = this._smartSplit(argsStr)
-    return this._fnSum(args[0])
+    return this._fnSum(args[0], targetCell)
   }
 
-  _fnAverageIf(argsStr) {
+  _fnAverageIf(argsStr, targetCell = null) {
     const args = this._smartSplit(argsStr)
-    return this._fnAvg(args[0])
+    return this._fnAvg(args[0], targetCell)
   }
 
-  _fnCountIf(argsStr) {
+  _fnCountIf(argsStr, targetCell = null) {
     const args = this._smartSplit(argsStr)
-    return this._fnCount(args[0])
+    return this._fnCount(args[0], targetCell)
   }
 
-  _fnPower(argsStr) {
+  _fnPower(argsStr, targetCell = null) {
     const args = this._splitArgs(argsStr)
-    return Math.pow(parseFloat(this._resolveValue(args[0])), parseFloat(this._resolveValue(args[1])))
+    return Math.pow(parseFloat(this._resolveValue(args[0], targetCell)), parseFloat(this._resolveValue(args[1], targetCell)))
   }
 
-  _fnSqrt(argsStr) {
-    return Math.sqrt(parseFloat(this._resolveValue(this._splitArgs(argsStr)[0])))
+  _fnSqrt(argsStr, targetCell = null) {
+    return Math.sqrt(parseFloat(this._resolveValue(this._splitArgs(argsStr)[0], targetCell)))
   }
 
-  _fnCeil(argsStr) {
-    return Math.ceil(parseFloat(this._resolveValue(this._splitArgs(argsStr)[0])))
+  _fnCeil(argsStr, targetCell = null) {
+    return Math.ceil(parseFloat(this._resolveValue(this._splitArgs(argsStr)[0], targetCell)))
   }
 
-  _fnFloor(argsStr) {
-    return Math.floor(parseFloat(this._resolveValue(this._splitArgs(argsStr)[0])))
+  _fnFloor(argsStr, targetCell = null) {
+    return Math.floor(parseFloat(this._resolveValue(this._splitArgs(argsStr)[0], targetCell)))
   }
 
-  _evalArithmetic(expr) {
-    // 替换单元格引用为实际值
+  _evalArithmetic(expr, targetCell = null) {
+    // 替换单元格引用为实际值（排除目标单元格防自引用）
     const resolved = expr.replace(/([A-Z]+)(\d+)/g, (_, col, row) => {
       const key = `${row}-${this._colToNum(col)}`
+      if (targetCell && key === targetCell) return '0'
       const cell = this.cellData[key]
       if (!cell) return '0'
       const n = parseFloat(String(cell.v).replace(/,/g, ''))
@@ -335,13 +341,13 @@ export class FormulaEngine {
     } catch { return 0 }
   }
 
-  _evalCondition(cond) {
+  _evalCondition(cond, targetCell = null) {
     // 简单条件评估: >0, <100, >=50, <=200, =0, <>0
     const match = cond.match(/(.*?)(>=|<=|<>|>|<|=)(.*)/)
-    if (!match) return !!this._resolveValue(cond)
-    const left = parseFloat(this._resolveValue(match[1].trim()))
+    if (!match) return !!this._resolveValue(cond, targetCell)
+    const left = parseFloat(this._resolveValue(match[1].trim(), targetCell))
     const op = match[2]
-    const right = parseFloat(this._resolveValue(match[3].trim()))
+    const right = parseFloat(this._resolveValue(match[3].trim(), targetCell))
 
     switch (op) {
       case '>=': return left >= right
@@ -354,12 +360,13 @@ export class FormulaEngine {
     }
   }
 
-  _resolveValue(val) {
+  _resolveValue(val, targetCell = null) {
     // 如果是单元格引用
     if (/^[A-Z]+\d+$/.test(val.trim())) {
       const m = val.trim().match(/^([A-Z]+)(\d+)$/)
       if (m) {
         const key = `${m[2]}-${this._colToNum(m[1])}`
+        if (targetCell && key === targetCell) return 0
         const cell = this.cellData[key]
         return cell?.v ?? 0
       }
@@ -399,9 +406,13 @@ export class FormulaEngine {
 
   _extractRefs(expr) {
     const refs = new Set()
-    const pattern = /([A-Z]+\d+)/g
+    // 匹配 Excel 风格的单元格引用（如 C4, D4）并转换为内部 cellData key（如 "4-2"）
+    const pattern = /([A-Z]+)(\d+)/g
     let m
-    while ((m = pattern.exec(expr)) !== null) refs.add(m[1])
+    while ((m = pattern.exec(expr)) !== null) {
+      const cellKey = `${m[2]}-${this._colToNum(m[1])}`
+      refs.add(cellKey)
+    }
     return refs
   }
 
@@ -426,7 +437,7 @@ export class FormulaEngine {
 
   _colToNum(col) {
     let n = 0
-    for (let i = 0; i < col.length; i++) n = n * 26 + (col.charCodeAt(i) - 64)
+    for (let i = 0; i < col.length; i++) n = n * 26 + (col.charCodeAt(i) - 65)
     return n
   }
 

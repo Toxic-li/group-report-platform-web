@@ -4,7 +4,7 @@
  * 代理: /report-designer/submit/* → localhost:8080/report-designer/submit/*
  *       /report-designer/audit/* → localhost:8080/report-designer/audit/*
  */
-import { get, post, put } from '@/utils/http.js'
+import { get, post, put } from '@/utils/http'
 
 // ==================== 提交 ====================
 
@@ -32,8 +32,8 @@ export function getSubmitDetail(submitId) {
 // ==================== 审核 ====================
 
 /** 审核通过 */
-export function approveAudit(submitId) {
-  return put(`/report-designer/audit/${submitId}/approve`)
+export function approveAudit(submitId, remark) {
+  return put(`/report-designer/audit/${submitId}/approve`, remark ? { remark } : {})
 }
 
 /** 审核驳回 */
@@ -45,4 +45,25 @@ export function rejectAudit(submitId, reason) {
 export function getPendingAudits(params = {}) {
   const query = new URLSearchParams(params).toString()
   return get(`/report-designer/audit/pending${query ? `?${query}` : ''}`)
+}
+
+/** 批量审核通过 */
+export function batchApproveAudit(ids) {
+  return put('/report-designer/audit/batch-approve', { ids })
+}
+
+/** 批量审核驳回 */
+export function batchRejectAudit(ids, reason) {
+  return put('/report-designer/audit/batch-reject', { ids, reason })
+}
+
+/** 查询审核日志/轨迹 */
+export function getAuditLogs(submitId) {
+  return get(`/report-designer/audit/${submitId}/logs`)
+}
+
+/** 对接审批流 - 获取待办任务 */
+export function getWorkflowTasks(params = {}) {
+  const query = new URLSearchParams(params).toString()
+  return get(`/workflow/tasks${query ? `?${query}` : ''}`)
 }

@@ -733,9 +733,10 @@ export class AggregateEngine {
     this.template = template
     this.cellData = cellData
     this.flatRows = template?.getFlatRows?.() || []
-    this.flatCols = template?.getFlatColumns?.() || []
+    // 数据列必须用叶子列，否则多级表头会导致列偏移错位
+    this.leafCols = template?.getLeafColumns?.() || template?.getFlatColumns?.() || []
     this.aggregateCache = new Map()
-    this.frozenRowCount = 4  // 默认表头占4行
+    this.frozenRowCount = template?.layout?.frozenRows ?? template?.getColumnDepth?.() ?? 4
   }
 
   /**
@@ -755,8 +756,9 @@ export class AggregateEngine {
       const childIds = new Set(row.children.map(c => c.id))
 
       // 对每列计算子节点的聚合值
-      this.flatCols.forEach((col, colIdx) => {
-        const actualColIdx = colIdx + 3  // 跳过前3个冻结列(序号+层级+指标名)
+      // 数据列从第 2 列开始（跳过 #、指标名两个冻结列）
+      this.leafCols.forEach((col, colIdx) => {
+        const actualColIdx = colIdx + 2
 
         // 收集所有子行的该列值
         const childValues = []
@@ -780,14 +782,17 @@ export class AggregateEngine {
 
         if (aggResult !== null) {
           results[cellKey] = aggResult
-          // 回填到 cellData 并标记为只读公式列
-          if (this.cellData[cellKey]) {
-            this.cellData[cellKey] = {
-              ...this.cellData[cellKey],
-              v: aggResult,
-              readOnly: true,
-              f: `=AGGREGATE(${row.name}, ${col.title})`
-            }
+          // 如果该单元格已有用户自定义公式，优先保留用户公式，避免自动汇总覆盖
+          const existing = this.cellData[cellKey]
+          if (existing && existing.f && !String(existing.f).startsWith('=AGGREGATE')) {
+            return
+          }
+          const base = existing || { v: '' }
+          this.cellData[cellKey] = {
+            ...base,
+            v: aggResult,
+            readOnly: true,
+            f: `=AGGREGATE(${row.name}, ${col.title || col.name})`
           }
         }
       })
@@ -846,8 +851,8 @@ export class AggregateEngine {
       const actualRowIdx = this.frozenRowCount + summaryIdx
       const childIds = new Set(summary.children?.map(c => c.id) || [])
 
-      this.flatCols.forEach((col, colIdx) => {
-        const actualColIdx = colIdx + 3
+      this.leafCols.forEach((col, colIdx) => {
+        const actualColIdx = colIdx + 2
         const childValues = []
 
         this.flatRows.forEach((childRow, childIdx) => {
@@ -865,8 +870,14 @@ export class AggregateEngine {
         const aggResult = this.aggregateValues(childValues, summary.name)
         if (aggResult !== null) {
           const cellKey = `${actualRowIdx}-${actualColIdx}`
-          if (this.cellData[cellKey]) {
-            this.cellData[cellKey].v = aggResult
+          const existing = this.cellData[cellKey]
+          if (existing && existing.f && !String(existing.f).startsWith('=AGGREGATE')) {
+            return
+          }
+          if (existing) {
+            existing.v = aggResult
+          } else {
+            this.cellData[cellKey] = { v: aggResult, readOnly: true, f: `=AGGREGATE(${summary.name}, ${col.title || col.name})` }
           }
         }
       })

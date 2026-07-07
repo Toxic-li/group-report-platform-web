@@ -2,7 +2,7 @@
  * 数据源 + 公式 + 条件格式 + 校验规则 API
  * 后端: DataSourceController / ReportFormulaController / ReportConditionalFormatController / ReportValidatorController
  */
-import { get, post, put, del } from '@/utils/http.js'
+import { get, post, put, del } from '@/utils/http'
 
 // ==================== 数据源 ====================
 

@@ -76,6 +76,8 @@ import { useReportStore } from '@/stores/reportStore.js'
 import { ExcelService } from '@/services/templateEngine.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+const emit = defineEmits(['export-report'])
+
 const store = useReportStore()
 const selectedYear = ref('2026')
 
@@ -126,9 +128,8 @@ async function handleReturn() {
 }
 
 function handleExport() {
-  // 通过 UniverReport 组件暴露的方法获取数据
-  const event = new CustomEvent('export-report')
-  window.dispatchEvent(event)
+  // 通过 emit 事件通知父组件导出，替代 window.dispatchEvent
+  emit('export-report')
   ElMessage.success('导出功能已触发')
 }
 

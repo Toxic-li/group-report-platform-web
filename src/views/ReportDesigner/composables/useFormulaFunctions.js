@@ -18,6 +18,7 @@ function debounce(func, wait) {
 export function useFormulaFunctions(showNotification) {
   const functionSearch = ref('')
   const allFunctions = ref([])
+  const displayFunctions = ref(null) // null 表示使用 allFunctions
   const recentFunctions = ref([])
   const favoriteFunctions = ref([])
   const selectedFunction = ref(null)
@@ -36,14 +37,15 @@ export function useFormulaFunctions(showNotification) {
   })
 
   const functionCategories = computed(() => {
-    let filteredFunctions = allFunctions.value
+    const source = displayFunctions.value || allFunctions.value
+    let filteredFunctions = source
 
     if (functionFilter.value === 'favorite') {
-      filteredFunctions = allFunctions.value.filter(f => 
+      filteredFunctions = source.filter(f =>
         favoriteFunctions.value.some(fav => fav.name === f.name)
       )
     } else if (functionFilter.value === 'recent') {
-      filteredFunctions = allFunctions.value.filter(f => 
+      filteredFunctions = source.filter(f =>
         recentFunctions.value.some(rf => rf.name === f.name)
       )
     }
@@ -62,6 +64,7 @@ export function useFormulaFunctions(showNotification) {
 
   function initializeFunctions() {
     allFunctions.value = formulaService.getAllFunctions()
+    displayFunctions.value = null // 重置搜索状态
     const recent = localStorage.getItem('formula-recent-functions')
     if (recent) {
       recentFunctions.value = JSON.parse(recent)
@@ -74,12 +77,12 @@ export function useFormulaFunctions(showNotification) {
 
   function searchFunctions() {
     if (functionSearch.value) {
-      allFunctions.value = formulaService.getAllFunctions().filter(f =>
+      displayFunctions.value = formulaService.getAllFunctions().filter(f =>
         f.name.toLowerCase().includes(functionSearch.value.toLowerCase()) ||
         f.description.toLowerCase().includes(functionSearch.value.toLowerCase())
       )
     } else {
-      initializeFunctions()
+      displayFunctions.value = null
     }
   }
 
@@ -155,16 +158,14 @@ export function useFormulaFunctions(showNotification) {
 
   const debouncedFunctionSearch = debounce((searchTerm) => {
     if (!searchTerm) {
-      initializeFunctions()
+      displayFunctions.value = null
       return
     }
     const results = allFunctions.value.filter(func =>
       func.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       func.description.toLowerCase().includes(searchTerm.toLowerCase())
     )
-    if (results.length > 0) {
-      allFunctions.value = results
-    }
+    displayFunctions.value = results.length > 0 ? results : []
   }, 300)
 
   watch(functionSearch, (newValue) => {
@@ -174,6 +175,7 @@ export function useFormulaFunctions(showNotification) {
   return {
     functionSearch,
     allFunctions,
+    displayFunctions,
     recentFunctions,
     favoriteFunctions,
     selectedFunction,

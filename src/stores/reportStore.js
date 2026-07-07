@@ -17,7 +17,9 @@ import {
   buildFullReportTemplate,
   generateGroupConsolidation
 } from '@/mock/dataGenerator.js'
-import { saveReportData } from '@/api/reportDesigner.js'
+import { saveReportData } from '@/api/reportData.js'
+import { getReportData as getReportDataApi } from '@/api/reportData.js'
+import { submitForReview, approveAudit, rejectAudit } from '@/api/reportSubmit.js'
 import { getOrgTree } from '@/api/org.js'
 
 // localStorage key 前缀
@@ -161,16 +163,26 @@ export const useReportStore = defineStore('report', () => {
   }
 
   /**
-   * 加载子公司数据
+   * 加载子公司数据（从后端 API 获取，非 mock）
    */
-  function loadSubsidiaryData(subId) {
+  async function loadSubsidiaryData(subId) {
     loading.value = true
-    // 模拟异步加载
-    setTimeout(() => {
-      // 根据子公司ID生成不同的随机数据种子
+    try {
+      // 从后端 API 获取报表数据
+      const res = await getReportDataApi({
+        templateId: template.value?.id,
+        orgId: subId,
+        period: saveData.value.period
+      })
+      if (res) {
+        template.value = res
+      }
+    } catch (error) {
+      console.warn('[Store] 加载子公司数据失败，使用默认模板:', error)
       template.value = buildFullReportTemplate()
+    } finally {
       loading.value = false
-    }, 300)
+    }
   }
 
   /**
@@ -578,43 +590,61 @@ export const useReportStore = defineStore('report', () => {
   }
 
   /**
-   * 提交上报
+   * 提交上报（调用后端 API）
    */
-  function submitReport() {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        if (currentSubsidiaryId.value) {
-          const sub = subsidiaries.value.find(s => s.id === currentSubsidiaryId.value)
-          if (sub) {
-            sub.status = 'submitted'
-            sub.submitTime = new Date().toLocaleString('zh-CN')
-            reportStatus.value = REPORT_STATUS.SUBMITTED
-          }
+  async function submitReport() {
+    try {
+      if (currentSubsidiaryId.value) {
+        // 调用后端提交接口
+        await submitForReview({
+          templateId: template.value?.id,
+          orgId: currentSubsidiaryId.value,
+          period: saveData.value.period
+        })
+        const sub = subsidiaries.value.find(s => s.id === currentSubsidiaryId.value)
+        if (sub) {
+          sub.status = 'submitted'
+          sub.submitTime = new Date().toLocaleString('zh-CN')
+          reportStatus.value = REPORT_STATUS.SUBMITTED
         }
-        resolve({ success: true, message: '提交成功，等待审核' })
-      }, 500)
-    })
-  }
-
-  /**
-   * 审核通过
-   */
-  function approveReport(subId) {
-    const sub = subsidiaries.value.find(s => s.id === subId)
-    if (sub) {
-      sub.status = 'approved'
+      }
+      return { success: true, message: '提交成功，等待审核' }
+    } catch (error) {
+      console.error('[Store] 提交失败:', error)
+      return { success: false, message: error.message || '提交失败，请稍后重试' }
     }
   }
 
   /**
-   * 退回修改
+   * 审核通过（调用后端 API）
    */
-  function returnReport(subId, reason = '') {
-    const sub = subsidiaries.value.find(s => s.id === subId)
-    if (sub) {
-      sub.status = 'returned'
+  async function approveReport(subId) {
+    try {
+      await approveAudit(subId)
+      const sub = subsidiaries.value.find(s => s.id === subId)
+      if (sub) {
+        sub.status = 'approved'
+      }
+    } catch (error) {
+      console.error('[Store] 审核通过失败:', error)
     }
-    return { success: true, message: `已退回${sub?.name || ''}，原因：${reason || '请修改后重新提交'}` }
+  }
+
+  /**
+   * 退回修改（调用后端 API）
+   */
+  async function returnReport(subId, reason = '') {
+    try {
+      await rejectAudit(subId, reason)
+      const sub = subsidiaries.value.find(s => s.id === subId)
+      if (sub) {
+        sub.status = 'returned'
+      }
+      return { success: true, message: `已退回${sub?.name || ''}，原因：${reason || '请修改后重新提交'}` }
+    } catch (error) {
+      console.error('[Store] 退回失败:', error)
+      return { success: false, message: error.message || '退回失败，请稍后重试' }
+    }
   }
 
   /**

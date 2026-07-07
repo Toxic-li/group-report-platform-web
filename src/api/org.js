@@ -3,7 +3,7 @@
  * 后端: OrgController
  * 代理: /org/* → localhost:8080/org/*
  */
-import { get, post, put, del } from '@/utils/http.js'
+import { get, post, put, del } from '@/utils/http'
 
 /** 获取组织树 */
 export function getOrgTree() {

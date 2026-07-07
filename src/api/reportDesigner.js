@@ -3,7 +3,7 @@
  * 后端: ReportDesignerController
  * 代理: /report-designer/* → localhost:8080/report-designer/*
  */
-import { get, post, put, del } from '@/utils/http.js'
+import { get, post, put, del } from '@/utils/http'
 
 const BASE = '/report-designer'
 

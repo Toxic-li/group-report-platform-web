@@ -205,6 +205,7 @@
 
 <script>
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { toExcelRef } from '@/utils/excelRef.js'
 
 export default {
   name: 'ReportCellSelector',
@@ -354,7 +355,7 @@ export default {
         
         // ✅ 构建单元格
         const cells = colLeaves.map((col, colIndex) => {
-          const excelRef = convertToExcelRef(rowIndex + 1, colIndex + 1)
+          const excelRef = toExcelRef(rowIndex + 1, colIndex + 1)
           
           return {
             id: `cell_${rowIndex}_${colIndex}`,
@@ -414,12 +415,6 @@ export default {
       }
       
       return leaves
-    }
-    
-    // 转换为Excel式引用
-    function convertToExcelRef(row, col) {
-      const colLetter = String.fromCharCode(64 + col) // ASCII: A=65
-      return `${colLetter}${row}`
     }
     
     // 生成示例值

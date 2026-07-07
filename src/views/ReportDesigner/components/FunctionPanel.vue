@@ -158,7 +158,7 @@ export default {
     favoriteFunctions: Array
   },
   emits: ['search', 'update:functionSearch', 'filter', 'toggle-category', 'function-click', 'function-favorite', 'show-tooltip', 'hide-tooltip', 'insert-operator'],
-  setup(props) {
+  setup(props, { emit }) {
     const searchQuery = ref(props.functionSearch || '')
 
     watch(() => props.functionSearch, (newVal) => {
@@ -167,8 +167,8 @@ export default {
 
     function updateSearch(event) {
       searchQuery.value = event.target.value
-      props.$emit('update:functionSearch', searchQuery.value)
-      props.$emit('search')
+      emit('update:functionSearch', searchQuery.value)
+      emit('search')
     }
 
     return {

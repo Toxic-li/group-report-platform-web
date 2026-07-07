@@ -3,7 +3,7 @@
  * 用于验证 token 是否正确存储和携带
  */
 
-import { get } from '@/utils/http.js'
+import { get } from '@/utils/http'
 
 /**
  * ✅ 测试 token 是否正确携带

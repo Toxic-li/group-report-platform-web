@@ -1,13 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { login as apiLogin, logout as apiLogout, getCurrentUser } from '@/api/auth.js'
+import { derivePermissionsFromRoles } from '@/utils/rolePermissions.js'
 
 export const useUserStore = defineStore('user', () => {
   // ==================== 状态 ====================
   const token = ref(sessionStorage.getItem('rpt_token') || '')
   const user = ref(JSON.parse(sessionStorage.getItem('rpt_user') || 'null'))
-  const permissions = ref(JSON.parse(sessionStorage.getItem('rpt_permissions') || '[]'))
   const roles = ref(JSON.parse(sessionStorage.getItem('rpt_roles') || '[]'))
+
+  // 权限码：后端不返回权限码（纯 RBAC），根据角色推导
+  const storedPerms = JSON.parse(sessionStorage.getItem('rpt_permissions') || '[]')
+  const permissions = ref(
+    storedPerms.length ? storedPerms : derivePermissionsFromRoles(roles.value)
+  )
+  // 如果推导了权限，同步写回 sessionStorage
+  if (!storedPerms.length && permissions.value.length) {
+    sessionStorage.setItem('rpt_permissions', JSON.stringify(permissions.value))
+  }
 
   // ==================== 计算属性 ====================
   const isLoggedIn = computed(() => !!token.value)
@@ -26,7 +36,10 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function hasRole(roleCode) {
-    return roles.value.some(r => r.roleCode === roleCode)
+    return roles.value.some(r => {
+      const code = typeof r === 'string' ? r : r?.roleCode
+      return code === roleCode
+    })
   }
 
   // ==================== 登录 ====================
@@ -70,7 +83,13 @@ export const useUserStore = defineStore('user', () => {
       loginTime: data?.loginTime
     }
     roles.value = data?.roles || res?.roles || []
-    permissions.value = data?.permissions || res?.permissions || ['*:*:*', 'template:create', 'template:edit', 'template:publish', 'template:delete', 'template:permission', 'menu:reportCenter', 'menu:reportFill', 'menu:auditCenter', 'menu:admin']
+    // 后端为纯 RBAC，不返回权限码。根据角色推导权限码
+    const perms = data?.permissions || res?.permissions
+    if (Array.isArray(perms) && perms.length > 0) {
+      permissions.value = perms
+    } else {
+      permissions.value = derivePermissionsFromRoles(roles.value)
+    }
 
     // ✅ 持久化存储
     sessionStorage.setItem('rpt_token', token.value)
@@ -84,12 +103,6 @@ export const useUserStore = defineStore('user', () => {
       localStorage.setItem('rpt_token', token.value)
       localStorage.setItem('rpt_user', JSON.stringify(user.value))
     }
-
-    console.log('[UserStore] ✅ 登录成功:', {
-      token: token.value,
-      user: user.value,
-      roles: roles.value
-    })
 
     return res
   }
@@ -115,8 +128,14 @@ export const useUserStore = defineStore('user', () => {
     try {
       const res = await getCurrentUser()
       user.value = res.data || res
-      permissions.value = res.permissions || res.data?.permissions || ['*:*:*', 'template:create', 'template:edit', 'template:publish', 'template:delete', 'template:permission', 'menu:reportCenter', 'menu:reportFill', 'menu:auditCenter', 'menu:admin']
-      roles.value = res.roles || res.data?.roles || []
+      // 后端为纯 RBAC，根据角色推导权限码
+      const perms = res.permissions || res.data?.permissions
+      if (Array.isArray(perms) && perms.length > 0) {
+        permissions.value = perms
+      } else {
+        roles.value = res.roles || res.data?.roles || []
+        permissions.value = derivePermissionsFromRoles(roles.value)
+      }
       sessionStorage.setItem('rpt_user', JSON.stringify(user.value))
       sessionStorage.setItem('rpt_roles', JSON.stringify(roles.value))
       sessionStorage.setItem('rpt_permissions', JSON.stringify(permissions.value))

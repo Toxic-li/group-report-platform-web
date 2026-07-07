@@ -66,8 +66,8 @@
         <button class="dh-tool-btn" @click="handleImportExcel" title="导入Excel">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
           导入Excel
         </button>
@@ -485,11 +485,12 @@
             <table class="dg-table">
               <thead>
                 <template v-for="(headerRow, hi) in headerRows" :key="'hr'+hi">
-                  <tr>
+                  <tr :style="frozenRowCount.value > 0 && hi < frozenRowCount.value ? { position: 'sticky', top: (hi * 37) + 'px', zIndex: 20 } : {}">
                     <!-- 多级列表头（行标签列标题） -->
                     <th 
                       v-if="hi < rowHeaderRows.length"
                       class="dg-th dg-th-row-header"
+                      :class="{ 'dg-th-frozen': frozenColCount.value > 0 }"
                       :rowspan="rowHeaderRows[hi]?.rowspan || 1"
                     >
                       <span class="dg-col-label">{{ rowHeaderRows[hi]?.label || '' }}</span>
@@ -499,10 +500,10 @@
                       v-for="(col, ci) in headerRow" 
                       :key="'h'+hi+ci" 
                       class="dg-th"
-                      :class="{ 'dg-th-group': col.isGroup }"
+                      :class="{ 'dg-th-group': col.isGroup, 'dg-th-frozen-col': frozenColCount.value > 0 && ci < frozenColCount.value }"
                       :colspan="col.colspan"
                       :rowspan="col.rowspan || 1"
-                      :style="col.isGroup ? {} : { width: col.width + 'px' }"
+                      :style="col.isGroup ? (frozenColCount.value > 0 && ci < frozenColCount.value ? { zIndex: 25 } : {}) : { width: col.width + 'px' }"
                     >
                       <span class="dg-col-label">{{ col.label }}</span>
                       <span v-if="col.isFormula" class="dg-fx-badge">fx</span>
@@ -514,6 +515,7 @@
                 <tr v-for="(row, ri) in rows" :key="'r'+ri" :class="{ 'dg-row-summary': row.isSummary }">
                   <td 
                     class="dg-td dg-td-row-label"
+                    :class="{ 'dg-td-frozen-col': frozenColCount.value > 0 }"
                     @click="toggleRowExpand(ri)"
                     @dblclick="startRowLabelEdit(ri)"
                   >
@@ -557,7 +559,10 @@
                         'dg-td-selected': selectedCell.row === ri && selectedCell.col === ci,
                         'dg-td-merged': cell.colspan > 1,
                         'dg-td-in-range': isInRange(ri, ci),
+                        'dg-td-frozen-col': frozenColCount.value > 0 && ci < frozenColCount.value,
+                        'dg-td-frozen-row': frozenRowCount.value > 0 && ri < frozenRowCount.value,
                       }]"
+                      :style="getCellFreezeStyle(ri, ci)"
                       @click="selectCell(ri, ci, $event)"
                       @dblclick="startEdit(ri, ci)"
                     >
@@ -581,12 +586,20 @@
           </div>
           <!-- 工作表标签 -->
           <div class="dg-sheet-tabs">
-            <div v-for="(sheet, idx) in sheets" :key="idx"
+            <div v-for="(sheet, idx) in sheets" :key="sheet.id"
                  class="dg-sheet-tab" :class="{ active: activeSheet === idx }"
-                 @click="activeSheet = idx">
+                 @click="activeSheet = idx"
+                 @contextmenu.prevent="showSheetMenu(idx, $event)">
               {{ sheet.name }}
             </div>
             <button class="dg-sheet-add" @click="addSheet" title="新增工作表">+</button>
+          </div>
+          
+          <!-- 工作表右键菜单 -->
+          <div v-if="sheetMenu.visible" class="dg-sheet-menu" :style="{ left: sheetMenu.x + 'px', bottom: '40px' }">
+            <div class="dg-sheet-menu-item" @click="renameSheet(sheetMenu.index); sheetMenu.visible = false">重命名</div>
+            <div class="dg-sheet-menu-item" @click="duplicateSheet(sheetMenu.index); sheetMenu.visible = false">复制</div>
+            <div class="dg-sheet-menu-item dg-sheet-menu-danger" @click="deleteSheet(sheetMenu.index); sheetMenu.visible = false">删除</div>
           </div>
         </div>
       </main>
@@ -1146,14 +1159,268 @@
         <el-button type="primary" @click="onFormulaDesignerConfirm">确认并应用</el-button>
       </template>
     </el-dialog>
+
+    <!-- 条件格式弹窗 -->
+    <el-dialog
+      v-model="conditionalFormatDialog.visible"
+      title="条件格式"
+      width="500px"
+      destroy-on-close
+    >
+      <div class="cfd-content">
+        <div class="cfd-section">
+          <label class="cfd-label">应用范围</label>
+          <div class="cfd-range">
+            <input v-model="conditionalFormatDialog.rangeStart" class="cfd-input" placeholder="如 A1" style="width:80px" />
+            <span>至</span>
+            <input v-model="conditionalFormatDialog.rangeEnd" class="cfd-input" placeholder="如 C5" style="width:80px" />
+          </div>
+        </div>
+        <div class="cfd-section">
+          <label class="cfd-label">条件类型</label>
+          <select v-model="conditionalFormatDialog.conditionType" class="cfd-select">
+            <option value="greater">大于</option>
+            <option value="less">小于</option>
+            <option value="equal">等于</option>
+            <option value="between">介于</option>
+            <option value="text">文本包含</option>
+            <option value="empty">为空</option>
+            <option value="notEmpty">不为空</option>
+          </select>
+        </div>
+        <div class="cfd-section" v-if="conditionalFormatDialog.conditionType !== 'empty' && conditionalFormatDialog.conditionType !== 'notEmpty'">
+          <label class="cfd-label">条件值</label>
+          <input v-model="conditionalFormatDialog.conditionValue" class="cfd-input" placeholder="输入数值或文本" />
+          <input v-if="conditionalFormatDialog.conditionType === 'between'" v-model="conditionalFormatDialog.conditionValue2" class="cfd-input" placeholder="第二个值" style="margin-top:8px" />
+        </div>
+        <div class="cfd-section">
+          <label class="cfd-label">格式设置</label>
+          <div class="cfd-format-options">
+            <div class="cfd-format-item">
+              <span>背景色</span>
+              <input type="color" v-model="conditionalFormatDialog.bgColor" class="cfd-color" />
+            </div>
+            <div class="cfd-format-item">
+              <span>文字色</span>
+              <input type="color" v-model="conditionalFormatDialog.textColor" class="cfd-color" />
+            </div>
+            <div class="cfd-format-item">
+              <span>加粗</span>
+              <input type="checkbox" v-model="conditionalFormatDialog.bold" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="conditionalFormatDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="applyConditionalFormat">应用</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 筛选弹窗 -->
+    <el-dialog
+      v-model="filterDialog.visible"
+      title="数据筛选"
+      width="400px"
+      destroy-on-close
+    >
+      <div class="fd-content">
+        <div class="fd-section">
+          <label class="fd-label">筛选列</label>
+          <select v-model="filterDialog.column" class="fd-select">
+            <option v-for="(col, idx) in columnHeaders" :key="idx" :value="idx">{{ col.label || '列' + (idx + 1) }}</option>
+          </select>
+        </div>
+        <div class="fd-section">
+          <label class="fd-label">筛选条件</label>
+          <select v-model="filterDialog.condition" class="fd-select">
+            <option value="contains">包含</option>
+            <option value="equals">等于</option>
+            <option value="startsWith">开头是</option>
+            <option value="endsWith">结尾是</option>
+            <option value="greater">大于</option>
+            <option value="less">小于</option>
+            <option value="notEmpty">不为空</option>
+            <option value="empty">为空</option>
+          </select>
+        </div>
+        <div class="fd-section" v-if="filterDialog.condition !== 'empty' && filterDialog.condition !== 'notEmpty'">
+          <label class="fd-label">筛选值</label>
+          <input v-model="filterDialog.value" class="fd-input" placeholder="输入筛选值" />
+        </div>
+        <div class="fd-preview">
+          <span class="fd-preview-label">预览：将显示 {{ filteredRowCount }} 行数据</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="clearFilter">清除筛选</el-button>
+        <el-button @click="filterDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="applyFilter">应用筛选</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 另存为弹窗 -->
+    <el-dialog
+      v-model="saveAsDialog.visible"
+      title="另存为"
+      width="450px"
+      destroy-on-close
+    >
+      <div class="sad-content">
+        <div class="sad-section">
+          <label class="sad-label">新模板名称 *</label>
+          <input v-model="saveAsDialog.name" class="sad-input" placeholder="输入新模板名称" />
+        </div>
+        <div class="sad-section">
+          <label class="sad-label">新模板编码 *</label>
+          <input v-model="saveAsDialog.code" class="sad-input" placeholder="输入新模板编码" />
+        </div>
+        <div class="sad-section">
+          <label class="sad-label">分类</label>
+          <select v-model="saveAsDialog.category" class="sad-select">
+            <option value="">未分类</option>
+            <option value="production">生产</option>
+            <option value="finance">财务</option>
+            <option value="safety">安全</option>
+            <option value="energy">能源</option>
+            <option value="cost">成本</option>
+            <option value="custom">自定义</option>
+          </select>
+        </div>
+        <div class="sad-section">
+          <label class="sad-label">描述</label>
+          <textarea v-model="saveAsDialog.description" class="sad-textarea" rows="3" placeholder="模板描述"></textarea>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="saveAsDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="confirmSaveAs" :disabled="!saveAsDialog.name || !saveAsDialog.code">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 排序弹窗 -->
+    <el-dialog
+      v-model="sortDialog.visible"
+      title="排序"
+      width="400px"
+      destroy-on-close
+    >
+      <div class="sd-content">
+        <div class="sd-section">
+          <label class="sd-label">排序列</label>
+          <select v-model="sortDialog.column" class="sd-select">
+            <option v-for="(col, idx) in columnHeaders" :key="idx" :value="idx">{{ col.label || '列' + (idx + 1) }}</option>
+          </select>
+        </div>
+        <div class="sd-section">
+          <label class="sd-label">排序方式</label>
+          <div class="sd-order-options">
+            <button class="sd-order-btn" :class="{ active: sortDialog.order === 'asc' }" @click="sortDialog.order = 'asc'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+              升序
+            </button>
+            <button class="sd-order-btn" :class="{ active: sortDialog.order === 'desc' }" @click="sortDialog.order = 'desc'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>
+              降序
+            </button>
+          </div>
+        </div>
+        <div class="sd-section">
+          <label class="sd-label">数据类型</label>
+          <select v-model="sortDialog.dataType" class="sd-select">
+            <option value="auto">自动判断</option>
+            <option value="number">数值</option>
+            <option value="text">文本</option>
+          </select>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="sortDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="applySort">应用排序</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 查找/替换面板 -->
+    <div v-if="findReplacePanel.visible" class="frp-panel">
+      <div class="frp-header">
+        <span class="frp-title">查找与替换</span>
+        <button class="frp-close" @click="findReplacePanel.visible = false">✕</button>
+      </div>
+      <div class="frp-body">
+        <div class="frp-field">
+          <input v-model="findReplacePanel.findText" class="frp-input" placeholder="查找内容" @keydown.enter="findNext" />
+          <button class="frp-btn" @click="findNext">查找下一个</button>
+        </div>
+        <div class="frp-field">
+          <input v-model="findReplacePanel.replaceText" class="frp-input" placeholder="替换内容" />
+          <button class="frp-btn" @click="replaceOne">替换</button>
+          <button class="frp-btn frp-btn-all" @click="replaceAll">全部替换</button>
+        </div>
+        <div class="frp-options">
+          <label class="frp-option">
+            <input type="checkbox" v-model="findReplacePanel.caseSensitive" />
+            区分大小写
+          </label>
+          <label class="frp-option">
+            <input type="checkbox" v-model="findReplacePanel.wholeWord" />
+            全词匹配
+          </label>
+        </div>
+        <div class="frp-result" v-if="findReplacePanel.result">
+          {{ findReplacePanel.result }}
+        </div>
+      </div>
+    </div>
+
+    <!-- 自动排行弹窗 -->
+    <el-dialog
+      v-model="autoRankDialog.visible"
+      title="自动排行"
+      width="450px"
+      destroy-on-close
+    >
+      <div class="ard-content">
+        <div class="ard-section">
+          <label class="ard-label">排行列</label>
+          <select v-model="autoRankDialog.column" class="ard-select">
+            <option v-for="(col, idx) in columnHeaders" :key="idx" :value="idx">{{ col.label || '列' + (idx + 1) }}</option>
+          </select>
+        </div>
+        <div class="ard-section">
+          <label class="ard-label">排行方式</label>
+          <div class="ard-order-options">
+            <button class="ard-order-btn" :class="{ active: autoRankDialog.order === 'desc' }" @click="autoRankDialog.order = 'desc'">
+              从大到小（1为最大）
+            </button>
+            <button class="ard-order-btn" :class="{ active: autoRankDialog.order === 'asc' }" @click="autoRankDialog.order = 'asc'">
+              从小到大（1为最小）
+            </button>
+          </div>
+        </div>
+        <div class="ard-section">
+          <label class="ard-label">排行结果存放</label>
+          <select v-model="autoRankDialog.targetColumn" class="ard-select">
+            <option value="new">新增排名列</option>
+            <option v-for="(col, idx) in columnHeaders" :key="'t'+idx" :value="idx">替换 {{ col.label || '列' + (idx + 1) }}</option>
+          </select>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="autoRankDialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="applyAutoRank">生成排行</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, defineComponent, h } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, defineComponent, h, toRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { loadTemplate, saveTemplate, updateTemplate, publishTemplate } from '@/api/reportDesigner.js'
 import FormulaDesigner from './FormulaDesigner.vue'
+import { safeEvalExpr } from '@/utils/safeEval.js'
+import { toExcelRef, colLetterToNum, fromExcelRef, isRangeRef, parseRangeRef } from '@/utils/excelRef.js'
+import { createFormulaService } from '@/services/formula'
 
 const router = useRouter()
 const route = useRoute()
@@ -1337,6 +1604,8 @@ const isFullscreen = ref(false)
 const sidebarCollapsed = ref(false)
 const propsCollapsed = ref(false)
 const designMode = ref('edit')
+const frozenRowCount = ref(0)
+const frozenColCount = ref(0)
 const showTemplateProps = ref(false)
 const activeNav = ref('rows')
 const expandedNavs = ref(['rows', 'cols'])
@@ -1429,12 +1698,61 @@ function handleMenuAction(action) {
 }
 
 // ==================== 工作表 ====================
-const sheets = ref([{ name: '销售汇总' }, { name: '产品分析' }, { name: '区域分析' }])
+const sheets = ref([
+  { id: 'sheet_1', name: '销售汇总', data: null },
+  { id: 'sheet_2', name: '产品分析', data: null },
+  { id: 'sheet_3', name: '区域分析', data: null }
+])
 const activeSheet = ref(0)
+const sheetMenu = reactive({ visible: false, index: 0, x: 0 })
+
+function showSheetMenu(idx, event) {
+  sheetMenu.visible = true
+  sheetMenu.index = idx
+  sheetMenu.x = event.clientX
+}
 
 function addSheet() {
-  sheets.value.push({ name: `工作表${sheets.value.length + 1}` })
+  const newSheet = {
+    id: generateId('sheet'),
+    name: `工作表${sheets.value.length + 1}`,
+    data: null
+  }
+  sheets.value.push(newSheet)
   activeSheet.value = sheets.value.length - 1
+}
+
+function renameSheet(idx) {
+  const newName = prompt('输入新的工作表名称:', sheets.value[idx].name)
+  if (newName && newName.trim()) {
+    sheets.value[idx].name = newName.trim()
+  }
+}
+
+function deleteSheet(idx) {
+  if (sheets.value.length <= 1) {
+    showToast('至少保留一个工作表', 'warning')
+    return
+  }
+  if (confirm(`确定删除工作表 "${sheets.value[idx].name}"?`)) {
+    sheets.value.splice(idx, 1)
+    if (activeSheet.value >= sheets.value.length) {
+      activeSheet.value = sheets.value.length - 1
+    }
+    showToast('工作表已删除', 'info')
+  }
+}
+
+function duplicateSheet(idx) {
+  const source = sheets.value[idx]
+  const newSheet = {
+    id: generateId('sheet'),
+    name: source.name + '_副本',
+    data: source.data ? deepClone(source.data) : null
+  }
+  sheets.value.splice(idx + 1, 0, newSheet)
+  activeSheet.value = idx + 1
+  showToast('工作表已复制', 'success')
 }
 
 // ==================== 右侧面板 ====================
@@ -1459,7 +1777,7 @@ watch(formulaWorkbenchExpr, (expr) => {
     formulaValidateStatus.value = 'valid'
     formulaValidateMessage.value = '语法正确'
     try {
-      formulaPreviewResult.value = String(eval(trimmed.slice(1)) || '')
+      formulaPreviewResult.value = String(safeEvalExpr(trimmed.slice(1)) ?? '')
     } catch {
       formulaPreviewResult.value = '计算错误'
     }
@@ -1727,7 +2045,7 @@ const formulaCells = computed(() => {
           col: c + 1,
           rowLabel: rowData.label || `行${r + 1}`,
           colLabel: colHeader.label || `列${c + 1}`,
-          excelRef: convertToExcelRef(r + 1, c + 1),
+          excelRef: toExcelRef(r + 1, c + 1),
           label: getCellLabel(r, c),
           value: cell.value || '',
           isFormula: cell.isFormula || false,
@@ -2080,7 +2398,7 @@ const canSplitCells = computed(() => {
   if (!row) return false
   const cell = row.cells[selectedCell.col]
   if (!cell) return false
-  return cell.colspan > 1
+  return cell.colspan > 1 || cell.rowspan > 1
 })
 
 function mergeCells() {
@@ -2093,9 +2411,11 @@ function mergeCells() {
   const startCol = Math.min(selectedRange.startCol, selectedRange.endCol)
   const endCol = Math.max(selectedRange.startCol, selectedRange.endCol)
   
+  const rowSpan = endRow - startRow + 1
   const colSpan = endCol - startCol + 1
   
   const firstCell = rows.value[startRow].cells[startCol]
+  firstCell.rowspan = rowSpan
   firstCell.colspan = colSpan
   
   for (let ri = startRow; ri <= endRow; ri++) {
@@ -2103,6 +2423,7 @@ function mergeCells() {
       if (ri === startRow && ci === startCol) continue
       
       rows.value[ri].cells[ci].skipCell = true
+      rows.value[ri].cells[ci].rowspan = 0
       rows.value[ri].cells[ci].colspan = 0
     }
   }
@@ -2116,14 +2437,29 @@ function splitCells() {
   saveToUndoStack()
   
   const cell = rows.value[selectedCell.row].cells[selectedCell.col]
-  const colspan = cell.colspan
+  const colspan = cell.colspan || 1
+  const rowspan = cell.rowspan || 1
   
+  cell.rowspan = 1
   cell.colspan = 1
   cell.skipCell = false
   
+  // 拆分列
   for (let ci = selectedCell.col + 1; ci < selectedCell.col + colspan; ci++) {
     rows.value[selectedCell.row].cells[ci].skipCell = false
+    rows.value[selectedCell.row].cells[ci].rowspan = 1
     rows.value[selectedCell.row].cells[ci].colspan = 1
+  }
+  
+  // 拆分行
+  for (let ri = selectedCell.row + 1; ri < selectedCell.row + rowspan; ri++) {
+    for (let ci = selectedCell.col; ci < selectedCell.col + colspan; ci++) {
+      if (ri < rows.value.length && rows.value[ri].cells[ci]) {
+        rows.value[ri].cells[ci].skipCell = false
+        rows.value[ri].cells[ci].rowspan = 1
+        rows.value[ri].cells[ci].colspan = 1
+      }
+    }
   }
   
   showToast('单元格拆分成功', 'success')
@@ -2259,6 +2595,84 @@ const formulaEditorDialog = reactive({
   expression: '',
   resultType: 'number',
   targetCell: null // 目标单元格位置 { row, col }
+})
+
+// 条件格式弹窗
+const conditionalFormatDialog = reactive({
+  visible: false,
+  rangeStart: '',
+  rangeEnd: '',
+  conditionType: 'greater',
+  conditionValue: '',
+  conditionValue2: '',
+  bgColor: '#ffeb3b',
+  textColor: '#000000',
+  bold: false
+})
+
+// 筛选弹窗
+const filterDialog = reactive({
+  visible: false,
+  column: 0,
+  condition: 'contains',
+  value: ''
+})
+const activeFilter = ref(null) // 当前应用的筛选
+
+// 另存为弹窗
+const saveAsDialog = reactive({
+  visible: false,
+  name: '',
+  code: '',
+  category: '',
+  description: ''
+})
+
+// 排序弹窗
+const sortDialog = reactive({
+  visible: false,
+  column: 0,
+  order: 'asc', // asc 或 desc
+  dataType: 'auto'
+})
+
+// 查找/替换面板
+const findReplacePanel = reactive({
+  visible: false,
+  findText: '',
+  replaceText: '',
+  caseSensitive: false,
+  wholeWord: false,
+  result: '',
+  currentIndex: -1
+})
+
+// 自动排行弹窗
+const autoRankDialog = reactive({
+  visible: false,
+  column: 0,
+  order: 'desc', // desc: 1为最大, asc: 1为最小
+  targetColumn: 'new'
+})
+
+// 筛选后的行数计算
+const filteredRowCount = computed(() => {
+  if (!filterDialog.value && filterDialog.condition === 'contains') return rows.value.length
+  const col = filterDialog.column
+  const condition = filterDialog.condition
+  const val = filterDialog.value
+  return rows.value.filter(row => {
+    const cellVal = row.cells[col]?.value
+    if (condition === 'empty') return !cellVal
+    if (condition === 'notEmpty') return cellVal
+    if (condition === 'contains') return String(cellVal).includes(val)
+    if (condition === 'equals') return String(cellVal) === val
+    if (condition === 'startsWith') return String(cellVal).startsWith(val)
+    if (condition === 'endsWith') return String(cellVal).endsWith(val)
+    if (condition === 'greater') return parseFloat(cellVal) > parseFloat(val)
+    if (condition === 'less') return parseFloat(cellVal) < parseFloat(val)
+    return true
+  }).length
 })
 
 function getNodeByPath(tree, path) {
@@ -2915,16 +3329,6 @@ function getCellLabel(row, col) {
   return `${colLetter}${row + 1}`
 }
 
-function convertToExcelRef(row, col) {
-  let colLetter = ''
-  let c = col
-  while (c > 0) {
-    colLetter = String.fromCharCode(64 + (c % 26)) + colLetter
-    c = Math.floor(c / 26)
-  }
-  return `${colLetter}${row}`
-}
-
 /** 根据 targetCell 字符串（如 "3-5"）生成可读标签 */
 function getCellLabelByTarget(targetCellStr) {
   if (!targetCellStr) return '未指定'
@@ -3058,29 +3462,94 @@ function insertSummaryRow() {
 }
 
 function freezeRows() {
-  showToast('已冻结首行', 'success')
+  const newValue = frozenRowCount.value > 0 ? 0 : 1
+  frozenRowCount.value = newValue
+  // 同步到模板布局
+  tpl.layout.frozenRows = newValue
+  showToast(newValue > 0 ? '已冻结首行' : '已取消冻结首行', 'success')
 }
 
 function freezeCols() {
-  showToast('已冻结首列', 'success')
+  const newValue = frozenColCount.value > 0 ? 0 : 1
+  frozenColCount.value = newValue
+  // 同步到模板布局
+  tpl.layout.frozenCols = newValue
+  showToast(newValue > 0 ? '已冻结首列' : '已取消冻结首列', 'success')
+}
+
+// 获取表头行的冻结样式
+function getHeaderRowStyle(hi) {
+  if (frozenRowCount.value <= 0) return {}
+  // 计算该行的 top 值（基于前面的行高度，默认 37px 每行）
+  const rowHeight = 37
+  let top = 0
+  for (let i = 0; i < hi && i < frozenRowCount.value; i++) {
+    top += rowHeight
+  }
+  if (hi < frozenRowCount.value) {
+    return { top: top + 'px', 'z-index': 20 }
+  }
+  return {}
+}
+
+// 获取单元格的冻结样式
+function getCellFreezeStyle(ri, ci) {
+  const styles = {}
+  // 冻结列（第一列是行标签列）
+  if (frozenColCount.value > 0 && ci === 0) {
+    styles.left = '0px'
+    styles.zIndex = 8
+  }
+  // 冻结行（表头行）
+  if (frozenRowCount.value > 0 && ri < frozenRowCount.value) {
+    styles.position = 'sticky'
+    styles.top = (ri * 37) + 'px'
+    styles.zIndex = 12
+  }
+  return styles
+}
+
+// 判断单元格是否被冻结
+function isFrozenCell(ri, ci) {
+  if (frozenRowCount.value > 0 && ri < frozenRowCount.value) return true
+  if (frozenColCount.value > 0 && ci === 0) return true
+  return false
 }
 
 function calculateFormula(row, col) {
   const cell = rows.value[row]?.cells[col]
   if (!cell?.formula) return
-  
+
   try {
-    let expr = cell.formula.replace(/=/, '')
-    expr = expr.replace(/([A-Z])(\d+)/g, (_, colLetter, rowNum) => {
-      const c = colLetter.charCodeAt(0) - 65
-      const r = parseInt(rowNum) - 1
-      return rows.value[r]?.cells[c]?.value || 0
+    let expr = cell.formula.replace(/^=/, '')
+
+    // 1. 替换范围引用（如 A1:B10）为数组字面量
+    expr = expr.replace(/\b([A-Z]+)(\d+):([A-Z]+)(\d+)\b/gi, (_, sc, sr, ec, er) => {
+      const pr = parseRangeRef(`${sc}${sr}:${ec}${er}`)
+      if (!pr) return '[]'
+      const vals = []
+      for (let r = pr.startRow; r <= pr.endRow; r++) {
+        for (let c = pr.startCol; c <= pr.endCol; c++) {
+          const v = rows.value[r - 1]?.cells[c - 1]?.value
+          if (v != null) vals.push(Number(v) || 0)
+        }
+      }
+      return JSON.stringify(vals)
     })
-    
-    const result = eval(expr)
+
+    // 2. 替换单元格引用（如 A1、BC27）为实际值
+    expr = expr.replace(/\b([A-Z]+)(\d+)\b/gi, (_, colLetters, rowNum) => {
+      const c = colLetterToNum(colLetters) - 1
+      const r = parseInt(rowNum) - 1
+      const v = rows.value[r]?.cells[c]?.value
+      return v != null ? Number(v) || 0 : 0
+    })
+
+    const result = safeEvalExpr(expr)
     cell.value = typeof result === 'number' ? result.toFixed(2) : String(result)
     showToast('公式计算完成', 'success')
-  } catch {
+  } catch (err) {
+    console.warn('[Designer] 公式计算失败:', err.message)
     showToast('公式计算失败', 'error')
   }
 }
@@ -3120,12 +3589,12 @@ function cmDeleteCol() {
 }
 
 function cmMergeCells() {
-  showToast('合并单元格功能', 'success')
+  mergeCells()
   contextMenu.visible = false
 }
 
 function cmSplitCells() {
-  showToast('拆分单元格功能', 'success')
+  splitCells()
   contextMenu.visible = false
 }
 
@@ -3159,35 +3628,103 @@ function cmSetStyle() {
   contextMenu.visible = false
 }
 
-// ==================== 撤销/重做 ====================
+// ==================== 撤销/重做（优化版：限制栈深度 + 增量快照）====================
+const MAX_UNDO_DEPTH = 30 // 最大撤销深度
+
 function saveToUndoStack() {
+  // 限制栈深度，避免内存无限增长
+  if (undoStack.value.length >= MAX_UNDO_DEPTH) {
+    undoStack.value.shift() // 移除最旧的记录
+  }
+  
+  // 使用轻量拷贝：只保存变更的单元格而非整个表格
   undoStack.value.push({
-    rows: JSON.parse(JSON.stringify(rows.value)),
-    columns: JSON.parse(JSON.stringify(columnHeaders.value))
+    rows: lightClone(rows.value),
+    columns: lightClone(columnHeaders.value),
+    timestamp: Date.now()
   })
   redoStack.value = []
 }
 
+// 轻量拷贝：避免 structuredClone 的超大对象开销
+function lightClone(data) {
+  if (!data) return data
+  if (typeof data !== 'object') return data
+  
+  // 对于数组，使用 map + 浅拷贝对象
+  if (Array.isArray(data)) {
+    return data.map(item => {
+      if (item && typeof item === 'object') {
+        const cloned = { ...item }
+        // 深拷贝 cells 数组（这是主要变更点）
+        if (item.cells && Array.isArray(item.cells)) {
+          cloned.cells = item.cells.map(cell => ({ ...cell }))
+        }
+        // 深拷贝 children 树
+        if (item.children && Array.isArray(item.children)) {
+          cloned.children = lightClone(item.children)
+        }
+        return cloned
+      }
+      return item
+    })
+  }
+  
+  // 对于普通对象
+  const result = {}
+  for (const key in data) {
+    if (data.hasOwnProperty(key)) {
+      const val = data[key]
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        result[key] = lightClone(val)
+      } else {
+        result[key] = val
+      }
+    }
+  }
+  return result
+}
+
 function handleUndo() {
   if (undoStack.value.length === 0) return
+  
   const prev = undoStack.value.pop()
+  
+  // 限制 redo 栈深度
+  if (redoStack.value.length >= MAX_UNDO_DEPTH) {
+    redoStack.value.shift()
+  }
+  
   redoStack.value.push({
-    rows: JSON.parse(JSON.stringify(rows.value)),
-    columns: JSON.parse(JSON.stringify(columnHeaders.value))
+    rows: lightClone(rows.value),
+    columns: lightClone(columnHeaders.value),
+    timestamp: Date.now()
   })
+  
   rows.value = prev.rows
   columnHeaders.value = prev.columns
+  showToast('已撤销', 'info')
 }
 
 function handleRedo() {
   if (redoStack.value.length === 0) return
+  
   const next = redoStack.value.pop()
+  
+  // 限制 undo 栈深度
+  if (undoStack.value.length >= MAX_UNDO_DEPTH) {
+    undoStack.value.shift()
+  }
+  
   undoStack.value.push({
-    rows: JSON.parse(JSON.stringify(rows.value)),
-    columns: JSON.parse(JSON.stringify(columnHeaders.value))
+    rows: lightClone(rows.value),
+    columns: lightClone(columnHeaders.value),
+    timestamp: Date.now()
   })
+  
   rows.value = next.rows
   columnHeaders.value = next.columns
+  showToast('已重做', 'info')
 }
 
 // ==================== 视图控制 ====================
@@ -3248,15 +3785,176 @@ function exportTemplate() {
 }
 
 function handleImportExcel() {
-  showToast('导入Excel功能开发中', 'warning')
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.csv,.xlsx,.xls'
+  input.onchange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    saveToUndoStack()
+    
+    const ext = file.name.split('.').pop().toLowerCase()
+    
+    if (ext === 'csv') {
+      importCSV(file)
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      importExcelFile(file)
+    } else {
+      showToast('不支持的文件格式', 'error')
+    }
+  }
+  input.click()
+}
+
+// 导入CSV文件（增强版，支持引号内逗号）
+function importCSV(file) {
+  const reader = new FileReader()
+  reader.onload = (event) => {
+    try {
+      const text = event.target.result
+      const lines = parseCSVLines(text)
+      if (lines.length < 1) return
+      
+      const headers = lines[0]
+      columnHeaders.value = headers.map((h, idx) => ({ label: h || `列${idx + 1}`, fieldName: h || `col_${idx}` }))
+      
+      const newRows = []
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i]
+        newRows.push({
+          cells: vals.map(v => ({ value: v || '', formula: '', isFormula: false }))
+        })
+      }
+      rows.value = newRows
+      showToast(`已导入 ${newRows.length} 行数据`, 'success')
+    } catch (err) {
+      showToast('CSV导入失败: ' + err.message, 'error')
+    }
+  }
+  reader.readAsText(file)
+}
+
+// 解析CSV行（支持引号内逗号）
+function parseCSVLines(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  return lines.map(line => {
+    const result = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"'
+          i++
+        } else {
+          inQuotes = !inQuotes
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim())
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    result.push(current.trim())
+    return result.map(v => v.replace(/^"|"$/g, ''))
+  })
+}
+
+// 导入Excel文件（使用SheetJS CDN或原生解析）
+function importExcelFile(file) {
+  // 尝试使用动态导入SheetJS
+  const script = document.createElement('script')
+  script.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
+  script.onload = () => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' })
+        
+        if (jsonData.length < 1) {
+          showToast('Excel文件为空', 'warning')
+          return
+        }
+        
+        const headers = jsonData[0].map((h, idx) => ({ label: h || `列${idx + 1}`, fieldName: h || `col_${idx}` }))
+        columnHeaders.value = headers
+        
+        const newRows = []
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i]
+          const cells = row.map(v => ({ 
+            value: v !== undefined && v !== null ? String(v) : '', 
+            formula: '', 
+            isFormula: false 
+          }))
+          // 补齐列数
+          while (cells.length < headers.length) {
+            cells.push({ value: '', formula: '', isFormula: false })
+          }
+          newRows.push({ cells: cells.slice(0, headers.length) })
+        }
+        rows.value = newRows
+        showToast(`已导入 ${newRows.length} 行数据`, 'success')
+      } catch (err) {
+        showToast('Excel解析失败: ' + err.message, 'error')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+  script.onerror = () => {
+    showToast('Excel解析库加载失败，请检查网络', 'error')
+  }
+  document.head.appendChild(script)
 }
 
 function handlePreview() {
-  showToast('预览功能开发中', 'warning')
+  designMode.value = 'preview'
+  // 预览模式下自动计算所有公式
+  calculateAllFormulas()
+  showToast('已进入预览模式，公式已重新计算', 'info')
 }
 
-function handleSaveAs() {
-  showToast('另存为功能开发中', 'warning')
+// 计算所有公式
+function calculateAllFormulas() {
+  for (let ri = 0; ri < rows.value.length; ri++) {
+    for (let ci = 0; ci < rows.value[ri].cells.length; ci++) {
+      const cell = rows.value[ri].cells[ci]
+      if (cell?.formula) {
+        try {
+          let expr = cell.formula.replace(/^=/, '')
+          // 替换范围引用
+          expr = expr.replace(/\b([A-Z]+)(\d+):([A-Z]+)(\d+)\b/gi, (_, sc, sr, ec, er) => {
+            const pr = parseRangeRef(`${sc}${sr}:${ec}${er}`)
+            if (!pr) return '[]'
+            const vals = []
+            for (let r = pr.startRow; r <= pr.endRow; r++) {
+              for (let c = pr.startCol; c <= pr.endCol; c++) {
+                const v = rows.value[r - 1]?.cells[c - 1]?.value
+                if (v != null) vals.push(Number(v) || 0)
+              }
+            }
+            return JSON.stringify(vals)
+          })
+          // 替换单元格引用
+          expr = expr.replace(/\b([A-Z]+)(\d+)\b/gi, (_, colLetters, rowNum) => {
+            const c = colLetterToNum(colLetters) - 1
+            const r = parseInt(rowNum) - 1
+            const v = rows.value[r]?.cells[c]?.value
+            return v != null ? Number(v) || 0 : 0
+          })
+          const result = safeEvalExpr(expr)
+          cell.value = typeof result === 'number' ? result.toFixed(2) : String(result)
+        } catch (err) {
+          console.warn(`[Designer] 公式计算失败 [${ri},${ci}]:`, err.message)
+        }
+      }
+    }
+  }
 }
 
 // ==================== 工具函数 ====================
@@ -3490,58 +4188,405 @@ function handleAlignRight() {
   if (cell) { saveToUndoStack(); cell.style = cell.style || {}; cell.style.textAlign = 'right' }
 }
 
-function handleAutoRank() {
-  if (selectedCell.col === null) { showToast('请先选中要排行的列', 'warning'); return }
-  showToast('自动排行完成', 'success')
+function handleConditionalFormat() {
+  // 以当前选中单元格为默认范围
+  if (selectedCell.row !== null && selectedCell.col !== null) {
+    conditionalFormatDialog.rangeStart = getCellLabel(selectedCell.row, selectedCell.col)
+    conditionalFormatDialog.rangeEnd = getCellLabel(selectedCell.row, selectedCell.col)
+  } else {
+    conditionalFormatDialog.rangeStart = ''
+    conditionalFormatDialog.rangeEnd = ''
+  }
+  conditionalFormatDialog.visible = true
 }
 
-function handleConditionalFormat() { showToast('条件格式功能开发中', 'warning') }
+function applyConditionalFormat() {
+  const start = conditionalFormatDialog.rangeStart
+  const end = conditionalFormatDialog.rangeEnd
+  
+  if (!start || !end) {
+    showToast('请设置应用范围', 'warning')
+    return
+  }
+  
+  // 解析单元格引用
+  const startRef = parseCellRef(start)
+  const endRef = parseCellRef(end)
+  
+  if (!startRef || !endRef) {
+    showToast('无效的单元格引用', 'error')
+    return
+  }
+  
+  saveToUndoStack()
+  
+  // 保存条件格式规则
+  const rule = {
+    id: generateId('cf'),
+    rangeStart: startRef,
+    rangeEnd: endRef,
+    conditionType: conditionalFormatDialog.conditionType,
+    conditionValue: conditionalFormatDialog.conditionValue,
+    conditionValue2: conditionalFormatDialog.conditionValue2,
+    bgColor: conditionalFormatDialog.bgColor,
+    textColor: conditionalFormatDialog.textColor,
+    bold: conditionalFormatDialog.bold
+  }
+  
+  tpl.conditionalFormats.push(rule)
+  
+  // 应用到单元格
+  for (let r = Math.min(startRef.row, endRef.row); r <= Math.max(startRef.row, endRef.row); r++) {
+    for (let c = Math.min(startRef.col, endRef.col); c <= Math.max(startRef.col, endRef.col); c++) {
+      const cell = rows.value[r]?.cells[c]
+      if (cell) {
+        applyConditionStyle(cell, rule)
+      }
+    }
+  }
+  
+  conditionalFormatDialog.visible = false
+  showToast('条件格式已应用', 'success')
+}
+
+function parseCellRef(ref) {
+  const match = ref.match(/^([A-Z]+)(\d+)$/i)
+  if (!match) return null
+  const colLetter = match[1].toUpperCase()
+  const rowNum = parseInt(match[2]) - 1
+  const colNum = colLetterToNum(colLetter) - 1
+  return { row: rowNum, col: colNum }
+}
+
+function applyConditionStyle(cell, rule) {
+  const value = cell.value
+  let match = false
+  
+  const numVal = parseFloat(value)
+  const condVal = parseFloat(rule.conditionValue)
+  const condVal2 = parseFloat(rule.conditionValue2)
+  
+  switch (rule.conditionType) {
+    case 'greater': match = numVal > condVal; break
+    case 'less': match = numVal < condVal; break
+    case 'equal': match = numVal === condVal; break
+    case 'between': match = numVal >= condVal && numVal <= condVal2; break
+    case 'text': match = String(value).includes(rule.conditionValue); break
+    case 'empty': match = !value; break
+    case 'notEmpty': match = value; break
+  }
+  
+  if (match) {
+    cell.style = cell.style || {}
+    if (rule.bgColor) cell.style.backgroundColor = rule.bgColor
+    if (rule.textColor) cell.style.color = rule.textColor
+    if (rule.bold) cell.style.fontWeight = 'bold'
+    cell.conditionalFormatId = rule.id
+  }
+}
 
 function handleSort() {
-  if (selectedCell.col === null) { showToast('请先选中要排序的列', 'warning'); return }
-  saveToUndoStack()
-  rows.value.sort((a, b) => {
-    const valA = parseFloat(a.cells[selectedCell.col]?.value) || 0
-    const valB = parseFloat(b.cells[selectedCell.col]?.value) || 0
-    return valA - valB
-  })
-  showToast('排序完成', 'success')
+  sortDialog.column = selectedCell.col || 0
+  sortDialog.order = 'asc'
+  sortDialog.dataType = 'auto'
+  sortDialog.visible = true
 }
 
-function handleFilter() { showToast('筛选功能开发中', 'warning') }
+function applySort() {
+  const col = sortDialog.column
+  const order = sortDialog.order
+  const dataType = sortDialog.dataType
+  
+  saveToUndoStack()
+  
+  rows.value.sort((a, b) => {
+    const valA = a.cells[col]?.value
+    const valB = b.cells[col]?.value
+    
+    let compareResult = 0
+    
+    if (dataType === 'number' || (dataType === 'auto' && !isNaN(parseFloat(valA)) && !isNaN(parseFloat(valB)))) {
+      compareResult = parseFloat(valA) - parseFloat(valB)
+    } else {
+      compareResult = String(valA || '').localeCompare(String(valB || ''), 'zh-CN')
+    }
+    
+    return order === 'asc' ? compareResult : -compareResult
+  })
+  
+  sortDialog.visible = false
+  showToast(`已按${order === 'asc' ? '升序' : '降序'}排序`, 'success')
+}
+
+function handleFilter() {
+  filterDialog.column = selectedCell.col || 0
+  filterDialog.condition = 'contains'
+  filterDialog.value = ''
+  filterDialog.visible = true
+}
+
+function applyFilter() {
+  activeFilter.value = {
+    column: filterDialog.column,
+    condition: filterDialog.condition,
+    value: filterDialog.value
+  }
+  
+  filterDialog.visible = false
+  showToast('筛选已应用', 'success')
+}
+
+function clearFilter() {
+  activeFilter.value = null
+  filterDialog.visible = false
+  showToast('筛选已清除', 'info')
+}
 
 function handleFind() {
-  const searchText = prompt('请输入要查找的内容:')
-  if (!searchText) return
-  for (let row = 0; row < rows.value.length; row++) {
-    for (let col = 0; col < columnHeaders.value.length; col++) {
+  findReplacePanel.visible = true
+  findReplacePanel.findText = ''
+  findReplacePanel.replaceText = ''
+  findReplacePanel.result = ''
+  findReplacePanel.currentIndex = -1
+}
+
+function handleReplace() {
+  findReplacePanel.visible = true
+  findReplacePanel.findText = ''
+  findReplacePanel.replaceText = ''
+  findReplacePanel.result = ''
+  findReplacePanel.currentIndex = -1
+}
+
+function findNext() {
+  const searchText = findReplacePanel.findText
+  if (!searchText) {
+    findReplacePanel.result = '请输入查找内容'
+    return
+  }
+  
+  const caseSensitive = findReplacePanel.caseSensitive
+  const wholeWord = findReplacePanel.wholeWord
+  
+  // 从当前位置开始查找
+  let startRow = findReplacePanel.currentIndex >= 0 ? selectedCell.row : 0
+  let startCol = findReplacePanel.currentIndex >= 0 ? selectedCell.col + 1 : 0
+  
+  for (let row = startRow; row < rows.value.length; row++) {
+    for (let col = (row === startRow ? startCol : 0); col < columnHeaders.value.length; col++) {
       const cell = rows.value[row]?.cells[col]
-      if (cell && String(cell.value || '').includes(searchText)) {
-        selectedCell.row = row; selectedCell.col = col
-        showToast(`找到匹配项: ${getCellLabel(row, col)}`, 'success')
+      let cellValue = String(cell?.value || '')
+      
+      if (!caseSensitive) {
+        cellValue = cellValue.toLowerCase()
+        searchText = searchText.toLowerCase()
+      }
+      
+      let found = false
+      if (wholeWord) {
+        found = cellValue === searchText
+      } else {
+        found = cellValue.includes(searchText)
+      }
+      
+      if (found) {
+        selectedCell.row = row
+        selectedCell.col = col
+        findReplacePanel.currentIndex = row * columnHeaders.value.length + col
+        findReplacePanel.result = `找到: ${getCellLabel(row, col)}`
         return
       }
     }
   }
-  showToast('未找到匹配项', 'info')
+  
+  // 没找到，从头重新搜索
+  findReplacePanel.currentIndex = -1
+  findReplacePanel.result = '未找到匹配项'
 }
 
-function handleReplace() {
-  const findText = prompt('请输入要查找的内容:')
-  if (!findText) return
-  const replaceText = prompt('请输入替换内容:')
+function replaceOne() {
+  const findText = findReplacePanel.findText
+  const replaceText = findReplacePanel.replaceText
+  
+  if (!findText) {
+    findReplacePanel.result = '请输入查找内容'
+    return
+  }
+  
+  if (selectedCell.row === null) {
+    findReplacePanel.result = '请先查找内容'
+    return
+  }
+  
+  const cell = rows.value[selectedCell.row]?.cells[selectedCell.col]
+  if (!cell) return
+  
+  saveToUndoStack()
+  
+  let cellValue = String(cell.value || '')
+  const caseSensitive = findReplacePanel.caseSensitive
+  
+  if (!caseSensitive) {
+    const regex = new RegExp(findText, 'i')
+    cell.value = cellValue.replace(regex, replaceText)
+  } else {
+    cell.value = cellValue.replace(findText, replaceText)
+  }
+  
+  findReplacePanel.result = `已替换: ${getCellLabel(selectedCell.row, selectedCell.col)}`
+  findNext()
+}
+
+function replaceAll() {
+  const findText = findReplacePanel.findText
+  const replaceText = findReplacePanel.replaceText
+  
+  if (!findText) {
+    findReplacePanel.result = '请输入查找内容'
+    return
+  }
+  
+  saveToUndoStack()
+  
   let count = 0
+  const caseSensitive = findReplacePanel.caseSensitive
+  
   for (let row = 0; row < rows.value.length; row++) {
     for (let col = 0; col < columnHeaders.value.length; col++) {
       const cell = rows.value[row]?.cells[col]
-      if (cell && !cell.readOnly && String(cell.value || '').includes(findText)) {
-        saveToUndoStack()
-        cell.value = String(cell.value).replace(findText, replaceText)
-        count++
+      if (cell && !cell.readOnly) {
+        let cellValue = String(cell.value || '')
+        
+        if (!caseSensitive) {
+          const regex = new RegExp(findText, 'gi')
+          const matches = cellValue.match(regex)
+          if (matches) {
+            cell.value = cellValue.replace(regex, replaceText)
+            count += matches.length
+          }
+        } else {
+          if (cellValue.includes(findText)) {
+            const matches = cellValue.split(findText).length - 1
+            cell.value = cellValue.replaceAll(findText, replaceText)
+            count += matches
+          }
+        }
       }
     }
   }
-  showToast(`替换完成，共替换 ${count} 处`, 'success')
+  
+  findReplacePanel.result = `已替换 ${count} 处`
+}
+
+function handleAutoRank() {
+  autoRankDialog.column = selectedCell.col || 0
+  autoRankDialog.order = 'desc'
+  autoRankDialog.targetColumn = 'new'
+  autoRankDialog.visible = true
+}
+
+function applyAutoRank() {
+  const col = autoRankDialog.column
+  const order = autoRankDialog.order
+  const target = autoRankDialog.targetColumn
+  
+  saveToUndoStack()
+  
+  // 获取所有值并排序
+  const values = rows.value.map((row, idx) => ({
+    rowIdx: idx,
+    value: parseFloat(row.cells[col]?.value) || 0
+  }))
+  
+  // 排序获取排名
+  const sorted = [...values].sort((a, b) => order === 'desc' ? b.value - a.value : a.value - b.value)
+  
+  // 分配排名（处理相同值）
+  const ranks = {}
+  let currentRank = 1
+  let prevValue = null
+  
+  sorted.forEach(item => {
+    if (prevValue !== null && item.value !== prevValue) {
+      currentRank = Object.keys(ranks).length + 1
+    }
+    ranks[item.rowIdx] = currentRank
+    prevValue = item.value
+  })
+  
+  // 确定目标列
+  let targetColIdx = target === 'new' ? columnHeaders.value.length : target
+  
+  if (target === 'new') {
+    // 新增排名列
+    columnHeaders.value.push({
+      id: generateId('col'),
+      label: '排名',
+      width: 80,
+      align: 'center'
+    })
+    rows.value.forEach(row => {
+      row.cells.push({ value: '', style: {} })
+    })
+  }
+  
+  // 写入排名值
+  rows.value.forEach((row, idx) => {
+    row.cells[targetColIdx].value = ranks[idx]
+  })
+  
+  autoRankDialog.visible = false
+  showToast('自动排行已完成', 'success')
+}
+
+function handleSaveAs() {
+  saveAsDialog.name = tpl.name + '_副本'
+  saveAsDialog.code = tpl.code + '_COPY'
+  saveAsDialog.category = tpl.category
+  saveAsDialog.description = tpl.description
+  saveAsDialog.visible = true
+}
+
+async function confirmSaveAs() {
+  if (!saveAsDialog.name || !saveAsDialog.code) {
+    showToast('请填写模板名称和编码', 'warning')
+    return
+  }
+  
+  saving.value = true
+  
+  try {
+    const newTemplate = {
+      ...tpl,
+      id: '',
+      name: saveAsDialog.name,
+      code: saveAsDialog.code,
+      category: saveAsDialog.category,
+      description: saveAsDialog.description,
+      version: 1,
+      status: 'designing',
+      rowTree: deepClone(tpl.rowTree),
+      columnTree: deepClone(tpl.columnTree),
+      metrics: deepClone(tpl.metrics),
+      validators: deepClone(tpl.validators),
+      conditionalFormats: deepClone(tpl.conditionalFormats)
+    }
+    
+    const result = await saveTemplate(newTemplate)
+    
+    if (result.success) {
+      saveAsDialog.visible = false
+      showToast('另存为成功', 'success')
+      router.push(`/report-designer?id=${result.data.id}`)
+    } else {
+      showToast(result.message || '保存失败', 'error')
+    }
+  } catch (err) {
+    console.error('[SaveAs] 保存异常:', err)
+    showToast('保存失败: ' + err.message, 'error')
+  } finally {
+    saving.value = false
+  }
 }
 
 function handleF9() {
@@ -4496,6 +5541,20 @@ async function handlePublishTemplate() {
   border-right: 2px solid $dg-border-strong;
 }
 
+.dg-th-frozen {
+  position: sticky;
+  left: 0;
+  z-index: 25;
+  background: $dg-bg-header;
+}
+
+.dg-th-frozen-col {
+  position: sticky;
+  left: 120px;
+  z-index: 18;
+  background: $dg-bg-header;
+}
+
 .dg-th-group {
   background: $dg-bg-header;
   font-weight: 700;
@@ -4538,6 +5597,19 @@ async function handlePublishTemplate() {
   user-select: none;
   
   &:hover { background: $dg-bg-header; }
+}
+
+.dg-td-frozen-col {
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  background: $dg-bg-header;
+}
+
+.dg-td-frozen-row {
+  position: sticky;
+  z-index: 10;
+  background: $dg-bg-panel;
 }
 
 .dg-tree-cell {
@@ -4761,6 +5833,26 @@ async function handlePublishTemplate() {
   display: flex; align-items: center; justify-content: center;
   font-size: 14px; transition: all .15s;
   &:hover { background: $dg-bg-header; color: $dg-primary; border-color: $dg-primary; }
+}
+
+.dg-sheet-menu {
+  position: fixed;
+  background: $dg-bg-panel;
+  border: 1px solid $dg-border;
+  border-radius: $dg-radius-lg;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 8px 0;
+  z-index: 1000;
+}
+.dg-sheet-menu-item {
+  padding: 8px 16px;
+  font-size: $dg-font-size-sm;
+  color: $dg-text-primary;
+  cursor: pointer;
+  &:hover { background: $dg-bg-header; }
+}
+.dg-sheet-menu-danger {
+  color: $dg-error;
 }
 
 /* ====== 底部状态栏（续） ====== */
@@ -5363,6 +6455,326 @@ async function handlePublishTemplate() {
   &.valid { color: $dg-success; }
   &.error { color: $dg-error; }
   &.warning { color: $dg-warning; }
+}
+
+// 条件格式弹窗样式
+.cfd-content {
+  padding: 16px;
+}
+.cfd-section {
+  margin-bottom: 16px;
+}
+.cfd-label {
+  display: block;
+  font-size: 13px;
+  color: $dg-text-secondary;
+  margin-bottom: 6px;
+}
+.cfd-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cfd-input {
+  height: 32px;
+  padding: 8px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.cfd-select {
+  width: 100%;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.cfd-format-options {
+  display: flex;
+  gap: 16px;
+}
+.cfd-format-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.cfd-color {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+// 筛选弹窗样式
+.fd-content {
+  padding: 16px;
+}
+.fd-section {
+  margin-bottom: 16px;
+}
+.fd-label {
+  display: block;
+  font-size: 13px;
+  color: $dg-text-secondary;
+  margin-bottom: 6px;
+}
+.fd-select {
+  width: 100%;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.fd-input {
+  width: 100%;
+  height: 32px;
+  padding: 8px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.fd-preview {
+  padding: 10px;
+  background: $dg-bg-secondary;
+  border-radius: 6px;
+}
+.fd-preview-label {
+  font-size: 13px;
+  color: $dg-primary;
+}
+
+// 另存为弹窗样式
+.sad-content {
+  padding: 16px;
+}
+.sad-section {
+  margin-bottom: 16px;
+}
+.sad-label {
+  display: block;
+  font-size: 13px;
+  color: $dg-text-secondary;
+  margin-bottom: 6px;
+}
+.sad-input {
+  width: 100%;
+  height: 32px;
+  padding: 8px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.sad-select {
+  width: 100%;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.sad-textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+  resize: vertical;
+}
+
+// 排序弹窗样式
+.sd-content {
+  padding: 16px;
+}
+.sd-section {
+  margin-bottom: 16px;
+}
+.sd-label {
+  display: block;
+  font-size: 13px;
+  color: $dg-text-secondary;
+  margin-bottom: 6px;
+}
+.sd-select {
+  width: 100%;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.sd-order-options {
+  display: flex;
+  gap: 12px;
+}
+.sd-order-btn {
+  flex: 1;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid $dg-border;
+  border-radius: 8px;
+  background: $dg-bg;
+  color: $dg-text-secondary;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  &:hover {
+    border-color: $dg-primary;
+  }
+  &.active {
+    border-color: $dg-primary;
+    background: rgba($dg-primary, 0.1);
+    color: $dg-primary;
+  }
+}
+
+// 查找/替换面板样式
+.frp-panel {
+  position: fixed;
+  top: 120px;
+  right: 20px;
+  width: 380px;
+  background: $dg-bg;
+  border: 1px solid $dg-border;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  z-index: 1000;
+}
+.frp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid $dg-border;
+}
+.frp-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: $dg-text-primary;
+}
+.frp-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: $dg-text-placeholder;
+  cursor: pointer;
+  border-radius: 4px;
+  &:hover {
+    background: $dg-bg-secondary;
+    color: $dg-text-primary;
+  }
+}
+.frp-body {
+  padding: 16px;
+}
+.frp-field {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.frp-input {
+  flex: 1;
+  height: 32px;
+  padding: 8px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.frp-btn {
+  height: 32px;
+  padding: 8px 14px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  background: $dg-bg;
+  color: $dg-text-secondary;
+  cursor: pointer;
+  font-size: 13px;
+  &:hover {
+    border-color: $dg-primary;
+    color: $dg-primary;
+  }
+}
+.frp-btn-all {
+  background: $dg-primary;
+  border-color: $dg-primary;
+  color: #fff;
+  &:hover {
+    background: $dg-primary-dark;
+  }
+}
+.frp-options {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.frp-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: $dg-text-secondary;
+  cursor: pointer;
+}
+.frp-result {
+  padding: 8px 12px;
+  background: $dg-bg-secondary;
+  border-radius: 6px;
+  font-size: 13px;
+  color: $dg-primary;
+}
+
+// 自动排行弹窗样式
+.ard-content {
+  padding: 16px;
+}
+.ard-section {
+  margin-bottom: 16px;
+}
+.ard-label {
+  display: block;
+  font-size: 13px;
+  color: $dg-text-secondary;
+  margin-bottom: 6px;
+}
+.ard-select {
+  width: 100%;
+  height: 32px;
+  padding: 6px 10px;
+  border: 1px solid $dg-border;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.ard-order-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ard-order-btn {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid $dg-border;
+  border-radius: 8px;
+  background: $dg-bg;
+  color: $dg-text-secondary;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 13px;
+  &:hover {
+    border-color: $dg-primary;
+  }
+  &.active {
+    border-color: $dg-primary;
+    background: rgba($dg-primary, 0.1);
+    color: $dg-primary;
+  }
 }
 </style>
 

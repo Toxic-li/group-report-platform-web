@@ -80,5 +80,6 @@ async function loadData() {
 </script>
 
 <style lang="scss" scoped>
+.page-log-view { height: 100%; overflow-y: auto; padding: 24px; }
 .lv-header { display: flex; justify-content: space-between; align-items: center; }
 </style>

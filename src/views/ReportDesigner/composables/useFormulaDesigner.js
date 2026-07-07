@@ -1,5 +1,6 @@
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { createFormulaService } from '@/services/formula'
+import { DependencyGraph } from '@/services/formula/core/DependencyGraph.js'
 
 const formulaService = createFormulaService()
 
@@ -228,7 +229,22 @@ export function useFormulaDesigner(props, emit) {
   }
 
   function checkCircularDependency(tree) {
-    return false
+    // 如果没有依赖，直接返回 false
+    if (!tree || tree.length === 0) return false
+
+    try {
+      // 获取所有公式，构建依赖图
+      const allFormulas = formulaService.formulas || new Map()
+      if (allFormulas.size === 0) return false
+
+      const graph = new DependencyGraph()
+      graph.buildFromFormulas([...allFormulas.values()])
+
+      return graph.hasCycles()
+    } catch (err) {
+      console.warn('[FormulaDesigner] 循环依赖检测失败:', err)
+      return false
+    }
   }
 
   function jumpToDependency(dep) {
@@ -488,10 +504,19 @@ export function useFormulaDesigner(props, emit) {
     if (props.initialFormula) {
       Object.assign(formulaData, props.initialFormula)
     }
+    if (props.indicators && props.indicators.length > 0) {
+      formulaService.registerIndicators(props.indicators)
+    }
     if (formulaData.id) {
       formulaHistory.value = formulaService.getFormulaHistory(formulaData.id)
     }
   })
+
+  watch(() => props.indicators, (newIndicators) => {
+    if (newIndicators && newIndicators.length > 0) {
+      formulaService.registerIndicators(newIndicators)
+    }
+  }, { deep: true })
 
   watch(() => formulaData.expression, () => {
     handleFormulaChange()

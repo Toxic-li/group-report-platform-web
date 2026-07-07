@@ -3,7 +3,7 @@
  * 后端: RoleController
  * 代理: /role/* → localhost:8080/role/*
  */
-import { get, post, put, del } from '@/utils/http.js'
+import { get, post, put, del } from '@/utils/http'
 
 /** 角色列表 */
 export function getRoleList() {
