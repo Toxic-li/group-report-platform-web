@@ -3351,7 +3351,9 @@ function getColCode(col) {
 
 function addCol() {
   saveToUndoStack()
-  const monthIndex = columnHeaders.value.length
+  // 数据列数量 = 总长度 - "指标"列 - "合计"列
+  const dataColCount = columnHeaders.value.length - 2
+  const monthIndex = dataColCount + 1
   columnHeaders.value.splice(columnHeaders.value.length - 1, 0, {
     label: `${monthIndex}月`,
     width: 90,
@@ -3364,7 +3366,7 @@ function addCol() {
       readOnly: false
     })
   })
-  
+
   // 同时添加到左侧资源面板
   tpl.columnTree.push({
     id: generateId('col'),
