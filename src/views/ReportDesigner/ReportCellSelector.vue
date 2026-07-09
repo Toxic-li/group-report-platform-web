@@ -513,10 +513,10 @@ export default {
       
       // ✅ 选中单元格边框样式
       if (isSelectedTarget(cell)) {
-        style.border = '3px solid #10B981' // 绿色边框（目标单元格）
+        style.border = '3px solid #00B578' // 绿色边框（目标单元格）
         style.background = 'linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%)'
       } else if (isSelectedCalc(cell)) {
-        style.border = '3px solid #3B82F6' // 蓝色边框（计算单元格）
+        style.border = '3px solid #1677FF' // 蓝色边框（计算单元格）
         style.background = 'linear-gradient(135deg, #EFF6FF 0%, #F0F9FF 100%)'
       }
       
@@ -920,12 +920,12 @@ export default {
 }
 
 .data-cell:hover {
-  background: rgba(59, 130, 246, 0.05);
-  border-color: #3B82F6;
+  background: rgba(22, 119, 255, 0.05);
+  border-color: #1677FF;
 }
 
 .data-cell.selected-target {
-  border: 3px solid #10B981;
+  border: 3px solid #00B578;
   background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%);
 }
 
@@ -934,7 +934,7 @@ export default {
 }
 
 .data-cell.selected-calc {
-  border: 3px solid #3B82F6;
+  border: 3px solid #1677FF;
   background: linear-gradient(135deg, #EFF6FF 0%, #F0F9FF 100%);
 }
 
@@ -944,8 +944,8 @@ export default {
 
 /* ✅ 新增：框选范围内的单元格样式 */
 .data-cell.in-range {
-  background: rgba(59, 130, 246, 0.1);
-  border: 1px dashed #3B82F6;
+  background: rgba(22, 119, 255, 0.1);
+  border: 1px dashed #1677FF;
 }
 
 .data-cell.merged {
@@ -985,12 +985,12 @@ export default {
 }
 
 .selected-badge.target {
-  background: #10B981;
+  background: #00B578;
   color: white;
 }
 
 .selected-badge.calc {
-  background: #3B82F6;
+  background: #1677FF;
   color: white;
 }
 
@@ -1000,7 +1000,7 @@ export default {
   bottom: -18px;
   left: 50%;
   transform: translateX(-50%);
-  background: #3B82F6;
+  background: #1677FF;
   color: white;
   padding: 2px 8px;
   border-radius: 4px;
@@ -1125,11 +1125,11 @@ export default {
 }
 
 .target-count {
-  color: #10B981;
+  color: #00B578;
 }
 
 .calc-count {
-  color: #3B82F6;
+  color: #1677FF;
 }
 
 .footer-actions {
@@ -1158,8 +1158,8 @@ export default {
 }
 
 .footer-btn.primary {
-  background: #3B82F6;
-  border-color: #3B82F6;
+  background: #1677FF;
+  border-color: #1677FF;
   color: white;
 }
 
@@ -1181,7 +1181,7 @@ export default {
 
 /* ✅ 新增：引用预览样式 */
 .ref-preview {
-  color: #3B82F6;
+  color: #1677FF;
   font-weight: 600;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;

@@ -228,6 +228,6 @@ function openBindOrg(row) {
 </script>
 
 <style lang="scss" scoped>
-.page-user-manage { height: 100%; overflow-y: auto; padding: 24px; }
+.page-user-manage { height: 100%; overflow-y: auto; padding: var(--app-content-padding); }
 .pum-toolbar { display: flex; justify-content: space-between; margin-bottom: 16px; }
 </style>

@@ -15,8 +15,7 @@ html, body, #app {
   padding: 0;
   height: 100%;
   width: 100%;
-  font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family);
 }
 
 /* 全局路由淡入淡出过渡 */

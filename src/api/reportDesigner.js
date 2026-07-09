@@ -92,6 +92,23 @@ export function getTemplateList(params = {}) {
   return get(`${BASE}/template/list?${new URLSearchParams(q)}`)
 }
 
+// ==================== 模板版本 ====================
+
+/** 获取模板版本列表 */
+export function getTemplateVersions(templateId) {
+  return get(`${BASE}/template/${templateId}/versions`)
+}
+
+/** 获取版本快照 */
+export function getVersionSnapshot(versionId) {
+  return get(`${BASE}/template/versions/${versionId}`)
+}
+
+/** 回滚到指定版本 */
+export function rollbackVersion(versionId) {
+  return put(`${BASE}/template/versions/${versionId}/rollback`)
+}
+
 // ==================== 登录兼容 ====================
 export { login, logout, getCurrentUser } from './auth.js'
 

@@ -7,17 +7,17 @@
         <div class="ac-stat-number">{{ stats.pending }}</div>
         <div class="ac-stat-label">待审核</div>
       </div>
-      <div class="ac-stat-card ac-stat-approved">
-        <div class="ac-stat-number">{{ stats.approved }}</div>
-        <div class="ac-stat-label">已通过</div>
+      <div class="ac-stat-card ac-stat-today">
+        <div class="ac-stat-number">{{ stats.todayCompleted }}</div>
+        <div class="ac-stat-label">今日完成</div>
       </div>
       <div class="ac-stat-card ac-stat-rejected">
         <div class="ac-stat-number">{{ stats.rejected }}</div>
-        <div class="ac-stat-label">已驳回</div>
+        <div class="ac-stat-label">退回</div>
       </div>
-      <div class="ac-stat-card ac-stat-total">
-        <div class="ac-stat-number">{{ stats.total }}</div>
-        <div class="ac-stat-label">总提交</div>
+      <div class="ac-stat-card ac-stat-avg">
+        <div class="ac-stat-number">{{ stats.avgAuditTime || '--' }}<span v-if="stats.avgAuditTime" class="ac-stat-unit">分钟</span></div>
+        <div class="ac-stat-label">平均审核时间</div>
       </div>
     </div>
 
@@ -83,6 +83,7 @@
             <th>模板名称</th>
             <th>组织</th>
             <th>周期</th>
+            <th>截止时间</th>
             <th>提交人</th>
             <th>提交时间</th>
             <th>审核人/时间</th>
@@ -104,6 +105,11 @@
             <td class="ac-td-name">{{ item.templateName || '-' }}</td>
             <td>{{ item.orgName || '-' }}</td>
             <td>{{ item.period || '-' }}</td>
+            <td>
+              <span :class="{ 'ac-deadline-urgent': isDeadlineUrgent(item.deadline) }">
+                {{ formatTime(item.deadline) || '-' }}
+              </span>
+            </td>
             <td>{{ item.submitterName || '-' }}</td>
             <td>{{ formatTime(item.submitTime) }}</td>
             <td>
@@ -160,17 +166,38 @@
       
       <!-- 空状态 -->
       <div v-else-if="!loading" class="ac-empty">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="1.5">
-          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
-          <path d="M9 14l2 2 4-4"/>
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+          <rect x="8" y="12" width="64" height="56" rx="10" stroke="var(--app-text-muted)" stroke-width="2" fill="var(--app-bg)"/>
+          <line x1="20" y1="28" x2="48" y2="28" stroke="var(--app-border-dark)" stroke-width="2" stroke-linecap="round"/>
+          <line x1="20" y1="38" x2="56" y2="38" stroke="var(--app-border-dark)" stroke-width="2" stroke-linecap="round"/>
+          <line x1="20" y1="48" x2="36" y2="48" stroke="var(--app-border-dark)" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="64" cy="56" r="16" fill="var(--app-surface)" stroke="var(--app-primary)" stroke-width="2"/>
+          <path d="M58 56l4 4 8-8" stroke="var(--app-primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <p>暂无提交记录</p>
+        <p class="ac-empty-title">暂无提交记录</p>
+        <p class="ac-empty-desc">所有审核任务将在这里显示</p>
       </div>
       
-      <!-- 加载中 -->
-      <div v-if="loading" class="ac-loading">
-        <div class="ac-spinner"></div>
-        <p>正在加载...</p>
+      <!-- 骨架屏加载 -->
+      <div v-if="loading" class="ac-table">
+        <table>
+          <thead><tr><th class="ac-col-check"></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th><th></th></tr></thead>
+          <tbody>
+            <tr v-for="n in 5" :key="n" class="ac-skeleton-row">
+              <td class="ac-col-check"><div class="ac-skeleton" style="width:16px;height:16px;border-radius:3px"></div></td>
+              <td><div class="ac-skeleton" style="width:24px"></div></td>
+              <td><div class="ac-skeleton" style="width:100px"></div></td>
+              <td><div class="ac-skeleton" style="width:60px"></div></td>
+              <td><div class="ac-skeleton" style="width:70px"></div></td>
+              <td><div class="ac-skeleton" style="width:90px"></div></td>
+              <td><div class="ac-skeleton" style="width:50px"></div></td>
+              <td><div class="ac-skeleton" style="width:100px"></div></td>
+              <td><div class="ac-skeleton" style="width:80px"></div></td>
+              <td><div class="ac-skeleton" style="width:56px;border-radius:12px"></div></td>
+              <td><div class="ac-skeleton" style="width:80px"></div></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -259,6 +286,15 @@
           </div>
           <div class="ac-modal-body">
             <label class="ac-label">驳回原因 *</label>
+            <div class="ac-quick-comments">
+              <button 
+                v-for="qc in quickComments.reject" 
+                :key="qc"
+                class="ac-qc-chip"
+                :class="{ 'ac-qc-active': rejectDialog.reason === qc }"
+                @click="rejectDialog.reason = rejectDialog.reason === qc ? '' : qc"
+              >{{ qc }}</button>
+            </div>
             <textarea 
               v-model="rejectDialog.reason" 
               class="ac-textarea" 
@@ -291,6 +327,15 @@
           <div class="ac-modal-body">
             <p class="ac-confirm-text">确认通过「{{ approveDialog.targetItem?.templateName }}」的审核？</p>
             <label class="ac-label">审核意见（可选）</label>
+            <div class="ac-quick-comments">
+              <button 
+                v-for="qc in quickComments.approve" 
+                :key="qc"
+                class="ac-qc-chip"
+                :class="{ 'ac-qc-active': approveDialog.remark === qc }"
+                @click="approveDialog.remark = approveDialog.remark === qc ? '' : qc"
+              >{{ qc }}</button>
+            </div>
             <textarea 
               v-model="approveDialog.remark" 
               class="ac-textarea" 
@@ -382,8 +427,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { showToast } from '@/utils/toast.js'
 import { 
   getSubmitList, 
@@ -391,13 +436,13 @@ import {
   getPendingAudits, 
   approveAudit, 
   rejectAudit,
-  batchApproveAudit,
-  batchRejectAudit,
+  batchAudit,
   getAuditLogs,
   getWorkflowTasks
 } from '@/api/reportSubmit.js'
 
 const router = useRouter()
+const route = useRoute()
 
 // ========================================
 // 响应式数据
@@ -408,7 +453,9 @@ const stats = reactive({
   pending: 0,
   approved: 0,
   rejected: 0,
-  total: 0
+  total: 0,
+  todayCompleted: 0,
+  avgAuditTime: null
 })
 
 /** 筛选条件 */
@@ -459,6 +506,21 @@ const historyDialog = reactive({
 /** 批量选择 */
 const selectedIds = ref([])
 const batchSubmitting = ref(false)
+
+/** 快捷评论 */
+const quickComments = {
+  approve: ['数据正确', '确认无误', '通过'],
+  reject: ['请补充附件', '金额需要确认', '数据异常请核实', '重新填写']
+}
+
+/** 判断截止时间是否临近/超时 */
+function isDeadlineUrgent(deadline) {
+  if (!deadline) return false
+  const d = new Date(deadline)
+  if (isNaN(d.getTime())) return false
+  const now = Date.now()
+  return d.getTime() < now || (d.getTime() - now < 24 * 60 * 60 * 1000)
+}
 
 // 计算属性
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
@@ -513,6 +575,7 @@ async function loadSubmissions() {
     
     // 清空选择
     selectedIds.value = []
+    updateStats()
     
   } catch (err) {
     console.error('[AuditCenter] 加载失败:', err)
@@ -551,6 +614,33 @@ function updateStats() {
   stats.approved = normalized.filter(s => s === 'approved').length
   stats.rejected = normalized.filter(s => s === 'rejected').length
   stats.total = total.value
+  
+  // 今日完成数
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  stats.todayCompleted = submissions.value.filter(s => {
+    if (normalizeStatus(s.status) !== 'approved') return false
+    const t = s.auditTime || s.approveTime
+    if (!t) return false
+    const d = new Date(t)
+    return !isNaN(d.getTime()) && d >= today
+  }).length
+  
+  // 平均审核时间（分钟）
+  const approvedItems = submissions.value.filter(s => {
+    if (normalizeStatus(s.status) !== 'approved') return false
+    return s.submitTime && (s.auditTime || s.approveTime)
+  })
+  if (approvedItems.length > 0) {
+    const totalMs = approvedItems.reduce((sum, s) => {
+      const start = new Date(s.submitTime).getTime()
+      const end = new Date(s.auditTime || s.approveTime).getTime()
+      return sum + Math.max(0, end - start)
+    }, 0)
+    stats.avgAuditTime = Math.round(totalMs / approvedItems.length / 60000)
+  } else {
+    stats.avgAuditTime = null
+  }
 }
 
 /**
@@ -667,7 +757,7 @@ async function batchApprove() {
   
   batchSubmitting.value = true
   try {
-    await batchApproveAudit(selectedIds.value)
+    await batchAudit(selectedIds.value, 1, null)
     showToast(`已通过 ${selectedIds.value.length} 项`, 'success')
     selectedIds.value = []
     loadStats()
@@ -698,7 +788,7 @@ async function batchReject() {
   
   batchSubmitting.value = true
   try {
-    await batchRejectAudit(selectedIds.value, reason)
+    await batchAudit(selectedIds.value, 0, reason)
     showToast(`已驳回 ${selectedIds.value.length} 项`, 'success')
     selectedIds.value = []
     loadStats()
@@ -809,8 +899,23 @@ function formatTime(time) {
 // ========================================
 // 生命周期
 // ========================================
-onMounted(() => {
+function updateFilterFromRoute() {
+  const path = route.path
+  if (path.includes('/audit/approved')) filters.status = 'approved'
+  else if (path.includes('/audit/rejected')) filters.status = 'rejected'
+  else if (path.includes('/audit/initiated')) filters.status = ''
+  else if (path.includes('/audit/history')) filters.status = ''
+  else filters.status = 'pending'
+  currentPage.value = 1
   loadSubmissions()
+}
+
+onMounted(() => {
+  updateFilterFromRoute()
+})
+
+watch(() => route.path, () => {
+  updateFilterFromRoute()
 })
 </script>
 
@@ -831,53 +936,60 @@ onMounted(() => {
 .ac-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: var(--app-card-gap);
+  margin-bottom: var(--app-space-6);
 }
 .ac-stat-card {
   background: var(--app-surface);
   border-radius: var(--app-card-radius);
-  padding: 18px;
+  padding: var(--app-space-5);
   border: 1px solid var(--app-border);
   text-align: center;
   box-shadow: var(--app-shadow-sm);
 }
 .ac-stat-number {
-  font-size: 30px;
-  font-weight: 700;
+  font-size: var(--app-font-h2);
+  font-weight: var(--app-font-bold);
   line-height: 1.2;
+  font-family: var(--app-font-family-number);
+}
+.ac-stat-unit {
+  font-size: var(--app-font-caption);
+  font-weight: var(--app-font-regular);
+  color: var(--app-text-muted);
+  margin-left: 2px;
 }
 .ac-stat-label {
-  font-size: 13px;
+  font-size: var(--app-font-caption);
   color: var(--app-text-secondary);
-  margin-top: 4px;
+  margin-top: var(--app-space-1);
 }
-.ac-stat-pending .ac-stat-number { color: var(--app-warning); }
-.ac-stat-approved .ac-stat-number { color: var(--app-success); }
+.ac-stat-pending .ac-stat-number { color: var(--app-primary); }
+.ac-stat-today .ac-stat-number { color: var(--app-success); }
 .ac-stat-rejected .ac-stat-number { color: var(--app-danger); }
-.ac-stat-total .ac-stat-number { color: var(--app-primary); }
+.ac-stat-avg .ac-stat-number { color: var(--app-warning); }
 
 /* 工具栏 */
 .ac-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--app-space-3);
+  margin-bottom: var(--app-space-4);
   flex-wrap: wrap;
 }
 .ac-filters {
   display: flex;
-  gap: 8px;
+  gap: var(--app-space-2);
   flex: 1;
   min-width: 300px;
 }
 .ac-select, .ac-input {
-  height: 34px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 var(--app-space-3);
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  font-size: 13px;
+  border-radius: var(--app-radius-md);
+  font-size: var(--app-font-caption);
   outline: none;
   background: var(--app-surface);
   color: var(--app-text-primary);
@@ -888,14 +1000,15 @@ onMounted(() => {
 
 /* 按钮 */
 .ac-btn {
-  height: 34px;
-  padding: 0 16px;
-  border-radius: var(--app-radius-sm);
+  height: 36px;
+  padding: 0 var(--app-space-4);
+  border-radius: var(--app-radius-md);
   border: 1px solid var(--app-border);
   background: var(--app-surface);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--app-font-caption);
+  font-weight: var(--app-font-medium);
   cursor: pointer;
+  color: var(--app-text-primary);
   transition: all var(--app-transition-fast);
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
@@ -913,7 +1026,7 @@ onMounted(() => {
   background: var(--app-danger);
   color: #fff;
   border-color: var(--app-danger);
-  &:hover:not(:disabled) { background: #DC2626; }
+  &:hover:not(:disabled) { background: var(--app-danger-hover); }
 }
 
 /* 表格 */
@@ -929,14 +1042,14 @@ onMounted(() => {
   width: 100%;
   border-collapse: collapse;
   th, td {
-    padding: 11px 16px;
+    padding: 11px var(--app-space-4);
     text-align: left;
     border-bottom: 1px solid var(--app-border-light);
-    font-size: 13px;
+    font-size: var(--app-font-caption);
   }
   th {
     background: var(--app-bg);
-    font-weight: 600;
+    font-weight: var(--app-font-semibold);
     color: var(--app-text-secondary);
     position: sticky;
     top: 0;
@@ -949,11 +1062,12 @@ onMounted(() => {
 .ac-status {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
+  border-radius: var(--app-radius-xl);
+  font-size: var(--app-font-caption);
+  font-weight: var(--app-font-medium);
 }
-.ac-status-pending { background: var(--app-warning-bg); color: var(--app-warning); }
+.ac-status-pending { background: var(--app-primary-bg); color: var(--app-primary); }
+.ac-status-submitted { background: var(--app-primary-bg); color: var(--app-primary); }
 .ac-status-approved { background: var(--app-success-bg); color: var(--app-success); }
 .ac-status-rejected { background: var(--app-danger-bg); color: var(--app-danger); }
 .ac-status-withdrawn { background: var(--app-surface-active); color: var(--app-text-muted); }
@@ -963,58 +1077,87 @@ onMounted(() => {
 .ac-action-btn {
   padding: 4px 10px;
   border: none;
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: var(--app-radius-xs);
+  font-size: var(--app-font-caption);
   cursor: pointer;
   margin-right: 4px;
   transition: all var(--app-transition-fast);
+  background: var(--app-bg);
+  color: var(--app-text-secondary);
+  &:hover { background: var(--app-surface-active); color: var(--app-text-primary); }
 }
-.ac-approve { background: var(--app-success-bg); color: var(--app-success); &:hover { background: #A7F3D0; } }
-.ac-reject { background: var(--app-danger-bg); color: var(--app-danger); &:hover { background: #FECACA; } }
-.ac-detail { background: var(--app-info-bg); color: var(--app-info); &:hover { background: #BFDBFE; } }
-.ac-resubmit { background: var(--app-warning-bg); color: var(--app-warning); &:hover { background: #FDE68A; } }
-.ac-history { background: var(--app-info-bg); color: var(--app-info); &:hover { background: #BFDBFE; } }
+.ac-approve { background: var(--app-success-bg); color: var(--app-success); &:hover { background: var(--app-success-bg-hover); } }
+.ac-reject { background: var(--app-danger-bg); color: var(--app-danger); &:hover { background: var(--app-danger-bg-hover); } }
+.ac-detail { background: var(--app-info-bg); color: var(--app-info); &:hover { background: var(--app-info-bg-hover); } }
+.ac-resubmit { background: var(--app-warning-bg); color: var(--app-warning); &:hover { background: var(--app-warning-bg-hover); } }
+.ac-history { background: var(--app-info-bg); color: var(--app-info); &:hover { background: var(--app-info-bg-hover); } }
 
-/* 空状态/加载 */
-.ac-empty, .ac-loading {
+/* 空状态 */
+.ac-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
+  padding: var(--app-space-16) var(--app-space-5);
   color: var(--app-text-muted);
 }
-.ac-spinner {
-  width: 32px; height: 32px;
-  border: 3px solid var(--app-border);
-  border-top-color: var(--app-primary);
-  border-radius: 50%;
-  animation: ac-spin 0.7s linear infinite;
+.ac-empty-title {
+  font-size: var(--app-font-body);
+  font-weight: var(--app-font-medium);
+  color: var(--app-text-secondary);
+  margin: var(--app-space-4) 0 var(--app-space-1);
 }
-@keyframes ac-spin { to { transform: rotate(360deg); } }
+.ac-empty-desc {
+  font-size: var(--app-font-caption);
+  color: var(--app-text-muted);
+  margin: 0;
+}
+
+/* 骨架屏 */
+.ac-skeleton-row td {
+  padding: 14px var(--app-space-4) !important;
+}
+.ac-skeleton {
+  height: 14px;
+  border-radius: var(--app-radius-xs);
+  background: linear-gradient(90deg, var(--app-border-light) 25%, var(--app-bg) 50%, var(--app-border-light) 75%);
+  background-size: 200% 100%;
+  animation: ac-shimmer 1.5s infinite;
+}
+@keyframes ac-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 截止时间 */
+.ac-deadline-urgent {
+  color: var(--app-danger);
+  font-weight: var(--app-font-medium);
+}
 
 /* 分页 */
 .ac-pagination {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 16px;
-  margin-top: 16px;
-  padding: 12px 0;
+  gap: var(--app-space-4);
+  margin-top: var(--app-space-4);
+  padding: var(--app-space-3) 0;
 }
 .ac-page-btn {
-  height: 34px;
-  padding: 0 16px;
+  height: 36px;
+  padding: 0 var(--app-space-4);
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-md);
   background: var(--app-surface);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--app-font-caption);
   color: var(--app-text-primary);
+  transition: all var(--app-transition-fast);
   &:disabled { opacity: 0.4; cursor: not-allowed; }
   &:hover:not(:disabled) { border-color: var(--app-primary); color: var(--app-primary); }
 }
-.ac-page-info { font-size: 13px; color: var(--app-text-secondary); }
+.ac-page-info { font-size: var(--app-font-caption); color: var(--app-text-secondary); }
 
 /* 弹窗 */
 .ac-modal-overlay {
@@ -1044,9 +1187,9 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 18px 24px;
+  padding: var(--app-space-5) var(--app-space-6);
   border-bottom: 1px solid var(--app-border-light);
-  h3 { margin: 0; font-size: 17px; color: var(--app-text-primary); }
+  h3 { margin: 0; font-size: var(--app-font-h5); color: var(--app-text-primary); }
 }
 .ac-modal-close {
   background: none;
@@ -1056,29 +1199,53 @@ onMounted(() => {
   color: var(--app-text-muted);
   &:hover { color: var(--app-danger); }
 }
-.ac-modal-body { padding: 22px 24px; }
+.ac-modal-body { padding: 22px var(--app-space-6); }
 .ac-modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding: 14px 24px;
+  gap: var(--app-space-2);
+  padding: var(--app-space-4) var(--app-space-6);
   border-top: 1px solid var(--app-border-light);
+}
+
+/* 快速评论标签 */
+.ac-quick-comments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  margin-bottom: var(--app-space-3);
+}
+.ac-qc-chip {
+  padding: 4px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xl);
+  background: var(--app-bg);
+  color: var(--app-text-secondary);
+  font-size: var(--app-font-caption);
+  cursor: pointer;
+  transition: all var(--app-transition-fast);
+  &:hover { border-color: var(--app-primary); color: var(--app-primary); background: var(--app-primary-bg); }
+}
+.ac-qc-active {
+  border-color: var(--app-primary);
+  color: var(--app-primary);
+  background: var(--app-primary-bg);
 }
 
 /* 驳回表单 */
 .ac-label {
   display: block;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 8px;
+  font-size: var(--app-font-caption);
+  font-weight: var(--app-font-medium);
+  margin-bottom: var(--app-space-2);
   color: var(--app-text-secondary);
 }
 .ac-textarea {
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px var(--app-space-3);
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  font-size: 13px;
+  border-radius: var(--app-radius-md);
+  font-size: var(--app-font-caption);
   resize: vertical;
   font-family: inherit;
   outline: none;
@@ -1087,24 +1254,32 @@ onMounted(() => {
   &:focus { border-color: var(--app-primary); box-shadow: 0 0 0 3px var(--app-primary-bg); }
 }
 
+/* 确认文字 */
+.ac-confirm-text {
+  margin: 0 0 var(--app-space-4);
+  font-size: var(--app-font-body);
+  color: var(--app-text-primary);
+  line-height: 1.5;
+}
+
 /* 详情网格 */
 .ac-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
+  gap: var(--app-space-4);
 }
 .ac-detail-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--app-space-1);
 }
 .ac-detail-full { grid-column: span 2; }
-.ac-detail-label { font-size: 12px; color: var(--app-text-muted); }
-.ac-detail-value { font-size: 14px; font-weight: 500; word-break: break-all; }
+.ac-detail-label { font-size: var(--app-font-caption); color: var(--app-text-muted); }
+.ac-detail-value { font-size: var(--app-font-body); font-weight: var(--app-font-medium); word-break: break-all; }
 
 /* 数据预览 */
-.ac-data-preview { margin-top: 20px; }
-.ac-data-preview h4 { margin: 0 0 10px 0; font-size: 14px; color: var(--app-text-primary); }
+.ac-data-preview { margin-top: var(--app-space-5); }
+.ac-data-preview h4 { margin: 0 0 10px 0; font-size: var(--app-font-body); color: var(--app-text-primary); }
 .ac-cells-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -1113,34 +1288,34 @@ onMounted(() => {
 .ac-cell-item {
   display: flex;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: var(--app-space-2) 10px;
   background: var(--app-bg);
-  border-radius: var(--app-radius-sm);
-  font-size: 12px;
+  border-radius: var(--app-radius-xs);
+  font-size: var(--app-font-caption);
 }
 .ac-cell-label { color: var(--app-text-muted); }
-.ac-cell-value { font-weight: 500; }
-.ac-more-hint { text-align: center; color: var(--app-text-muted); font-size: 12px; margin-top: 10px; }
+.ac-cell-value { font-weight: var(--app-font-medium); }
+.ac-more-hint { text-align: center; color: var(--app-text-muted); font-size: var(--app-font-caption); margin-top: 10px; }
 
 /* 批量操作栏 */
 .ac-batch-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
+  padding: 10px var(--app-space-4);
   background: var(--app-primary-bg);
   border: 1px solid var(--app-primary);
   border-radius: var(--app-radius-sm);
-  margin-bottom: 12px;
+  margin-bottom: var(--app-space-3);
 }
 .ac-batch-info {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--app-font-body);
+  font-weight: var(--app-font-medium);
   color: var(--app-primary);
 }
 .ac-batch-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--app-space-2);
 }
 
 /* 复选框列 */
@@ -1156,12 +1331,12 @@ onMounted(() => {
   gap: 2px;
 }
 .ac-auditor {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--app-font-caption);
+  font-weight: var(--app-font-medium);
   color: var(--app-text-primary);
 }
 .ac-audit-time {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--app-text-muted);
 }
 .ac-audit-empty {
@@ -1171,7 +1346,7 @@ onMounted(() => {
 /* 审核时间线 */
 .ac-timeline {
   position: relative;
-  padding-left: 24px;
+  padding-left: var(--app-space-6);
 }
 .ac-timeline::before {
   content: '';
@@ -1184,7 +1359,7 @@ onMounted(() => {
 }
 .ac-timeline-item {
   position: relative;
-  padding-bottom: 20px;
+  padding-bottom: var(--app-space-5);
 }
 .ac-timeline-dot {
   position: absolute;
@@ -1196,7 +1371,7 @@ onMounted(() => {
   background: var(--app-border);
   border: 2px solid var(--app-surface);
 }
-.ac-timeline-pending .ac-timeline-dot { background: var(--app-warning); }
+.ac-timeline-pending .ac-timeline-dot { background: var(--app-primary); }
 .ac-timeline-approved .ac-timeline-dot { background: var(--app-success); }
 .ac-timeline-rejected .ac-timeline-dot { background: var(--app-danger); }
 .ac-timeline-submitted .ac-timeline-dot { background: var(--app-primary); }
@@ -1204,7 +1379,7 @@ onMounted(() => {
 .ac-timeline-content {
   background: var(--app-bg);
   border-radius: var(--app-radius-sm);
-  padding: 12px 14px;
+  padding: var(--app-space-3) var(--app-space-4);
 }
 .ac-timeline-header {
   display: flex;
@@ -1213,17 +1388,17 @@ onMounted(() => {
   margin-bottom: 6px;
 }
 .ac-timeline-action {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--app-font-body);
+  font-weight: var(--app-font-semibold);
   color: var(--app-text-primary);
 }
 .ac-timeline-time {
-  font-size: 12px;
+  font-size: var(--app-font-caption);
   color: var(--app-text-muted);
 }
 .ac-timeline-body p {
-  margin: 4px 0;
-  font-size: 13px;
+  margin: var(--app-space-1) 0;
+  font-size: var(--app-font-caption);
   color: var(--app-text-secondary);
 }
 .ac-timeline-remark {

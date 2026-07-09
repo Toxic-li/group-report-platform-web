@@ -32,34 +32,29 @@ export function getSubmitDetail(submitId) {
 // ==================== 审核 ====================
 
 /** 审核通过 */
-export function approveAudit(submitId, remark) {
-  return put(`/report-designer/audit/${submitId}/approve`, remark ? { remark } : {})
+export function approveAudit(submitId, opinion) {
+  return post('/report-designer/audit/approve', { submitId, opinion })
 }
 
 /** 审核驳回 */
-export function rejectAudit(submitId, reason) {
-  return put(`/report-designer/audit/${submitId}/reject`, { reason })
+export function rejectAudit(submitId, opinion) {
+  return post('/report-designer/audit/reject', { submitId, opinion })
 }
 
 /** 待审核列表 */
 export function getPendingAudits(params = {}) {
   const query = new URLSearchParams(params).toString()
-  return get(`/report-designer/audit/pending${query ? `?${query}` : ''}`)
+  return get(`/report-designer/audit/page${query ? `?${query}` : ''}`)
 }
 
-/** 批量审核通过 */
-export function batchApproveAudit(ids) {
-  return put('/report-designer/audit/batch-approve', { ids })
-}
-
-/** 批量审核驳回 */
-export function batchRejectAudit(ids, reason) {
-  return put('/report-designer/audit/batch-reject', { ids, reason })
+/** 批量审核 */
+export function batchAudit(submitIds, result, opinion) {
+  return post('/report-designer/audit/batch', { submitIds, result, opinion })
 }
 
 /** 查询审核日志/轨迹 */
 export function getAuditLogs(submitId) {
-  return get(`/report-designer/audit/${submitId}/logs`)
+  return get(`/report-designer/audit/logs?submitId=${submitId}`)
 }
 
 /** 对接审批流 - 获取待办任务 */

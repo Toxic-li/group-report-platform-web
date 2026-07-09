@@ -55,10 +55,14 @@ const { hasPermission } = usePermission()
 
 const allMenuItems = [
   { path: '/admin/users',     icon: '👤', label: '用户管理',   perm: 'menu:userManage' },
-  { path: '/admin/roles',     icon: '🔐', label: '角色权限',   perm: 'menu:roleManage' },
-  { path: '/admin/orgs',      icon: '🏢', label: '组织架构',   perm: 'menu:orgManage' },
-  { path: '/admin/workflows', icon: '📋', label: '审批流程',   perm: 'menu:workflow' },
-  { path: '/admin/logs',      icon: '📜', label: '操作日志',   perm: 'menu:logView' }
+  { path: '/admin/depts',     icon: '🏢', label: '部门管理',   perm: 'menu:deptManage' },
+  { path: '/admin/positions', icon: '💼', label: '岗位管理',   perm: 'menu:positionManage' },
+  { path: '/admin/roles',     icon: '🔐', label: '角色管理',   perm: 'menu:roleManage' },
+  { path: '/admin/perms',     icon: '🛡️', label: '权限管理',   perm: 'menu:permManage' },
+  { path: '/admin/datasource',icon: '🗄️', label: '数据源',     perm: 'menu:datasource' },
+  { path: '/admin/params',    icon: '⚙️', label: '参数配置',   perm: 'menu:paramConfig' },
+  { path: '/admin/workflows', icon: '📋', label: '工作流管理', perm: 'menu:workflow' },
+  { path: '/admin/logs',      icon: '📜', label: '日志中心',   perm: 'menu:logCenter' }
 ]
 
 const menuItems = computed(() => {
@@ -69,10 +73,14 @@ const menuItems = computed(() => {
 
 const titleMap = {
   '/admin/users': '用户管理',
-  '/admin/roles': '角色权限管理',
-  '/admin/orgs': '组织架构管理',
-  '/admin/workflows': '审批流程管理',
-  '/admin/logs': '操作日志'
+  '/admin/depts': '部门管理',
+  '/admin/positions': '岗位管理',
+  '/admin/roles': '角色管理',
+  '/admin/perms': '权限管理',
+  '/admin/datasource': '数据源管理',
+  '/admin/params': '参数配置',
+  '/admin/workflows': '工作流管理',
+  '/admin/logs': '日志中心'
 }
 const currentPageTitle = computed(() => {
   for (const [path, title] of Object.entries(titleMap)) {
@@ -101,7 +109,7 @@ async function handleLogout() {
 }
 .als-logo {
   width: 36px; height: 36px; border-radius: 8px;
-  background: #3B82F6; color: #fff; font-weight: 700; font-size: 16px;
+  background: #1677FF; color: #fff; font-weight: 700; font-size: 16px;
   display: flex; align-items: center; justify-content: center;
 }
 .als-title { font-size: 15px; font-weight: 600; color: #F1F5F9; }
@@ -112,7 +120,7 @@ async function handleLogout() {
   padding: 10px 12px; border-radius: 6px; font-size: 13px;
   text-decoration: none; color: #94A3B8; transition: all .15s;
   &:hover { background: #334155; color: #E2E8F0; }
-  &.active { background: #3B82F6; color: #fff; }
+  &.active { background: #1677FF; color: #fff; }
 }
 .als-nav-icon { font-size: 16px; }
 .als-nav-label { font-weight: 500; }
@@ -135,7 +143,7 @@ async function handleLogout() {
 .alm-user { font-size: 13px; color: #64748B; }
 .alm-logout {
   padding: 5px 12px; border-radius: 4px; border: 1px solid #E5E7EB;
-  background: #fff; font-size: 12px; color: #EF4444; cursor: pointer;
+  background: #fff; font-size: 12px; color: #F04438; cursor: pointer;
   &:hover { background: #FEF2F2; border-color: #FECACA; }
 }
 .alm-body { flex: 1; padding: 20px; overflow-y: auto; }

@@ -663,7 +663,7 @@ onMounted(() => {
   font-size: 12px; color: #374151; background: #fff;
   outline: none; transition: border-color .15s;
   min-width: 120px;
-  &:focus { border-color: #3B82F6; box-shadow: 0 0 0 2px rgba(59,130,246,.12); }
+  &:focus { border-color: #1677FF; box-shadow: 0 0 0 2px rgba(22, 119, 255,.12); }
   &::placeholder { color: #9CA3AF; }
 }
 .fe-meta-select {
@@ -671,7 +671,7 @@ onMounted(() => {
   border: 1px solid #D1D5DB; border-radius: 6px;
   font-size: 12px; color: #374151; background: #fff;
   outline: none; cursor: pointer; min-width: 80px;
-  &:focus { border-color: #3B82F6; }
+  &:focus { border-color: #1677FF; }
 }
 .fe-meta-type { min-width: 80px; }
 
@@ -726,7 +726,7 @@ onMounted(() => {
     font-size: 10px;
     width: 18px;
     text-align: center;
-    color: #3B82F6;
+    color: #1677FF;
     font-weight: 700;
   }
   .fe-field-label {
@@ -772,12 +772,12 @@ onMounted(() => {
   transition: border-color .2s, box-shadow .2s;
 
   &.fe-focus {
-    border-color: #3B82F6;
-    box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+    border-color: #1677FF;
+    box-shadow: 0 0 0 3px rgba(22, 119, 255,.12);
   }
   &.fe-error {
-    border-color: #EF4444;
-    box-shadow: 0 0 0 3px rgba(239,68,68,.1);
+    border-color: #F04438;
+    box-shadow: 0 0 0 3px rgba(240, 68, 56,.1);
   }
 }
 
@@ -825,9 +825,9 @@ onMounted(() => {
   font-size: 14px;
   line-height: 1.6;
   color: #1F2937; /* 文字透明，显示底层高亮层 */
-  caret-color: #3B82F6; /* 光标可见 */
+  caret-color: #1677FF; /* 光标可见 */
   background: transparent;
-  &::selection { background: rgba(59,130,246,.25); }
+  &::selection { background: rgba(22, 119, 255,.25); }
 }
 
 /* 高亮颜色 */

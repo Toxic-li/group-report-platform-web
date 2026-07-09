@@ -3,6 +3,7 @@
 
 // ==================== 集团统计报表平台 - 全局样式 ====================
 // 基于 variables.scss 定义的 CSS 自定义属性统一管理
+// 严格对齐《02_Design_System.md》《01_设计原则.md》
 
 // ==================== 全局重置 ====================
 *,
@@ -15,15 +16,19 @@
 
 html, body {
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
   background: var(--app-bg);
   color: var(--app-text-primary);
-  font-size: 14px;
+  font-size: var(--app-font-body);
   line-height: 1.5;
-  font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--app-font-family);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--app-transition-slow), color var(--app-transition-slow);
+}
+
+html.dark {
+  color-scheme: dark;
 }
 
 #app {
@@ -126,14 +131,14 @@ html, body {
     background: var(--app-success);
     color: #fff;
     border-color: var(--app-success);
-    &:hover { background: color.adjust(#10B981, $lightness: -8%); color: #fff; }
+    &:hover { background: color.adjust(#00B578, $lightness: -8%); color: #fff; }
   }
 
   &--danger {
     background: var(--app-danger);
     color: #fff;
     border-color: var(--app-danger);
-    &:hover { background: color.adjust(#EF4444, $lightness: -8%); color: #fff; }
+    &:hover { background: color.adjust(#F04438, $lightness: -8%); color: #fff; }
   }
 
   &--ghost {
@@ -185,7 +190,7 @@ html, body {
   }
 
   &--reviewing {
-    background: rgba(43, 108, 246, 0.08);
+    background: rgba(22, 119, 255, 0.08);
     color: var(--app-primary);
     &::before { background: var(--app-primary); animation: app-pulse 1.5s infinite; }
   }
@@ -403,14 +408,14 @@ html, body {
       background: var(--app-success);
       color: #fff;
       border-color: var(--app-success);
-      &:hover { background: color.adjust(#10B981, $lightness: -8%); }
+      &:hover { background: color.adjust(#00B578, $lightness: -8%); }
     }
 
     &--danger {
       background: var(--app-danger);
       color: #fff;
       border-color: var(--app-danger);
-      &:hover { background: color.adjust(#EF4444, $lightness: -8%); }
+      &:hover { background: color.adjust(#F04438, $lightness: -8%); }
     }
 
     &--ghost {
@@ -423,4 +428,80 @@ html, body {
       }
     }
   }
+}
+
+// ==========================================================================
+// 排版工具类 Typography Utilities（对齐文档字号规范）
+// ==========================================================================
+.text-display { font-size: var(--app-font-display); font-weight: var(--app-font-semibold); line-height: 1.2; }
+.text-h1 { font-size: var(--app-font-h1); font-weight: var(--app-font-semibold); line-height: 1.25; }
+.text-h2 { font-size: var(--app-font-h2); font-weight: var(--app-font-semibold); line-height: 1.3; }
+.text-h3 { font-size: var(--app-font-h3); font-weight: var(--app-font-semibold); line-height: 1.35; }
+.text-h4 { font-size: var(--app-font-h4); font-weight: var(--app-font-semibold); line-height: 1.4; }
+.text-h5 { font-size: var(--app-font-h5); font-weight: var(--app-font-medium); line-height: 1.4; }
+.text-title { font-size: var(--app-font-title); font-weight: var(--app-font-medium); line-height: 1.5; }
+.text-body { font-size: var(--app-font-body); line-height: 1.5; }
+.text-caption { font-size: var(--app-font-caption); line-height: 1.5; color: var(--app-text-muted); }
+.text-regular { font-weight: var(--app-font-regular); }
+.text-medium { font-weight: var(--app-font-medium); }
+.text-semibold { font-weight: var(--app-font-semibold); }
+.text-bold { font-weight: var(--app-font-bold); }
+
+.text-primary { color: var(--app-text-primary); }
+.text-secondary { color: var(--app-text-secondary); }
+.text-muted { color: var(--app-text-muted); }
+.text-brand { color: var(--app-primary); }
+.text-success { color: var(--app-success); }
+.text-warning { color: var(--app-warning); }
+.text-danger { color: var(--app-danger); }
+.text-info { color: var(--app-info); }
+
+.font-number { font-family: var(--app-font-family-number); font-variant-numeric: tabular-nums; }
+.font-code { font-family: var(--app-font-family-code); }
+
+// ==========================================================================
+// 间距工具类 Spacing Utilities（8pt Grid）
+// ==========================================================================
+@each $i in 1, 2, 3, 4, 5, 6, 8, 10, 12, 16 {
+  .m-#{$i} { margin: calc(#{$i} * 4px); }
+  .mt-#{$i} { margin-top: calc(#{$i} * 4px); }
+  .mr-#{$i} { margin-right: calc(#{$i} * 4px); }
+  .mb-#{$i} { margin-bottom: calc(#{$i} * 4px); }
+  .ml-#{$i} { margin-left: calc(#{$i} * 4px); }
+  .mx-#{$i} { margin-left: calc(#{$i} * 4px); margin-right: calc(#{$i} * 4px); }
+  .my-#{$i} { margin-top: calc(#{$i} * 4px); margin-bottom: calc(#{$i} * 4px); }
+  .p-#{$i} { padding: calc(#{$i} * 4px); }
+  .pt-#{$i} { padding-top: calc(#{$i} * 4px); }
+  .pr-#{$i} { padding-right: calc(#{$i} * 4px); }
+  .pb-#{$i} { padding-bottom: calc(#{$i} * 4px); }
+  .pl-#{$i} { padding-left: calc(#{$i} * 4px); }
+  .px-#{$i} { padding-left: calc(#{$i} * 4px); padding-right: calc(#{$i} * 4px); }
+  .py-#{$i} { padding-top: calc(#{$i} * 4px); padding-bottom: calc(#{$i} * 4px); }
+  .gap-#{$i} { gap: calc(#{$i} * 4px); }
+}
+
+// ==========================================================================
+// 圆角 / 阴影工具类
+// ==========================================================================
+.rounded-xs { border-radius: var(--app-radius-xs); }
+.rounded-sm { border-radius: var(--app-radius-sm); }
+.rounded-md { border-radius: var(--app-radius-md); }
+.rounded-lg { border-radius: var(--app-radius-lg); }
+.rounded-xl { border-radius: var(--app-radius-xl); }
+.rounded-full { border-radius: 9999px; }
+.shadow-xs { box-shadow: var(--app-shadow-xs); }
+.shadow-sm { box-shadow: var(--app-shadow-sm); }
+.shadow-md { box-shadow: var(--app-shadow-md); }
+.shadow-lg { box-shadow: var(--app-shadow-lg); }
+.shadow-xl { box-shadow: var(--app-shadow-xl); }
+
+// ==========================================================================
+// 暗色模式过渡：所有关键面平滑切换（禁止直接改色，统一由 Token 驱动）
+// ==========================================================================
+html.dark body,
+html.dark .app-card,
+html.dark .app-btn,
+html.dark .app-input,
+html.dark .app-select {
+  transition: background-color var(--app-transition-slow), border-color var(--app-transition-slow), color var(--app-transition-slow);
 }

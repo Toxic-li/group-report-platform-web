@@ -186,13 +186,13 @@ function summaryLabel(type) {
   &.tn-name { font-weight: 500; min-width: 100px; }
   &.tn-title { font-weight: 500; min-width: 80px; flex: 1; }
   &:hover { border-color: #E5E7EB; background: #fff; }
-  &:focus { border-color: #3B82F6; background: #fff; box-shadow: 0 0 0 2px rgba(59,130,246,.1); }
+  &:focus { border-color: #1677FF; background: #fff; box-shadow: 0 0 0 2px rgba(22, 119, 255,.1); }
 }
 
 .tn-type-select, .tn-fmt-select {
   height: 24px; padding: 0 4px; border: 1px solid #E5E7EB; border-radius: 4px;
   font-size: 10px; color: #6B7280; cursor: pointer; outline: none; background: #F9FAFB;
-  &:focus { border-color: #3B82F6; }
+  &:focus { border-color: #1677FF; }
 }
 
 .tn-badge {

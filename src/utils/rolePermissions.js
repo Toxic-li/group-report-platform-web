@@ -13,8 +13,9 @@ const ROLE_PERMISSIONS = {
 
   ADMIN: [
     'menu:reportCenter', 'menu:reportFill', 'menu:auditCenter', 'menu:wordToExcel',
-    'menu:admin', 'menu:userManage', 'menu:roleManage', 'menu:orgManage',
-    'menu:workflow', 'menu:logView',
+    'menu:admin', 'menu:userManage', 'menu:deptManage', 'menu:positionManage',
+    'menu:roleManage', 'menu:permManage', 'menu:datasource', 'menu:paramConfig',
+    'menu:workflow', 'menu:logCenter',
     'template:create', 'template:edit', 'template:publish', 'template:permission', 'template:delete'
   ],
 

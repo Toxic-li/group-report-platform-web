@@ -181,6 +181,6 @@ async function handleSavePerm() {
 </script>
 
 <style lang="scss" scoped>
-.page-role-manage { height: 100%; overflow-y: auto; padding: 24px; }
+.page-role-manage { height: 100%; overflow-y: auto; padding: var(--app-content-padding); }
 .rm-header { display: flex; justify-content: space-between; align-items: center; }
 </style>

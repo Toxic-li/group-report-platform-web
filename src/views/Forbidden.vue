@@ -49,13 +49,13 @@ function goLogin() {
   to { opacity: 1; transform: translateY(0); }
 }
 .fb-icon {
-  color: #EF4444;
+  color: #F04438;
   margin-bottom: 16px;
 }
 .fb-code {
   font-size: 64px;
   font-weight: 800;
-  color: #EF4444;
+  color: #F04438;
   line-height: 1;
   letter-spacing: -2px;
 }
@@ -86,12 +86,12 @@ function goLogin() {
   border: 1px solid transparent;
 }
 .fb-btn-primary {
-  background: #2B6CF6;
+  background: #1677FF;
   color: #fff;
 }
 .fb-btn-primary:hover {
   background: #1A51DB;
-  box-shadow: 0 4px 12px rgba(43, 108, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.3);
 }
 .fb-btn-ghost {
   background: transparent;

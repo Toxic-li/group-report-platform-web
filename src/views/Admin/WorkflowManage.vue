@@ -113,7 +113,7 @@
             </el-form-item>
             <el-form-item label="超时时间">
               <el-input-number v-model="node.timeoutHours" :min="0" :max="168" placeholder="小时" />
-              <span style="margin-left:8px;color:#909399">小时（0表示不超时）</span>
+              <span style="margin-left:8px;color:var(--app-text-muted)">小时（0表示不超时）</span>
             </el-form-item>
             <el-form-item label="超时处理" v-if="node.timeoutHours > 0">
               <el-select v-model="node.timeoutAction" style="width:100%">
@@ -300,7 +300,8 @@ async function toggleStatus(row) {
 .page-workflow {
   height: 100%;
   overflow-y: auto;
-  padding: 24px;
+  padding: var(--app-content-padding);
+  
   .pw-header {
     display: flex;
     justify-content: space-between;
@@ -308,19 +309,19 @@ async function toggleStatus(row) {
   }
   .pw-nodes {
     .pw-node-card {
-      border: 1px solid #E4E7ED;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 12px;
-      background: #F5F7FA;
+      border: 1px solid var(--app-border);
+      border-radius: var(--app-radius-sm);
+      padding: var(--app-space-3) var(--app-space-4);
+      margin-bottom: var(--app-space-3);
+      background: var(--app-bg);
       .pw-node-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 8px;
+        margin-bottom: var(--app-space-2);
         .pw-node-order {
-          font-weight: 600;
-          color: #409EFF;
+          font-weight: var(--app-font-semibold);
+          color: var(--app-primary);
         }
       }
     }

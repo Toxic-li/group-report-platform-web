@@ -1186,7 +1186,7 @@ export default {
 
 .validation-error {
   background: #fef2f2 !important;
-  border: 1px solid #ef4444;
+  border: 1px solid #F04438;
   border-radius: 6px;
   height: 36px;
   padding: 0 12px;
@@ -1769,7 +1769,7 @@ export default {
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: #3b82f6;
+  accent-color: #1677FF;
 }
 
 .apply-to-row-label:hover {
