@@ -32,6 +32,18 @@ const routes = [
     component: () => import('@/views/ReportDesigner/index.vue'),
     meta: { perm: 'template:edit' }
   },
+  {
+    path: '/designer/formula',
+    name: 'FormulaCenter',
+    component: () => import('@/views/ReportDesigner/FormulaDesigner.vue'),
+    meta: { perm: 'template:formula' }
+  },
+  {
+    path: '/designer/formula/:code',
+    name: 'FormulaCenterEdit',
+    component: () => import('@/views/ReportDesigner/FormulaDesigner.vue'),
+    meta: { perm: 'template:formula' }
+  },
 
   // ==================== 主应用布局（侧边栏 + 顶栏） ====================
   {
@@ -54,14 +66,20 @@ const routes = [
       {
         path: 'report-center/my-reports',
         name: 'MyReports',
-        component: () => import('@/views/ReportCenter/MyFilling.vue'),
+        component: () => import('@/views/ReportCenter/index.vue'),
         meta: { perm: 'menu:myReports' }
       },
       {
         path: 'report-center/favorites',
         name: 'FavoritesManage',
-        component: () => import('@/views/ReportCenter/FavoritesManage.vue'),
+        component: () => import('@/views/ReportCenter/index.vue'),
         meta: { perm: 'menu:favoritesManage' }
+      },
+      {
+        path: 'report-center/recent',
+        name: 'RecentReports',
+        component: () => import('@/views/ReportCenter/index.vue'),
+        meta: { perm: 'menu:recentAccess' }
       },
       // ==================== 表样设计子页面 ====================
       {
@@ -146,8 +164,9 @@ const routes = [
       {
         path: 'entry/detail/:submitId',
         name: 'EntryDetail',
-        component: () => import('@/views/EntryCenter/DataEntry.vue'),
-        meta: { perm: 'menu:entryDetail', immersive: true }
+        component: () => import('@/views/ReportFill/index.vue'),
+        props: true,
+        meta: { perm: 'menu:entryDetail' }
       },
       // ==================== 审核中心 ====================
       {

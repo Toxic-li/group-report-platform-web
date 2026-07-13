@@ -1,6 +1,5 @@
 <template>
   <div class="de-page">
-    <!-- Header -->
     <ReportHeader
       :entry="entryDetail"
       @back="handleBack"
@@ -8,7 +7,6 @@
       @showReview="showReviewDialog = true"
     />
 
-    <!-- Toolbar -->
     <EntryToolbar
       v-model:activePanel="activePanel"
       :isSaved="isSaved"
@@ -21,9 +19,7 @@
       @export="handleExport"
     />
 
-    <!-- Content -->
     <div class="de-content">
-      <!-- Spreadsheet Panel -->
       <Spreadsheet
         v-if="activePanel === 'spreadsheet'"
         :columns="columns"
@@ -35,7 +31,6 @@
         @navigate="handleSheetNavigate"
       />
 
-      <!-- Validation Panel -->
       <ValidationPanel
         v-if="activePanel === 'validation'"
         :errors="validationErrorObjects"
@@ -43,7 +38,6 @@
         @locateError="handleLocateError"
       />
 
-      <!-- Attachment Panel -->
       <AttachmentPanel
         v-if="activePanel === 'attachment'"
         :attachments="attachments"
@@ -54,7 +48,6 @@
       />
     </div>
 
-    <!-- Submit Footer -->
     <SubmitFooter
       :filledCount="filledCount"
       :totalCells="totalEditableCells"
@@ -67,7 +60,6 @@
       @dismissReview="showReviewBanner = false"
     />
 
-    <!-- History Dialog -->
     <el-dialog title="历史记录" v-model="showHistory" width="560px">
       <div class="de-history-list">
         <div class="de-history-item" v-for="item in historyList" :key="item.id">
@@ -82,7 +74,6 @@
       </div>
     </el-dialog>
 
-    <!-- Review Dialog -->
     <el-dialog title="审核退回意见" v-model="showReviewDialog" width="480px">
       <div class="de-review-dialog">
         <div class="de-review-dialog-icon">
@@ -103,7 +94,6 @@
       </template>
     </el-dialog>
 
-    <!-- Submit Confirm Dialog -->
     <el-dialog title="提交确认" v-model="showSubmitConfirm" width="440px">
       <div class="de-submit-confirm">
         <div class="de-submit-icon">
@@ -119,7 +109,6 @@
       </template>
     </el-dialog>
 
-    <!-- Import Dialog -->
     <el-dialog title="导入数据" v-model="showImportDialog" width="480px">
       <div class="de-import-dialog">
         <el-upload
@@ -148,11 +137,13 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useNavigation } from '@/composables/useNavigation.js'
 import {
   getEntryDetail, saveDraft, submitForReview, getEntryHistory,
   getAttachments, uploadAttachment, downloadAttachment, deleteAttachment,
   validateData, importFromExcel, exportToExcel,
 } from '@/api/filling'
+import { loadTemplate } from '@/api/reportDesigner.js'
 
 import { ElMessage } from 'element-plus'
 import ReportHeader from './components/ReportHeader.vue'
@@ -162,10 +153,14 @@ import ValidationPanel from './components/ValidationPanel.vue'
 import AttachmentPanel from './components/AttachmentPanel.vue'
 import SubmitFooter from './components/SubmitFooter.vue'
 
-const route = useRoute()
 const router = useRouter()
+const route = useRoute()
+const { navigateBack } = useNavigation()
 
-// ---- State ----
+const mode = ref('edit')
+const templateId = ref(null)
+const submitId = ref(null)
+
 const entryDetail = ref({
   submitId: null, reportId: null, reportName: '', reportCode: '',
   period: '', deadline: '', status: 'filling', category: '',
@@ -191,27 +186,13 @@ const submitRemark = ref('')
 const isImporting = ref(false)
 const importFile = ref(null)
 
-const columns = ref([
-  { index: 0, label: '部门', width: 120 },
-  { index: 1, label: '产品', width: 120 },
-  { index: 2, label: '销售额', width: 150, fieldType: 'amount' },
-  { index: 3, label: '成本', width: 150, fieldType: 'amount' },
-  { index: 4, label: '利润', width: 150 },
-])
-
-const rows = ref([
-  { index: 0, label: '' },
-  { index: 1, label: '1' },
-  { index: 2, label: '2' },
-  { index: 3, label: '3' },
-  { index: 4, label: '合计' },
-])
+const columns = ref([])
+const rows = ref([])
 
 let autoSaveTimer = null
 
-// ---- Computed ----
 const isEditable = computed(() => {
-  return ['draft', 'filling', 'pending', 'rejected'].includes(entryDetail.value.status)
+  return ['draft', 'filling', 'rejected', 'withdrawn'].includes(entryDetail.value.status)
 })
 
 const totalEditableCells = computed(() => {
@@ -242,35 +223,183 @@ const lastSavedText = computed(() => {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 })
 
-// ---- Helpers ----
 function getCell(row, col) {
   const key = `${row}-${col}`
   return cellData.value[key]
 }
 
-// ---- Data Loading ----
-async function loadEntryDetail() {
-  const submitId = route.params.submitId
-  try {
-    const result = await getEntryDetail(submitId)
-    if (result) {
-      entryDetail.value = result
-      initCellData()
-      showReviewBanner.value = result.status === 'rejected'
+function buildColumnsFromTemplate(templateVO) {
+  const colTree = templateVO?.columnTree || []
+  const headers = templateVO?.columnHeaders || []
+  const cols = []
+  if (headers && headers.length > 0) {
+    const lastLevel = headers[headers.length - 1]
+    lastLevel.forEach((h, idx) => {
+      cols.push({
+        index: idx,
+        label: h.label || h.title || h.text || `列${idx + 1}`,
+        width: h.width || 120,
+        fieldType: h.fieldType || 'string',
+      })
+    })
+  } else if (colTree && colTree.length > 0) {
+    const flatten = (nodes, result) => {
+      nodes.forEach(n => {
+        if (n.children && n.children.length > 0) {
+          flatten(n.children, result)
+        } else {
+          result.push({
+            index: result.length,
+            label: n.label || n.title || n.text || `列${result.length + 1}`,
+            width: n.width || 120,
+            fieldType: n.fieldType || 'string',
+          })
+        }
+      })
+      return result
     }
-  } catch {
-    useMockData(submitId)
+    flatten(colTree, cols)
+  }
+  return cols
+}
+
+function buildRowsFromTemplate(templateVO) {
+  const rowTree = templateVO?.rowTree || []
+  const rs = []
+  const flatten = (nodes, result) => {
+    nodes.forEach(n => {
+      result.push({
+        index: result.length,
+        label: n.label || n.title || n.text || n.rowName || '',
+        rowType: n.rowType || 'normal',
+        isLocked: n.isFormula || n.locked || false,
+      })
+      if (n.children && n.children.length > 0) {
+        flatten(n.children, result)
+      }
+    })
+    return result
+  }
+  flatten(rowTree, rs)
+  return rs
+}
+
+function buildCellDataFromTemplate(templateVO, dataCells) {
+  const data = {}
+  const formulas = templateVO?.formulas || []
+
+  if (dataCells && dataCells.length > 0) {
+    dataCells.forEach(cell => {
+      const key = `${cell.rowIndex}-${cell.colIndex}`
+      data[key] = {
+        rowIndex: cell.rowIndex,
+        colIndex: cell.colIndex,
+        value: cell.value ?? '',
+        cellType: cell.cellType || cell.dataType || 'string',
+        isFormula: cell.isFormula || false,
+        isLocked: cell.isLocked || cell.readonly || false,
+      }
+    })
+  }
+
+  formulas.forEach(f => {
+    if (f.rowIndex !== undefined && f.colIndex !== undefined) {
+      const key = `${f.rowIndex}-${f.colIndex}`
+      if (!data[key]) {
+        data[key] = {
+          rowIndex: f.rowIndex,
+          colIndex: f.colIndex,
+          value: '',
+          cellType: 'number',
+          isFormula: true,
+          isLocked: true,
+          formula: f.expression || f.formula,
+        }
+      } else {
+        data[key].isFormula = true
+        data[key].isLocked = true
+        data[key].formula = f.expression || f.formula
+      }
+    }
+  })
+
+  return data
+}
+
+async function loadByTemplate() {
+  try {
+    const res = await loadTemplate(templateId.value)
+    const tpl = res?.data || res
+    if (tpl) {
+      entryDetail.value = {
+        submitId: null,
+        reportId: tpl.id || templateId.value,
+        reportName: tpl.name || tpl.templateName || '未命名模板',
+        reportCode: tpl.code || tpl.templateCode || '',
+        period: '',
+        deadline: '',
+        status: 'filling',
+        category: '',
+        creatorName: '',
+        progress: 0,
+        reviewOpinion: '',
+        reviewItems: [],
+        cells: [],
+        attachments: [],
+      }
+      columns.value = buildColumnsFromTemplate(tpl)
+      rows.value = buildRowsFromTemplate(tpl)
+      cellData.value = buildCellDataFromTemplate(tpl, [])
+      showReviewBanner.value = false
+    }
+  } catch (err) {
+    console.error('加载模板失败:', err)
+    ElMessage.error('加载模板失败')
   }
 }
 
-function useMockData(submitId) {
+async function loadBySubmit() {
+  try {
+    const result = await getEntryDetail(submitId.value)
+    const detail = result?.data || result
+    if (detail) {
+      entryDetail.value = detail
+      if (detail.columnTree || detail.rowTree || detail.columnHeaders) {
+        columns.value = buildColumnsFromTemplate(detail)
+        rows.value = buildRowsFromTemplate(detail)
+        cellData.value = buildCellDataFromTemplate(detail, detail.cells || [])
+      } else if (detail.cells && detail.cells.length > 0) {
+        initCellDataFromDetail(detail.cells)
+      }
+      showReviewBanner.value = detail.status === 'rejected'
+    }
+  } catch {
+    useMockData(submitId.value)
+  }
+}
+
+function useMockData(id) {
   entryDetail.value = {
-    submitId, reportId: 1, reportName: '月度销售报表', reportCode: 'SALES-202607',
+    submitId: id, reportId: 1, reportName: '月度销售报表', reportCode: 'SALES-202607',
     period: '2026年7月', deadline: '2026-07-31', status: 'filling', category: 'sales',
     creatorName: '张三', progress: 60, reviewOpinion: '', reviewItems: [],
     cells: mockCells,
   }
-  initCellData()
+  columns.value = [
+    { index: 0, label: '部门', width: 120 },
+    { index: 1, label: '产品', width: 120 },
+    { index: 2, label: '销售额', width: 150, fieldType: 'amount' },
+    { index: 3, label: '成本', width: 150, fieldType: 'amount' },
+    { index: 4, label: '利润', width: 150 },
+  ]
+  rows.value = [
+    { index: 0, label: '' },
+    { index: 1, label: '1' },
+    { index: 2, label: '2' },
+    { index: 3, label: '3' },
+    { index: 4, label: '合计' },
+  ]
+  initCellDataFromDetail(mockCells)
 }
 
 const mockCells = [
@@ -278,7 +407,7 @@ const mockCells = [
   { rowIndex: 0, colIndex: 1, value: '产品', cellType: 'string', isFormula: false, isLocked: true },
   { rowIndex: 0, colIndex: 2, value: '销售额', cellType: 'number', isFormula: false, isLocked: true },
   { rowIndex: 0, colIndex: 3, value: '成本', cellType: 'number', isFormula: false, isLocked: true },
-  { rowIndex: 0, colIndex: 4, value: '利润', cellType: 'number', isFormula: true, isLocked: true },
+  { rowIndex: 0, colIndex: 4, value: '利润', cellType: 'number', isFormula: false, isLocked: true },
   { rowIndex: 1, colIndex: 0, value: '华东区', cellType: 'string', isFormula: false, isLocked: false },
   { rowIndex: 1, colIndex: 1, value: 'A产品', cellType: 'string', isFormula: false, isLocked: false },
   { rowIndex: 1, colIndex: 2, value: '125000', cellType: 'number', isFormula: false, isLocked: false },
@@ -301,29 +430,45 @@ const mockCells = [
   { rowIndex: 4, colIndex: 4, value: '73000', cellType: 'number', isFormula: true, isLocked: true },
 ]
 
-function initCellData() {
+function initCellDataFromDetail(cells) {
   cellData.value = {}
-  if (entryDetail.value.cells) {
-    entryDetail.value.cells.forEach(cell => {
+  if (cells) {
+    cells.forEach(cell => {
       const key = `${cell.rowIndex}-${cell.colIndex}`
       cellData.value[key] = { ...cell }
     })
   }
 }
 
+async function loadEntryDetail() {
+  if (mode.value === 'create') {
+    await loadByTemplate()
+  } else {
+    await loadBySubmit()
+  }
+}
+
 async function loadHistory() {
+  if (mode.value === 'create') {
+    historyList.value = []
+    return
+  }
   try {
     const result = await getEntryHistory(entryDetail.value.submitId)
-    if (result) historyList.value = result
+    if (result) historyList.value = result?.data || result
   } catch {
     historyList.value = mockHistory()
   }
 }
 
 async function loadAttachments() {
+  if (mode.value === 'create') {
+    attachments.value = []
+    return
+  }
   try {
     const result = await getAttachments(entryDetail.value.submitId)
-    if (result) attachments.value = result
+    if (result) attachments.value = result?.data || result
   } catch {
     attachments.value = mockAttachments()
   }
@@ -346,7 +491,6 @@ function mockAttachments() {
   ]
 }
 
-// ---- Cell Operations ----
 function handleCellChange({ row, col, value }) {
   const key = `${row}-${col}`
   if (!cellData.value[key]) {
@@ -361,10 +505,7 @@ function handleCellChange({ row, col, value }) {
 }
 
 function recalcFormulas() {
-  // Simple formula calculation - in production, integrate FormulaEngine from services/formula
   const getVal = (r, c) => parseFloat(cellData.value[`${r}-${c}`]?.value || '0') || 0
-
-  // Row formulas
   for (let r = 1; r < rows.value.length - 1; r++) {
     const sales = getVal(r, 2); const cost = getVal(r, 3)
     const key = `${r}-4`
@@ -373,8 +514,6 @@ function recalcFormulas() {
     }
     cellData.value[key].value = String(sales - cost)
   }
-
-  // Totals
   let totalSales = 0, totalCost = 0
   for (let r = 1; r < rows.value.length - 1; r++) { totalSales += getVal(r, 2); totalCost += getVal(r, 3) }
   const totalRow = rows.value.length - 1
@@ -389,12 +528,8 @@ function handleSheetNavigate({ action }) {
 
 function handleLocateError(err) {
   activePanel.value = 'spreadsheet'
-  if (err.row !== undefined && err.col !== undefined) {
-    // Scrolling to cell is handled by Spreadsheet component
-  }
 }
 
-// ---- Save ----
 async function handleSave() {
   if (isSaving.value) return
   isSaving.value = true
@@ -403,23 +538,32 @@ async function handleSave() {
       rowIndex: cell.rowIndex, colIndex: cell.colIndex,
       value: cell.value, cellType: cell.cellType, isFormula: cell.isFormula,
     }))
-    await saveDraft({ submitId: entryDetail.value.submitId, reportId: entryDetail.value.reportId, cells, status: 'filling' })
+    const res = await saveDraft({
+      submitId: entryDetail.value.submitId,
+      reportId: entryDetail.value.reportId,
+      templateId: templateId.value,
+      cells,
+      status: 'filling',
+    })
+    const resData = res?.data || res
+    if (resData?.submitId && !entryDetail.value.submitId) {
+      entryDetail.value.submitId = resData.submitId
+      submitId.value = resData.submitId
+    }
     isSaved.value = true
     lastSavedTime.value = Date.now()
     entryDetail.value.status = 'filling'
   } catch {
-    // Silent fail - data is in local state
   } finally {
     isSaving.value = false
   }
 }
 
-// ---- Validation ----
 async function handleValidate() {
   const cells = Object.values(cellData.value)
   try {
     const result = await validateData({ submitId: entryDetail.value.submitId, reportId: entryDetail.value.reportId, cells })
-    validationErrorObjects.value = result || []
+    validationErrorObjects.value = result?.data || result || []
   } catch {
     validationErrorObjects.value = runClientValidation()
   }
@@ -442,7 +586,6 @@ function runClientValidation() {
   return errors
 }
 
-// ---- Submit ----
 function handleSubmit() {
   if (validationErrorObjects.value.length > 0) {
     handleValidate()
@@ -459,11 +602,9 @@ async function confirmSubmit() {
     showSubmitConfirm.value = false
     router.push('/entry')
   } catch {
-    // Handle error
   }
 }
 
-// ---- Import/Export ----
 function handleFileChange(file) {
   importFile.value = file
 }
@@ -479,6 +620,10 @@ function beforeUpload(file) {
 
 async function confirmImport() {
   if (!importFile.value?.raw) return
+  if (!entryDetail.value.submitId) {
+    ElMessage.warning('请先保存后再导入数据')
+    return
+  }
   isImporting.value = true
   try {
     await importFromExcel(entryDetail.value.submitId, importFile.value.raw)
@@ -493,15 +638,22 @@ async function confirmImport() {
 }
 
 function handleExport() {
-  exportToExcel(entryDetail.value.submitId)
+  if (entryDetail.value.submitId) {
+    exportToExcel(entryDetail.value.submitId)
+  } else {
+    ElMessage.warning('请先保存后再导出')
+  }
 }
 
 function handleRefresh() {
   loadEntryDetail()
 }
 
-// ---- Attachments ----
 function handleUpload() {
+  if (!entryDetail.value.submitId) {
+    ElMessage.warning('请先保存后再上传附件')
+    return
+  }
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.pdf,.xlsx,.xls,.docx,.doc,.jpg,.png,.gif'
@@ -510,7 +662,7 @@ function handleUpload() {
     if (!file) return
     try {
       const result = await uploadAttachment(entryDetail.value.submitId, file)
-      if (result) attachments.value.push(result)
+      if (result) attachments.value.push(result?.data || result)
       ElMessage.success('上传成功')
     } catch {
       ElMessage.error('上传失败')
@@ -533,17 +685,16 @@ async function handleDeleteAttachment(att) {
   }
 }
 
-// ---- History ----
 function formatDateTime(d) { return d ? new Date(d).toLocaleString('zh-CN') : '' }
 function getOperationText(type) {
   const map = { save: '保存了', edit: '修改了', submit: '提交了', review: '审核了', approve: '通过了', reject: '退回了' }
   return map[type] || type
 }
 
-// ---- Navigation ----
-function handleBack() { router.push('/entry') }
+function handleBack() {
+  navigateBack('/entry')
+}
 
-// ---- Auto Save ----
 function startAutoSave() {
   autoSaveTimer = setInterval(() => {
     if (!isSaved.value && !isSaving.value) handleSave()
@@ -554,8 +705,19 @@ function stopAutoSave() {
   if (autoSaveTimer) { clearInterval(autoSaveTimer); autoSaveTimer = null }
 }
 
-// ---- Lifecycle ----
+function detectMode() {
+  const path = route.path
+  if (path.startsWith('/report/')) {
+    mode.value = 'create'
+    templateId.value = route.params.templateId
+  } else {
+    mode.value = 'edit'
+    submitId.value = route.params.submitId
+  }
+}
+
 onMounted(() => {
+  detectMode()
   loadEntryDetail()
   loadHistory()
   loadAttachments()
@@ -577,7 +739,6 @@ watch(activePanel, (p) => { if (p === 'validation') handleValidate() })
   padding: var(--app-space-4); overflow: hidden; min-height: 0;
 }
 
-/* History Dialog */
 .de-history-list { max-height: 320px; overflow: auto; }
 .de-history-item { padding: var(--app-space-3) 0; border-bottom: 1px solid var(--app-border-light); }
 .de-history-item:last-child { border-bottom: none; }
@@ -588,7 +749,6 @@ watch(activePanel, (p) => { if (p === 'validation') handleValidate() })
 .de-history-detail { color: var(--app-text-secondary); }
 .de-history-empty { text-align: center; padding: var(--app-space-10); color: var(--app-text-muted); font-size: 14px; }
 
-/* Review Dialog */
 .de-review-dialog { text-align: center; }
 .de-review-dialog-icon { margin-bottom: var(--app-space-4); }
 .de-review-dialog-reason { font-size: 15px; color: var(--app-text-primary); margin: 0 0 var(--app-space-4); line-height: 1.6; }
@@ -598,7 +758,6 @@ watch(activePanel, (p) => { if (p === 'validation') handleValidate() })
 .de-review-dialog-items li { margin-bottom: 4px; }
 .de-review-dialog-hint { font-size: 13px; color: var(--app-text-muted); margin: var(--app-space-4) 0 0; }
 
-/* Submit Confirm */
 .de-submit-confirm { text-align: center; }
 .de-submit-icon { margin-bottom: var(--app-space-4); }
 .de-submit-title { font-size: 16px; font-weight: 600; color: var(--app-text-primary); margin: 0 0 var(--app-space-2); }
@@ -611,7 +770,6 @@ watch(activePanel, (p) => { if (p === 'validation') handleValidate() })
 }
 .de-submit-remark:focus { border-color: var(--app-primary); }
 
-/* Import Dialog */
 .de-import-dialog { padding: var(--app-space-4) 0; }
 .de-import-tips { margin-top: var(--app-space-3); font-size: 12px; color: var(--app-text-muted); display: flex; gap: var(--app-space-2); justify-content: center; }
 </style>

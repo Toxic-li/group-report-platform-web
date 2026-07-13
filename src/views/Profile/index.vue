@@ -353,7 +353,7 @@ watch(() => route.path, () => {
   }
 
   &.active {
-    background: rgba(22, 119, 255, 0.08);
+    background: rgba(37, 99, 235, 0.08);
     color: var(--primary-500);
     font-weight: 500;
   }

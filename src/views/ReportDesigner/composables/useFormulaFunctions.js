@@ -136,7 +136,7 @@ export function useFormulaFunctions(showNotification) {
   function getCategoryColor(category) {
     const colors = {
       '聚合函数': '#00B578',
-      '数学函数': '#1677FF',
+      '数学函数': '#2563EB',
       '逻辑函数': '#8b5cf6',
       '时间分析': '#FFB020',
       '文本函数': '#06b6d4',

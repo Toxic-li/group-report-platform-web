@@ -1,112 +1,158 @@
-// Pixso Design Tokens for Report Designer
-// Extracted from Frame41.vue / Frame4436.vue
+// ============================================================
+// Report Designer 2.0 — Design Tokens
+// Figma 80% + Excel 15% + AI Copilot 5%
+// ============================================================
 
-// ==================== Colors ====================
-// Primary
-$dg-primary: #1264E8;
-$dg-primary-dark: #0D52C0;
-$dg-primary-light: #E8F0FE;
+// ==================== Primary Colors ====================
+$dg-primary: #2563EB;
+$dg-primary-dark: #0958D9;
+$dg-primary-light: #E6F0FF;
 $dg-primary-lighter: #F0F5FF;
-$dg-primary-border: #BFCCFF;
+$dg-primary-border: #91CAFF;
 
-// Backgrounds
+// ==================== AI Accent ====================
+$dg-ai-primary: #722ED1;
+$dg-ai-light: #F9F0FF;
+$dg-ai-border: #D3ADF7;
+$dg-ai-gradient: linear-gradient(135deg, #722ED1, #2563EB);
+
+// ==================== Backgrounds ====================
 $dg-bg: #FFFFFF;
-$dg-bg-page: #F5F6F8;
+$dg-bg-page: #F7F8FA;
 $dg-bg-panel: #FFFFFF;
-$dg-bg-secondary: #F0F5FF;
-$dg-bg-hover: #F0F5FF;
-$dg-bg-selected: #E8F0FE;
-$dg-bg-row-alt: #FAFAFA;
-$dg-bg-input: #F5F6F8;
-$dg-bg-header: #F5F6F8;
-$dg-bg-divider: #E4E6EB;
+$dg-bg-secondary: #F5F7FA;
+$dg-bg-hover: #F5F7FF;
+$dg-bg-selected: #E6F0FF;
+$dg-bg-row-alt: #FAFBFC;
+$dg-bg-input: #F7F8FA;
+$dg-bg-header: #F5F7FA;
+$dg-bg-divider: #E8EAED;
+$dg-bg-canvas: #ECEEF0;       // 画布背景（Excel 风格浅灰）
+$dg-bg-pivot-row: #F5F8FF;    // 透视区 - 行
+$dg-bg-pivot-col: #F6FFED;    // 透视区 - 列
+$dg-bg-pivot-value: #FAF5FF;  // 透视区 - 值
+$dg-bg-pivot-filter: #FFF7F5; // 透视区 - 过滤
 
-// Status
+// ==================== Status Colors ====================
 $dg-success: #52C41A;
 $dg-success-bg: #F0FFF4;
+$dg-success-border: #B7EB8F;
 $dg-error: #F04438;
 $dg-error-bg: #FFF5F5;
+$dg-error-border: #FFCCC7;
 $dg-warning: #FAAD14;
 $dg-warning-bg: #FFFBF0;
-$dg-info: #1264E8;
+$dg-warning-border: #FFE58F;
+$dg-info: #2563EB;
 
-// Text
+// ==================== Text ====================
 $dg-text-heading: #1A1A2E;
 $dg-text-primary: #3C3C4E;
 $dg-text-secondary: #6B7280;
 $dg-text-placeholder: #9CA3AF;
+$dg-text-disabled: #BFBFBF;
 $dg-text-inverse: #FFFFFF;
-$dg-text-link: #1264E8;
+$dg-text-link: #2563EB;
 
-// Borders
-$dg-border: #E4E6EB;
+// ==================== Borders ====================
+$dg-border: #E8EAED;
 $dg-border-strong: #D9DCE3;
-$dg-border-focus: #1264E8;
+$dg-border-focus: #2563EB;
 $dg-border-success: #52C41A;
+$dg-border-dashed: #D9D9D9;
+
+// ==================== Snapping & Guides ====================
+$dg-guide-color: #2563EB;
+$dg-guide-glow: rgba(37, 99, 235, 0.25);
 
 // ==================== Typography ====================
-$dg-font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-$dg-font-regular: "Noto Sans SC-Regular", $dg-font-family;
-$dg-font-medium: "Noto Sans SC-Medium", $dg-font-family;
-$dg-font-semibold: "Noto Sans SC-SemiBold", $dg-font-family;
-$dg-font-bold: "Noto Sans SC-Bold", $dg-font-family;
+$dg-font-family: "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+$dg-font-mono: "JetBrains Mono", "Roboto Mono", "SF Mono", "Cascadia Code", monospace;
+$dg-font-number: "DIN Alternate", "Inter", sans-serif;
 
-$dg-font-size-xs: 11px;
-$dg-font-size-sm: 12px;
-$dg-font-size-base: 13px;
-$dg-font-size-md: 14px;
-$dg-font-size-lg: 16px;
-$dg-font-size-xl: 22px;
+$dg-font-regular: "Noto Sans SC", $dg-font-family;
+$dg-font-medium: "Noto Sans SC", $dg-font-family;
+$dg-font-semibold: "Noto Sans SC", $dg-font-family;
+$dg-font-bold: "Noto Sans SC", $dg-font-family;
 
-// ==================== Spacing ====================
+$dg-font-size-xs: 10px;
+$dg-font-size-sm: 11px;
+$dg-font-size-base: 12px;
+$dg-font-size-md: 13px;
+$dg-font-size-lg: 14px;
+$dg-font-size-xl: 16px;
+$dg-font-size-2xl: 20px;
+
+$dg-font-weight-regular: 400;
+$dg-font-weight-medium: 500;
+$dg-font-weight-semibold: 600;
+$dg-font-weight-bold: 700;
+
+// ==================== Spacing (8px grid) ====================
+$dg-spacing-2xs: 2px;
 $dg-spacing-xs: 4px;
-$dg-spacing-sm: 8px;
-$dg-spacing-md: 12px;
-$dg-spacing-lg: 16px;
-$dg-spacing-xl: 20px;
-$dg-spacing-xxl: 24px;
+$dg-spacing-sm: 6px;
+$dg-spacing-md: 8px;
+$dg-spacing-lg: 12px;
+$dg-spacing-xl: 16px;
+$dg-spacing-2xl: 20px;
+$dg-spacing-3xl: 24px;
+$dg-spacing-4xl: 32px;
 
 // ==================== Layout Sizes ====================
 // Heights
-$dg-header-height: 48px;
-$dg-menubar-height: 32px;
-$dg-toolbar-height: 36px;
-$dg-formula-bar-height: 28px;
-$dg-sheet-tabs-height: 36px;
-$dg-footer-height: 36px;
+$dg-header-height: 56px;           // 顶部品牌栏
+$dg-ribbon-height: 36px;           // Ribbon 工具栏
+$dg-formula-bar-height: 28px;      // 公式栏
+$dg-footer-height: 32px;           // 底部状态栏（精简）
 
 // Widths
-$dg-sidebar-width: 200px;
-$dg-sidebar-collapsed-width: 48px;
-$dg-props-width: 240px;
-$dg-props-collapsed-width: 48px;
-$dg-formula-panel-height: 200px;
+$dg-sidebar-width: 280px;          // 左侧数据面板
+$dg-sidebar-collapsed-width: 40px;
+$dg-props-width: 300px;            // 右侧属性面板
+$dg-props-collapsed-width: 40px;
+$dg-pivot-height: 72px;            // 透视设计器高度
 
 // Table
 $dg-table-header-height: 24px;
-$dg-table-row-height: 28px;
-$dg-row-number-width: 36px;
-$dg-row-label-width: 120px;
-$dg-col-width-default: 90px;
+$dg-table-row-height: 24px;
+$dg-row-number-width: 48px;
+$dg-col-width-default: 100px;
 
-// ==================== Borders ====================
-$dg-radius-xs: 1px;
-$dg-radius-sm: 3px;
-$dg-radius-md: 4px;
-$dg-radius-lg: 6px;
-$dg-radius-xl: 11px;
-$dg-radius-pill: 14px;
+// ==================== Border Radius ====================
+$dg-radius-xs: 3px;
+$dg-radius-sm: 5px;
+$dg-radius-md: 6px;
+$dg-radius-lg: 8px;
+$dg-radius-xl: 10px;
+$dg-radius-2xl: 12px;
+$dg-radius-pill: 20px;
+$dg-radius-full: 9999px;
 
 // ==================== Shadows ====================
-$dg-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-$dg-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.08);
-$dg-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-$dg-shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.1);
+$dg-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+$dg-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+$dg-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+$dg-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.10);
+$dg-shadow-xl: 0 12px 40px rgba(0, 0, 0, 0.12);
+$dg-shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.10);
+$dg-shadow-focus: 0 0 0 2px rgba(37, 99, 235, 0.15);
+$dg-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(0, 0, 0, 0.06);
+
+// ==================== Transitions ====================
+$dg-transition-fast: 0.12s ease;
+$dg-transition-base: 0.15s ease;
+$dg-transition-smooth: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+$dg-transition-slow: 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 
 // ==================== Z-Index ====================
 $dg-z-sidebar: 10;
 $dg-z-header: 20;
+$dg-z-canvas-header: 30;
+$dg-z-canvas-tooltip: 50;
+$dg-z-guide: 100;
 $dg-z-dropdown: 100;
+$dg-z-overlay: 500;
 $dg-z-context-menu: 1000;
 $dg-z-dialog: 10000;
 $dg-z-toast: 99999;

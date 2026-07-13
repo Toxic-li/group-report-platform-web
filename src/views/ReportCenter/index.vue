@@ -36,10 +36,10 @@
         </el-select>
         <el-select v-model="filterStatus" placeholder="状态" style="width: 110px" size="default" clearable>
           <el-option label="草稿" value="draft"/>
-          <el-option label="已发布" value="published"/>
-          <el-option label="填报中" value="filling"/>
-          <el-option label="审核中" value="reviewing"/>
-          <el-option label="已完成" value="completed"/>
+          <el-option label="已提交" value="submitted"/>
+          <el-option label="已通过" value="approved"/>
+          <el-option label="已退回" value="rejected"/>
+          <el-option label="已撤回" value="withdrawn"/>
         </el-select>
         <el-select v-model="filterCreator" placeholder="创建人" style="width: 110px" size="default" clearable>
           <el-option label="我创建的" value="me"/>
@@ -90,7 +90,7 @@
           <!-- Category Icon (SVG) -->
           <div class="card-icon" :class="report.category" v-html="getCategoryIcon(report.category)"></div>
 
-          <h3 class="card-title">{{ report.name }}</h3>
+          <h3 class="card-title" :title="report.name || report.templateName || report.code">{{ report.name || report.templateName || report.code || '未命名报表' }}</h3>
           <p class="card-code">{{ report.code }}</p>
           <p class="card-desc">{{ report.description }}</p>
 
@@ -112,10 +112,13 @@
 
           <!-- Hover Actions: 打开/填报/查看/更多 -->
           <div class="card-actions">
-            <button class="action-btn" @click.stop="handleViewReport(report)">
-              {{ report.type === 'entry' ? '填报' : '查看' }}
+            <button v-if="report.type === 'entry' || report.status === 'draft' || report.status === 'rejected'" class="action-btn" @click.stop="handleFillReport(report)">
+              填报
             </button>
-            <button class="action-btn action-btn--ghost" @click.stop="handleViewReport(report)">打开</button>
+            <button v-else class="action-btn" @click.stop="handleViewReport(report)">
+              查看
+            </button>
+            <button class="action-btn action-btn--ghost" @click.stop="handleOpenReport(report)">打开</button>
             <el-dropdown trigger="click" @command="(cmd) => handleCardAction(cmd, report)">
               <button class="action-more" @click.stop title="更多操作">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
@@ -137,10 +140,6 @@
                   <el-dropdown-item command="export">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     导出
-                  </el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/></svg>
-                    删除
                   </el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -277,11 +276,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { queryReports, queryMyReports, queryFavoriteReports, toggleFavorite } from '@/api/reportCenter'
+import { queryReports, queryMyReports, queryFavoriteReports, queryRecentReports, toggleFavorite, countFavorites, countRecentViews, countMyReports, countReports, recordRecentView } from '@/api/reportCenter'
 
+const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
@@ -340,17 +340,38 @@ function onKeydown(e) {
   }
 }
 
-onMounted(() => { loadReports(); document.addEventListener('keydown', onKeydown) })
+function getTabFromRoute(path) {
+  if (path.endsWith('/my-reports')) return 'my'
+  if (path.endsWith('/favorites')) return 'favorites'
+  if (path.endsWith('/recent')) return 'recent'
+  return 'all'
+}
+
+watch(() => route.path, (newPath) => {
+  const tabId = getTabFromRoute(newPath)
+  if (activeTab.value !== tabId) {
+    activeTab.value = tabId
+    currentPage.value = 1
+    loadReports()
+  }
+})
+
+onMounted(async () => {
+  activeTab.value = getTabFromRoute(route.path)
+  await loadReports()
+  await refreshAllTabCounts()
+  document.addEventListener('keydown', onKeydown)
+})
 onUnmounted(() => { document.removeEventListener('keydown', onKeydown) })
 
 const mockReports = [
-  { id: 1, name: '月度销售报表', code: 'SALES-202607', description: '用于统计月度销售数据和趋势分析', type: 'statistics', status: 'published', creatorName: '张三', updatedAt: '2026-07-15', useCount: 128, isFavorite: true, category: 'sales' },
-  { id: 2, name: '财务费用报表', code: 'FIN-202607', description: '用于统计财务费用支出情况', type: 'statistics', status: 'published', creatorName: '李四', updatedAt: '2026-07-14', useCount: 86, isFavorite: false, category: 'finance' },
-  { id: 3, name: '人事考勤报表', code: 'HR-202607', description: '用于统计员工月度考勤情况', type: 'entry', status: 'filling', creatorName: '王五', updatedAt: '2026-07-13', useCount: 256, isFavorite: true, category: 'hr' },
+  { id: 1, name: '月度销售报表', code: 'SALES-202607', description: '用于统计月度销售数据和趋势分析', type: 'statistics', status: 'approved', creatorName: '张三', updatedAt: '2026-07-15', useCount: 128, isFavorite: true, category: 'sales' },
+  { id: 2, name: '财务费用报表', code: 'FIN-202607', description: '用于统计财务费用支出情况', type: 'statistics', status: 'approved', creatorName: '李四', updatedAt: '2026-07-14', useCount: 86, isFavorite: false, category: 'finance' },
+  { id: 3, name: '人事考勤报表', code: 'HR-202607', description: '用于统计员工月度考勤情况', type: 'entry', status: 'submitted', creatorName: '王五', updatedAt: '2026-07-13', useCount: 256, isFavorite: true, category: 'hr' },
   { id: 4, name: '生产产量报表', code: 'PROD-202607', description: '用于统计生产车间产量数据', type: 'statistics', status: 'draft', creatorName: '赵六', updatedAt: '2026-07-12', useCount: 45, isFavorite: false, category: 'production' },
-  { id: 5, name: '采购成本报表', code: 'PUR-202607', description: '用于统计采购成本明细', type: 'statistics', status: 'reviewing', creatorName: '张三', updatedAt: '2026-07-11', useCount: 67, isFavorite: false, category: 'finance' },
-  { id: 6, name: '库存盘点报表', code: 'INV-202607', description: '用于库存盘点和管理', type: 'entry', status: 'published', creatorName: '李四', updatedAt: '2026-07-10', useCount: 134, isFavorite: false, category: 'other' },
-  { id: 7, name: '员工薪资报表', code: 'HR-SAL-202607', description: '员工薪资发放统计', type: 'statistics', status: 'completed', creatorName: '王五', updatedAt: '2026-07-09', useCount: 98, isFavorite: false, category: 'hr' },
+  { id: 5, name: '采购成本报表', code: 'PUR-202607', description: '用于统计采购成本明细', type: 'statistics', status: 'submitted', creatorName: '张三', updatedAt: '2026-07-11', useCount: 67, isFavorite: false, category: 'finance' },
+  { id: 6, name: '库存盘点报表', code: 'INV-202607', description: '用于库存盘点和管理', type: 'entry', status: 'approved', creatorName: '李四', updatedAt: '2026-07-10', useCount: 134, isFavorite: false, category: 'other' },
+  { id: 7, name: '员工薪资报表', code: 'HR-SAL-202607', description: '员工薪资发放统计', type: 'statistics', status: 'approved', creatorName: '王五', updatedAt: '2026-07-09', useCount: 98, isFavorite: false, category: 'hr' },
   { id: 8, name: '客户回款报表', code: 'SALES-RCV-202607', description: '客户回款情况统计', type: 'statistics', status: 'draft', creatorName: '赵六', updatedAt: '2026-07-08', useCount: 34, isFavorite: false, category: 'sales' },
 ]
 
@@ -361,17 +382,26 @@ async function loadReports() {
     let result
     if (activeTab.value === 'my') result = await queryMyReports(params)
     else if (activeTab.value === 'favorites') result = await queryFavoriteReports(params)
+    else if (activeTab.value === 'recent') result = await queryRecentReports(params)
     else if (['finance', 'hr', 'sales', 'production'].includes(activeTab.value)) { params.category = activeTab.value; result = await queryReports(params) }
     else result = await queryReports(params)
 
-    if (result?.records) { reports.value = result.records; totalCount.value = result.total }
-    else { console.warn('[ReportCenter] API 返回空数据，使用模拟数据'); reports.value = mockReports; totalCount.value = mockReports.length }
-  } catch (e) { console.error('[ReportCenter] 加载报表失败:', e.message || e); reports.value = mockReports; totalCount.value = mockReports.length }
-  finally { loading.value = false; updateTabCounts() }
+    if (result?.records) {
+      reports.value = result.records.map(r => ({
+        ...r,
+        name: r.name || r.templateName || r.reportName || r.title || '',
+        code: r.code || r.templateCode || r.reportCode || '',
+        description: r.description || r.remark || r.summary || '',
+      }))
+      totalCount.value = result.total
+    }
+    else { reports.value = []; totalCount.value = 0 }
+  } catch (e) { console.error('[ReportCenter] 加载报表失败:', e.message || e); reports.value = []; totalCount.value = 0 }
+  finally { loading.value = false; updateTabCounts(); refreshAllTabCounts() }
 }
 
 function getStatusText(status) {
-  return { draft: '草稿', published: '已发布', filling: '填报中', reviewing: '审核中', completed: '已完成', disabled: '已停用' }[status] || status
+  return { draft: '草稿', submitted: '已提交', approved: '已通过', rejected: '已退回', withdrawn: '已撤回' }[status] || status
 }
 
 function getCategoryIcon(category) {
@@ -387,31 +417,128 @@ function handleReset() { searchKeyword.value = ''; filterCategory.value = ''; fi
 function handlePageChange(page) { currentPage.value = page; loadReports() }
 
 async function toggleFavoriteReport(report) {
-  try { await toggleFavorite(report.id); report.isFavorite = !report.isFavorite; updateTabCounts() }
-  catch { report.isFavorite = !report.isFavorite }
+  const newVal = !report.isFavorite
+  try {
+    await toggleFavorite(report.id)
+    report.isFavorite = newVal
+    refreshAllTabCounts()
+    if (activeTab.value === 'favorites') {
+      loadReports()
+    }
+    ElMessage.success(newVal ? '已收藏' : '已取消收藏')
+  } catch (e) {
+    ElMessage.error('操作失败，请重试')
+  }
 }
 
 function updateTabCounts() {
   categoryTabs.value = categoryTabs.value.map(tab => {
-    if (tab.id === 'all') return { ...tab, count: reports.value.length }
-    if (tab.id === 'my') return { ...tab, count: reports.value.filter(r => r.creatorName === '张三').length }
-    if (tab.id === 'favorites') return { ...tab, count: reports.value.filter(r => r.isFavorite).length }
+    if (tab.id === activeTab.value) {
+      return { ...tab, count: totalCount.value }
+    }
+    if (['all', 'my', 'favorites', 'recent'].includes(tab.id)) {
+      return tab
+    }
     return { ...tab, count: reports.value.filter(r => r.category === tab.id).length }
   })
 }
 
-function handleViewReport(report) { router.push('/report/' + report.id) }
+async function refreshFavoriteCount() {
+  try {
+    const result = await countFavorites()
+    categoryTabs.value = categoryTabs.value.map(tab => {
+      if (tab.id === 'favorites') return { ...tab, count: result.data || 0 }
+      return tab
+    })
+  } catch (e) {
+    console.warn('[ReportCenter] 获取收藏数量失败:', e)
+  }
+}
+
+async function refreshRecentCount() {
+  try {
+    const result = await countRecentViews()
+    categoryTabs.value = categoryTabs.value.map(tab => {
+      if (tab.id === 'recent') return { ...tab, count: result.data || 0 }
+      return tab
+    })
+  } catch (e) {
+    console.warn('[ReportCenter] 获取最近访问数量失败:', e)
+  }
+}
+
+async function refreshAllTabCounts() {
+  try {
+    const [allCount, myCount, favCount, recentCount] = await Promise.all([
+      countReports(),
+      countMyReports(),
+      countFavorites(),
+      countRecentViews()
+    ])
+    categoryTabs.value = categoryTabs.value.map(tab => {
+      if (tab.id === 'all') return { ...tab, count: allCount.data || 0 }
+      if (tab.id === 'my') return { ...tab, count: myCount.data || 0 }
+      if (tab.id === 'favorites') return { ...tab, count: favCount.data || 0 }
+      if (tab.id === 'recent') return { ...tab, count: recentCount.data || 0 }
+      return tab
+    })
+  } catch (e) {
+    console.warn('[ReportCenter] 获取 tab 数量失败:', e)
+  }
+}
+
+function handleViewReport(report) { router.push({ path: '/report/' + report.id, query: { mode: 'view' } }) }
+function handleFillReport(report) { router.push({ path: '/report/' + report.id, query: { mode: 'edit' } }) }
+function handleOpenReport(report) { router.push({ path: '/report/' + report.id, query: { mode: 'view' } }) }
 function handleEditReport(report) { router.push('/designer/' + report.code) }
-function handleTabClick(tabId) { activeTab.value = tabId; currentPage.value = 1; loadReports() }
+function handleTabClick(tabId) {
+  activeTab.value = tabId
+  currentPage.value = 1
+  const pathMap = {
+    all: '/report-center',
+    my: '/report-center/my-reports',
+    favorites: '/report-center/favorites',
+    recent: '/report-center/recent'
+  }
+  if (pathMap[tabId] && route.path !== pathMap[tabId]) {
+    router.replace(pathMap[tabId])
+  } else {
+    loadReports()
+  }
+}
+
+async function handleExportReport(report) {
+  try {
+    const url = `/report-designer/export/service/excel?templateId=${report.id}`
+    const response = await fetch(url, { method: 'GET', credentials: 'include' })
+    if (!response.ok) {
+      throw new Error(`导出失败: ${response.status}`)
+    }
+    const blob = await response.blob()
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `${report.name || report.code}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败: ' + (e.message || e))
+  }
+}
 
 function handleCardAction(command, report) {
   switch (command) {
     case 'favorite': toggleFavoriteReport(report); break
-    case 'share': ElMessage.info('分享功能开发中'); break
-    case 'versions': router.push('/designer/versions?code=' + report.code); break
-    case 'export': ElMessage.info('导出功能开发中'); break
-    case 'delete': ElMessage.warning('删除功能需要管理员权限'); break
+    case 'share': handleShareReport(report); break
+    case 'versions': router.push('/designer/versions?templateId=' + report.id); break
+    case 'export': handleExportReport(report); break
   }
+}
+
+function handleShareReport(report) {
+  ElMessage.info('分享功能开发中')
 }
 </script>
 
@@ -469,7 +596,7 @@ function handleCardAction(command, report) {
 .card-icon.production { background: var(--app-warning-bg); color: var(--app-warning); }
 .card-icon.other { background: var(--app-surface-hover); color: var(--color-gray-600); }
 
-.card-title { font-size: 16px; font-weight: 600; color: var(--app-text-primary); margin: 0 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 30px; }
+.card-title { font-size: 14px; font-weight: 600; color: var(--app-text-primary); margin: 0 0 4px;text-overflow: ellipsis; white-space: nowrap; padding-right: 30px; max-width: 100%; box-sizing: border-box; line-height: 1.4; }
 .card-code { font-size: 12px; color: var(--app-text-muted); font-family: var(--app-font-family-code); margin: 0 0 8px; }
 .card-desc { font-size: 14px; color: var(--color-gray-600); margin: 0 0 12px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
@@ -478,11 +605,10 @@ function handleCardAction(command, report) {
 /* Status Tags (CSS variables per doc §13) */
 .tag { font-size: 11px; padding: 3px 8px; border-radius: var(--app-radius-xs); font-weight: 500; }
 .tag-draft { background: var(--app-surface-hover); color: var(--color-gray-600); }
-.tag-published { background: var(--app-primary-bg); color: var(--app-primary); }
-.tag-filling { background: var(--app-info-bg); color: var(--app-info); }
-.tag-reviewing { background: var(--app-warning-bg); color: var(--app-warning); }
-.tag-completed { background: var(--app-success-bg); color: var(--app-success); }
-.tag-disabled { background: var(--app-surface-hover); color: var(--app-text-disabled); }
+.tag-submitted { background: var(--app-info-bg); color: var(--app-info); }
+.tag-approved { background: var(--app-success-bg); color: var(--app-success); }
+.tag-rejected { background: var(--app-danger-bg); color: var(--app-danger); }
+.tag-withdrawn { background: var(--app-surface-hover); color: var(--app-text-disabled); }
 .tag-category { background: var(--app-surface-hover); color: var(--app-text-secondary); }
 
 .card-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }

@@ -15,43 +15,63 @@
 
     <div class="content-card">
       <div class="filter-bar">
-        <el-input v-model="filterKeyword" placeholder="搜索模板名称或编号" class="search-input">
+        <el-input v-model="query.name" placeholder="搜索模板名称或编号" class="search-input" clearable @keyup.enter="handleSearch">
           <template #prefix>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </template>
         </el-input>
-        <el-select v-model="filterCategory" placeholder="报表分类" style="width: 140px">
-          <el-option label="全部" value=""/>
-          <el-option label="财务报表" value="finance"/>
-          <el-option label="人事报表" value="hr"/>
-          <el-option label="销售报表" value="sales"/>
-          <el-option label="生产报表" value="production"/>
+        <el-select v-model="query.templateType" placeholder="模板类型" style="width: 140px" clearable @change="handleSearch">
+          <el-option label="统计报表" :value="1" />
+          <el-option label="填报报表" :value="2" />
+          <el-option label="汇总报表" :value="3" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="状态" style="width: 120px">
-          <el-option label="全部" value=""/>
-          <el-option label="启用" value="active"/>
-          <el-option label="禁用" value="disabled"/>
+        <el-select v-model="query.status" placeholder="状态" style="width: 120px" clearable @change="handleSearch">
+          <el-option label="草稿" :value="0" />
+          <el-option label="已发布" :value="1" />
+          <el-option label="已停用" :value="2" />
         </el-select>
+        <el-button type="primary" @click="handleSearch">查询</el-button>
+        <el-button @click="handleReset">重置</el-button>
+        <div class="filter-spacer"></div>
+        <el-button
+          type="danger"
+          :disabled="selectedRows.length === 0"
+          @click="handleBatchDelete"
+        >
+          批量删除{{ selectedRows.length > 0 ? ` (${selectedRows.length})` : '' }}
+        </el-button>
       </div>
 
-      <el-table :data="filteredTemplates" border style="width: 100%">
-        <el-table-column prop="code" label="模板编号" width="140" />
-        <el-table-column prop="name" label="模板名称" width="200" />
-        <el-table-column prop="category" label="分类" width="120">
-          <template #default="{ row }">{{ getCategoryText(row.category) }}</template>
+      <el-table
+        ref="tableRef"
+        v-loading="loading"
+        :data="tableData"
+        border
+        style="width: 100%"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="45" />
+        <el-table-column prop="templateCode" label="模板编号" width="160" />
+        <el-table-column prop="templateName" label="模板名称" width="200" />
+        <el-table-column prop="templateType" label="类型" width="110">
+          <template #default="{ row }">{{ getTypeText(row.templateType) }}</template>
         </el-table-column>
+        <el-table-column prop="version" label="版本" width="80" />
         <el-table-column prop="description" label="描述" min-width="200" />
-        <el-table-column prop="creator" label="创建人" width="100" />
-        <el-table-column prop="createTime" label="创建时间" width="160" />
-        <el-table-column prop="updateTime" label="更新时间" width="160" />
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column prop="createTime" label="创建时间" width="170">
+          <template #default="{ row }">{{ formatDate(row.createTime) }}</template>
+        </el-table-column>
+        <el-table-column prop="updateTime" label="更新时间" width="170">
+          <template #default="{ row }">{{ formatDate(row.updateTime) }}</template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="90">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">
-              {{ row.status === 'active' ? '启用' : '禁用' }}
+            <el-tag :type="getStatusType(row.status)" size="small">
+              {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button text size="small" @click="handlePreview(row)">预览</el-button>
             <el-button text size="small" @click="handleEdit(row)">编辑</el-button>
@@ -60,63 +80,193 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pagination-wrap">
+        <el-pagination
+          v-model:current-page="query.current"
+          v-model:page-size="query.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          background
+          @size-change="fetchList"
+          @current-change="fetchList"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { getTemplateList, copyTemplate, deleteTemplate, batchDeleteTemplates } from '@/api/reportDesigner.js'
 
-const filterKeyword = ref('')
-const filterCategory = ref('')
-const filterStatus = ref('')
+const router = useRouter()
+const loading = ref(false)
+const total = ref(0)
+const tableData = ref([])
+const tableRef = ref(null)
+const selectedRows = ref([])
 
-const templates = ref([
-  { id: 1, code: 'TEMP-001', name: '月度销售报表', category: 'sales', description: '用于统计月度销售数据', creator: '张三', createTime: '2024-01-10 09:00', updateTime: '2024-01-15 14:00', status: 'active' },
-  { id: 2, code: 'TEMP-002', name: '财务费用报表', category: 'finance', description: '用于统计财务费用支出', creator: '李四', createTime: '2024-01-08 10:00', updateTime: '2024-01-12 16:00', status: 'active' },
-  { id: 3, code: 'TEMP-003', name: '人事考勤报表', category: 'hr', description: '用于统计员工考勤情况', creator: '王五', createTime: '2024-01-05 08:00', updateTime: '2024-01-14 11:00', status: 'disabled' },
-  { id: 4, code: 'TEMP-004', name: '生产产量报表', category: 'production', description: '用于统计生产产量数据', creator: '赵六', createTime: '2024-01-03 14:00', updateTime: '2024-01-10 09:00', status: 'active' },
-  { id: 5, code: 'TEMP-005', name: '采购成本报表', category: 'finance', description: '用于统计采购成本', creator: '孙七', createTime: '2024-01-01 16:00', updateTime: '2024-01-08 10:00', status: 'active' }
-])
+function handleSelectionChange(rows) {
+  selectedRows.value = rows
+}
 
-const filteredTemplates = computed(() => {
-  return templates.value.filter(t => {
-    const matchKeyword = !filterKeyword.value || t.name.includes(filterKeyword.value) || t.code.includes(filterKeyword.value)
-    const matchCategory = !filterCategory.value || t.category === filterCategory.value
-    const matchStatus = !filterStatus.value || t.status === filterStatus.value
-    return matchKeyword && matchCategory && matchStatus
-  })
+const query = reactive({
+  name: '',
+  templateType: '',
+  status: '',
+  current: 1,
+  size: 10
 })
 
-function getCategoryText(category) {
-  const texts = {
-    finance: '财务报表',
-    hr: '人事报表',
-    sales: '销售报表',
-    production: '生产报表'
+async function fetchList() {
+  loading.value = true
+  try {
+    const params = {
+      current: query.current,
+      size: query.size
+    }
+    if (query.name) params.name = query.name
+    if (query.templateType !== '' && query.templateType !== null && query.templateType !== undefined) {
+      params.templateType = query.templateType
+    }
+    if (query.status !== '' && query.status !== null && query.status !== undefined) {
+      params.status = query.status
+    }
+    const res = await getTemplateList(params)
+    const data = res?.data || res
+    if (data) {
+      tableData.value = data.records || data.list || []
+      total.value = data.total || 0
+    } else {
+      tableData.value = []
+      total.value = 0
+    }
+  } catch (err) {
+    console.error('获取模板列表失败:', err)
+    ElMessage.error('获取模板列表失败')
+    tableData.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
   }
-  return texts[category] || category
+}
+
+function handleSearch() {
+  query.current = 1
+  fetchList()
+}
+
+function handleReset() {
+  query.name = ''
+  query.templateType = ''
+  query.status = ''
+  query.current = 1
+  fetchList()
+}
+
+function getTypeText(type) {
+  const texts = { 1: '统计报表', 2: '填报报表', 3: '汇总报表' }
+  return texts[type] || '未知'
+}
+
+function getStatusText(status) {
+  const texts = { 0: '草稿', 1: '已发布', 2: '已停用' }
+  return texts[status] || '未知'
+}
+
+function getStatusType(status) {
+  const types = { 0: 'info', 1: 'success', 2: 'danger' }
+  return types[status] || 'info'
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '-'
+  return String(dateStr).replace('T', ' ').substring(0, 19)
 }
 
 function handleCreate() {
-  alert('新建模板')
+  router.push('/designer')
 }
 
 function handlePreview(row) {
-  console.log('预览:', row)
+  router.push(`/designer/templates/${row.id}/preview`)
 }
 
 function handleEdit(row) {
-  console.log('编辑:', row)
+  router.push({ path: '/designer', query: { templateId: row.id } })
 }
 
-function handleCopy(row) {
-  console.log('复制:', row)
+async function handleCopy(row) {
+  try {
+    await ElMessageBox.confirm(`确定复制模板"${row.templateName}"吗？`, '确认复制', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+    const res = await copyTemplate(row.id, row.templateName + ' - 副本')
+    ElMessage.success('复制成功')
+    fetchList()
+  } catch (err) {
+    if (err !== 'cancel') {
+      console.error('复制模板失败:', err)
+      ElMessage.error(err?.message || '复制失败')
+    }
+  }
 }
 
-function handleDelete(row) {
-  console.log('删除:', row)
+async function handleDelete(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除模板"${row.templateName}"吗？`, '确认删除', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await deleteTemplate(row.id)
+    ElMessage.success('删除成功')
+    if (tableData.value.length === 1 && query.current > 1) {
+      query.current--
+    }
+    fetchList()
+  } catch (err) {
+    if (err !== 'cancel') {
+      console.error('删除模板失败:', err)
+      ElMessage.error(err?.message || '删除失败')
+    }
+  }
 }
+
+async function handleBatchDelete() {
+  if (selectedRows.value.length === 0) return
+  const count = selectedRows.value.length
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${count} 个模板吗？此操作不可撤销。`,
+      '批量删除确认',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' }
+    )
+    const ids = selectedRows.value.map(r => r.id)
+    await batchDeleteTemplates(ids)
+    ElMessage.success(`成功删除 ${count} 个模板`)
+    selectedRows.value = []
+    if (tableData.value.length === count && query.current > 1) {
+      query.current--
+    }
+    fetchList()
+  } catch (err) {
+    if (err !== 'cancel') {
+      console.error('批量删除失败:', err)
+      ElMessage.error(err?.message || '批量删除失败')
+    }
+  }
+}
+
+onMounted(() => {
+  fetchList()
+})
 </script>
 
 <style scoped>
@@ -157,9 +307,20 @@ function handleDelete(row) {
   gap: 12px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-spacer {
+  flex: 1;
 }
 
 .search-input {
   width: 280px;
+}
+
+.pagination-wrap {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

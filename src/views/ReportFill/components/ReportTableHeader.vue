@@ -9,11 +9,11 @@
       </colgroup>
       <thead>
         <tr v-for="(hRow, hi) in headerRows" :key="'hr'+hi" :class="'fr-hr-l' + hRow.level">
-          <th class="fr-th fr-th-corner" :class="{ 'fr-th-placeholder': hi > 0 }">
-            <span v-if="hi === 0">#</span>
+          <th v-if="hi === 0" class="fr-th fr-th-corner" :rowspan="headerRows.length || 1">
+            <span>#</span>
           </th>
-          <th class="fr-th fr-th-metric" :class="{ 'fr-th-placeholder': hi > 0 }">
-            <span v-if="hi === 0">指标</span>
+          <th v-if="hi === 0" class="fr-th fr-th-metric" :rowspan="headerRows.length || 1">
+            <span>指标</span>
           </th>
           <template v-for="(cell, ci) in hRow.cells" :key="'hc'+hi+ci">
             <th v-show="!isColHidden(cell.colIdx)" class="fr-th" :class="'fr-th-l' + cell.level"

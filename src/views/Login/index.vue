@@ -498,7 +498,7 @@ onMounted(async () => {
   --primary-50: #EAF4FF;
   --primary-300: #84BEFF;
   --primary-400: #5AA8FF;
-  --primary-500: #1677FF;
+  --primary-500: #2563EB;
   --primary-600: #0958D9;
   --info-500: #18C8FF;
   --success-500: #00B578;
@@ -785,8 +785,8 @@ onMounted(async () => {
   }
 
   &.active {
-    background: rgba(22, 119, 255, 0.1);
-    border-color: rgba(22, 119, 255, 0.3);
+    background: rgba(37, 99, 235, 0.1);
+    border-color: rgba(37, 99, 235, 0.3);
     color: var(--primary-400);
   }
 }
@@ -919,7 +919,7 @@ onMounted(async () => {
 
   &.selected {
     border: 2px solid var(--primary-500);
-    background: rgba(22, 119, 255, 0.1);
+    background: rgba(37, 99, 235, 0.1);
   }
 }
 
@@ -1097,14 +1097,14 @@ onMounted(async () => {
 
   &.active .mock-node-dot {
     background: var(--primary-500);
-    box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.2);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
     animation: pulse-dot 2s ease-in-out infinite;
   }
 }
 
 @keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.2); }
-  50% { box-shadow: 0 0 0 6px rgba(22, 119, 255, 0.1); }
+  0%, 100% { box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.1); }
 }
 
 .mock-node-dot {
@@ -1318,7 +1318,7 @@ onMounted(async () => {
 
   &:focus-within {
     border-color: var(--primary-500);
-    box-shadow: 0 0 0 4px rgba(22, 119, 255, 0.1);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
   }
 }
 
@@ -1449,7 +1449,7 @@ onMounted(async () => {
 
   &:hover:not(:disabled) {
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(22, 119, 255, 0.35);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.35);
   }
 
   &:active:not(:disabled) {

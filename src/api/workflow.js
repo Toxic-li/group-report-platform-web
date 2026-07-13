@@ -4,7 +4,7 @@
  */
 import { get, post } from '@/utils/http'
 
-const WF_BASE = '/workflow'
+const WF_BASE = '/report-designer/workflow'
 
 /** 流程定义列表 */
 export async function getProcessList(params = {}) {

@@ -7,12 +7,17 @@
         :publishing="publishing"
         @save="handleSaveTemplate"
         @saveAs="handleSaveAs"
+        @history="handleHistory"
         @preview="handlePreview"
         @publish="handlePublishTemplate"
+        @share="handleShare"
         @exportExcel="handleExportExcel"
+        @exportPDF="handleExportPDF"
+        @print="handlePrint"
         @templateLibrary="handleTemplateLibrary"
         @toggleFullscreen="toggleFullscreen"
         @toggleHelp="showHelp"
+        @openAI="handleOpenAI"
         @importExcel="handleImportExcel"
       />
 
@@ -29,32 +34,38 @@
         @freezeRows="freezeRows"
         @freezeCols="freezeCols"
         @conditionalFormat="handleConditionalFormat"
+        @addCol="handleAddCol"
+        @addRow="handleAddRow"
+        @deleteCol="handleDeleteCol"
+        @deleteRow="handleDeleteRow"
+        @insertFunction="insertFunction"
+        @showHelp="showHelp"
+        @toggleFullscreen="toggleFullscreen"
+        @showPermission="showPermissionDialog"
+        @showExtension="showExtensionDialog"
+      />
+
+      <!-- 公式栏 -->
+      <FormulaBar
+        v-model:displayValue="formulaBarDisplay"
+        @cancelEdit="cancelEdit"
+        @confirmEdit="commitEditFromBar"
+        @insertFunction="insertFunction"
+        @openFormulaCenter="openFormulaWizard"
       />
 
       <!-- 主工作区 -->
       <div class="main-workspace">
-        <!-- 左侧数据面板 -->
         <DataPanel />
-
-        <!-- 中间区域 -->
         <div class="center-area">
-          <!-- 公式栏 -->
-          <FormulaBar
-            v-model:displayValue="formulaBarDisplay"
-            @cancelEdit="cancelEdit"
-            @confirmEdit="commitEditFromBar"
-            @insertFunction="insertFunction"
-          />
-
-          <!-- 画布 -->
           <ReportCanvas />
         </div>
-
-        <!-- 右侧属性面板 -->
         <PropertyPanel
           @openConditionalFormat="handleConditionalFormat"
           @openPermission="showPermissionDialog"
           @openExtension="showExtensionDialog"
+          @openFormulaCenter="openFormulaWizard"
+          @openAI="handleOpenAI"
         />
       </div>
 
@@ -122,12 +133,32 @@
           <el-button type="primary" @click="confirmSaveAs" :disabled="!saveAsDialog.name || !saveAsDialog.code">保存</el-button>
         </template>
       </el-dialog>
+
+      <!-- 函数选择弹窗 -->
+      <FunctionPickerDialog
+        v-model="showFunctionPicker"
+        @select="handleFunctionSelect"
+      />
+
+      <!-- 公式设计器弹窗 -->
+      <Teleport to="body">
+        <FormulaEditor
+          v-if="formulaWizard.visible"
+          :cell-info="formulaWizard.cellInfo"
+          :initial-value="formulaWizard.initialValue"
+          :row-fields="formulaWizard.rowFields"
+          :col-fields="formulaWizard.colFields"
+          :template-id="template.value?.id"
+          @apply="onFormulaWizardApply"
+          @close="formulaWizard.visible = false"
+        />
+      </Teleport>
     </DesignerProvider>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, provide } from 'vue'
+import { ref, onMounted, watch, provide, nextTick, unref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { loadTemplate, saveTemplate, updateTemplate, publishTemplate } from '@/api/reportDesigner.js'
@@ -139,7 +170,11 @@ import DataPanel from './components/DataPanel.vue'
 import ReportCanvas from './components/ReportCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
 import FormulaBar from './components/FormulaBar.vue'
+import FormulaEditor from '@/components/FormulaEditor.vue'
+import FunctionPickerDialog from './components/FunctionPickerDialog.vue'
 import StatusBar from './components/StatusBar.vue'
+
+import { designerRef } from './composables/useDesigner.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -149,21 +184,29 @@ const saving = ref(false)
 const publishing = ref(false)
 const showTemplateProps = ref(false)
 
+// 公式设计器弹窗状态
+const formulaWizard = ref({
+  visible: false,
+  cellInfo: '',
+  initialValue: '',
+  rowFields: [],
+  colFields: []
+})
+
 const template = ref({
   id: null,
   code: '',
   name: '未命名报表',
-  status: 0,
   version: 1,
+  status: 'draft',
   description: '',
-  templateType: 1,
-  categoryId: null,
-  periodType: 3,
-  auditRequired: 0,
+  periodType: 'month',
+  auditRequired: false,
 })
 
 const autoSaveStatus = ref('saved')
 const formulaBarDisplay = ref('')
+const showFunctionPicker = ref(false)
 
 const saveAsDialog = ref({
   visible: false,
@@ -176,20 +219,206 @@ const saveAsDialog = ref({
 provide('designerTemplate', template)
 provide('designerAutoSave', autoSaveStatus)
 
+// ==================== 公式栏与选中单元格同步 ====================
+// 当选中单元格变化时，更新公式栏显示
+watch(() => {
+  const d = getDesigner()
+  if (!d || !d.selectedRegion) return null
+  if (d.selectedRegion.type === 'cell' && d.selectedRegion.rowNodeId && d.selectedRegion.colNodeId) {
+    return { row: d.selectedRegion.rowNodeId, col: d.selectedRegion.colNodeId }
+  }
+  return null
+}, (sel) => {
+  const d = getDesigner()
+  if (!d || !sel) {
+    formulaBarDisplay.value = ''
+    return
+  }
+  // 优先显示公式表达式，无公式则显示原始值
+  const formula = d.getCellFormula ? d.getCellFormula(sel.row, sel.col) : null
+  if (formula) {
+    formulaBarDisplay.value = formula
+  } else {
+    const raw = d.getCellRawValue ? d.getCellRawValue(sel.row, sel.col) : d.getCellValue(sel.row, sel.col)
+    formulaBarDisplay.value = raw != null ? String(raw) : ''
+  }
+}, { immediate: true })
+
+// ==================== 公式向导 ====================
+
+function openFormulaWizard({ cell, formula }) {
+  const d = getDesigner()
+  if (!d) return
+
+  // unref 安全解包：处理 ref/computed 和已解包的值两种情况
+  let rawRows = unref(d.flatRowTree)
+  if (!Array.isArray(rawRows) || rawRows.length === 0) {
+    const rowTreeVal = unref(d.rowTree) || []
+    if (Array.isArray(rowTreeVal) && rowTreeVal.length > 0) {
+      rawRows = []
+      const flatten = (tree) => {
+        if (!Array.isArray(tree)) return
+        for (const n of tree) {
+          rawRows.push(n)
+          if (n.children?.length) flatten(n.children)
+        }
+      }
+      flatten(rowTreeVal)
+    }
+  }
+  if (!Array.isArray(rawRows)) rawRows = []
+
+  // 列叶子：优先 flatColumnLeaves，如果是完整树则手动提取叶子
+  let rawCols = unref(d.flatColumnLeaves)
+  if (!Array.isArray(rawCols) || rawCols.length === 0) {
+    const colTree = unref(d.columnTree) || []
+    if (Array.isArray(colTree)) {
+      rawCols = []
+      const extractLeaves = (tree) => {
+        if (!Array.isArray(tree)) return
+        for (const n of tree) {
+          if (!n.children || n.children.length === 0) rawCols.push(n)
+          else extractLeaves(n.children)
+        }
+      }
+      extractLeaves(colTree)
+    }
+  }
+  if (!Array.isArray(rawCols)) rawCols = []
+
+  const rowFields = rawRows
+    .filter(r => !r.isSummary)
+    .map(r => ({ id: r.id, name: r.name, type: r.type || 'data' }))
+
+  const colFields = rawCols
+    .map(c => ({ id: c.id, title: c.name || c.title || c.id, type: c.type || 'data' }))
+
+  // 当前选中单元格信息
+  let cellInfo = cell || ''
+  const sel = unref(d.selectedRegion)
+  if (sel?.type === 'cell' && sel.rowNodeId && sel.colNodeId) {
+    const rowNode = rawRows.find(r => r.id === sel.rowNodeId)
+    const colNode = rawCols.find(c => c.id === sel.colNodeId)
+    cellInfo = `${rowNode?.name || ''} / ${colNode?.name || colNode?.title || ''}`
+  }
+
+  formulaWizard.value = {
+    visible: true,
+    cellInfo,
+    initialValue: formula || formulaBarDisplay.value || '',
+    rowFields,
+    colFields
+  }
+}
+
+function onFormulaWizardApply(formulaData) {
+  const d = getDesigner()
+  if (!d) return
+
+  const sel = unref(d.selectedRegion)
+  if (!sel || sel.type !== 'cell' || !sel.rowNodeId || !sel.colNodeId) {
+    ElMessage.warning('请先选中数据单元格')
+    return
+  }
+
+  const { rowNodeId, colNodeId } = sel
+  const expr = formulaData.expression
+  const rawExpr = formulaData.rawExpression || expr.replace(/^=/, '')
+
+  // 汇总行不支持整行公式
+  if (formulaData.applyToRow) {
+    let rawRows = unref(d.flatRowTree) || []
+    const rowNode = rawRows.find(r => r.id === rowNodeId)
+    if (rowNode?.isSummary) {
+      ElMessage.warning('汇总行不支持整行公式')
+      return
+    }
+  }
+
+  d.pushHistory()
+
+  // 获取列叶子节点
+  let rawCols = unref(d.flatColumnLeaves) || []
+  if (!Array.isArray(rawCols) || rawCols.length === 0) {
+    const colTree = unref(d.columnTree) || []
+    rawCols = []
+    const extractLeaves = (tree) => {
+      if (!Array.isArray(tree)) return
+      for (const n of tree) {
+        if (!n.children || n.children.length === 0) rawCols.push(n)
+        else extractLeaves(n.children)
+      }
+    }
+    extractLeaves(colTree)
+  }
+
+  // 确定要应用的列：整行时应用所有列，否则只应用当前列
+  const targetCols = formulaData.applyToRow ? rawCols : [{ id: colNodeId }]
+
+  for (const col of targetCols) {
+    const colTargetCell = `${rowNodeId}:${col.id}`
+    // 把表达式中的当前列 colNodeId 替换为目标列 col.id
+    let colExpr = expr
+    let colRawExpr = rawExpr
+    if (col.id !== colNodeId) {
+      const esc = colNodeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const re = new RegExp(esc, 'g')
+      colExpr = expr.replace(re, col.id)
+      colRawExpr = rawExpr.replace(re, col.id)
+    }
+
+    // 将公式注册到 metrics（后端通过 metrics 保存到 rpt_formula 表）
+    const existing = unref(d.metrics)?.find(m => m.targetCell === colTargetCell)
+    if (existing) {
+      d.updateMetric(existing.field, {
+        expression: colRawExpr,
+        resultType: formulaData.resultType || 'number',
+        targetCell: colTargetCell,
+        dependencies: formulaData.dependencies || [],
+        label: formulaData.label || '',
+      })
+    } else {
+      d.addMetric({
+        field: `formula_${Date.now().toString(36)}_${col.id}`,
+        label: formulaData.label || '',
+        expression: colRawExpr,
+        resultType: formulaData.resultType || 'number',
+        targetCell: colTargetCell,
+        dependencies: formulaData.dependencies || [],
+        calcTrigger: 'save',
+      })
+    }
+    d.setCellValue(rowNodeId, col.id, colExpr)
+  }
+
+  ElMessage.success(formulaData.applyToRow ? '公式已应用到整行' : '公式已保存')
+  formulaBarDisplay.value = expr
+  formulaWizard.value.visible = false
+}
+
 // ==================== 模板加载 ====================
 onMounted(() => {
-  const code = route.params.code
-  if (code) {
-    loadTemplateData(code)
+  const tid = route.query.templateId || route.params.code
+  if (tid) {
+    loadTemplateData(tid)
+  } else {
+    const d = getDesigner()
+    if (d) {
+      d.initDemoData()
+    }
   }
 })
 
-async function loadTemplateData(code) {
+async function loadTemplateData(idOrCode) {
   loading.value = true
   try {
-    const data = await loadTemplate(code)
+    const data = await loadTemplate(idOrCode)
     if (data) {
       template.value = { ...template.value, ...data }
+      const d = getDesigner()
+      if (d) {
+        d.loadFromTemplate(data)
+      }
     }
   } catch (e) {
     console.error('加载模板失败:', e)
@@ -200,25 +429,49 @@ async function loadTemplateData(code) {
 }
 
 // ==================== 保存操作 ====================
+/**
+ * 序列化设计器状态为后端 ReportDesignerTemplateVO 结构
+ */
+function buildTemplatePayload() {
+  const d = getDesigner()
+  if (!d) return null
+  const vo = d.serializeToVO()
+  return {
+    ...vo,
+    name: template.value.name,
+    code: template.value.code,
+    description: template.value.description,
+    periodType: template.value.periodType,
+    auditRequired: template.value.auditRequired,
+  }
+}
+
 async function handleSaveTemplate() {
   if (!template.value.name) {
     ElMessage.warning('请输入模板名称')
+    return
+  }
+  const payload = buildTemplatePayload()
+  if (!payload) {
+    ElMessage.error('设计器未就绪')
     return
   }
   saving.value = true
   autoSaveStatus.value = 'saving'
   try {
     if (template.value.id) {
-      await updateTemplate(template.value.id, template.value)
+      // 更新
+      await updateTemplate(template.value.id, payload)
     } else {
-      const res = await saveTemplate(template.value)
+      // 新建
+      const res = await saveTemplate(payload)
       if (res?.id) template.value.id = res.id
     }
     autoSaveStatus.value = 'saved'
     ElMessage.success('保存成功')
   } catch (e) {
     autoSaveStatus.value = 'unsaved'
-    ElMessage.error('保存失败')
+    ElMessage.error('保存失败：' + (e.message || e))
     console.error(e)
   } finally {
     saving.value = false
@@ -237,7 +490,15 @@ function handleSaveAs() {
 async function confirmSaveAs() {
   const { name, code, description } = saveAsDialog.value
   try {
-    const newTpl = { ...template.value, id: null, name, code, description, version: 1, status: 0 }
+    const payload = buildTemplatePayload()
+    if (!payload) return
+    const newTpl = {
+      ...payload,
+      id: null,
+      name, code, description,
+      version: 1,
+      status: 'draft',
+    }
     const res = await saveTemplate(newTpl)
     if (res?.id) {
       template.value.id = res.id
@@ -261,7 +522,7 @@ async function handlePublishTemplate() {
     await ElMessageBox.confirm('发布后将不可修改，确定发布吗？', '发布确认', { type: 'warning' })
     publishing.value = true
     await publishTemplate(template.value.id)
-    template.value.status = 1
+    template.value.status = 'published'
     ElMessage.success('发布成功')
   } catch (e) {
     if (e !== 'cancel') ElMessage.error('发布失败')
@@ -280,37 +541,216 @@ function handlePreview() {
 }
 
 // ==================== 导出/导入 ====================
-function handleExportExcel() {
-  ElMessage.info('导出功能开发中')
+async function handleExportExcel() {
+  if (!template.value.id) { ElMessage.warning('请先保存模板'); return }
+  try {
+    const { exportTemplateExcel } = await import('@/api/reportDesigner.js')
+    const blob = await exportTemplateExcel(template.value.id)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `${template.value.name}_${new Date().toISOString().slice(0,10)}.xlsx`
+    a.click(); URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (e) {
+    ElMessage.error('导出失败: ' + (e.message || e))
+  }
 }
 
-function handleImportExcel() {
-  ElMessage.info('导入功能开发中')
+async function handleImportExcel() {
+  ElMessage.info('导入功能：请使用模板管理页面的导入功能')
 }
+
+async function handleHistory() {
+  const d = getDesigner()
+  if (!d) return
+  const count = d.history.length
+  const idx = d.historyIndex
+  ElMessage.info(`版本历史：共 ${count} 条记录，当前第 ${idx + 1} 条`)
+}
+function handleShare() { ElMessage.info('分享功能：可生成分享链接并设置权限') }
+function handleExportPDF() { ElMessage.info('PDF 导出：请先导出 Excel 后转换') }
+function handlePrint() { window.print() }
+function handleOpenAI() { ElMessage.info('AI 设计助手开发中') }
 
 function handleTemplateLibrary() {
-  ElMessage.info('模板库功能开发中')
+  router.push('/designer/templates')
 }
 
-// ==================== 工具栏操作 ====================
-function handleUndo() { ElMessage.info('撤销功能开发中') }
-function handleRedo() { ElMessage.info('重做功能开发中') }
-function handleCut() { ElMessage.info('剪切功能开发中') }
-function handleCopy() { ElMessage.info('复制功能开发中') }
-function handlePaste() { ElMessage.info('粘贴功能开发中') }
-function handleFormatPainter() { ElMessage.info('格式刷功能开发中') }
-function handleMergeCells() { ElMessage.info('合并单元格功能开发中') }
-function handleSplitCells() { ElMessage.info('拆分单元格功能开发中') }
-function freezeRows() { ElMessage.info('冻结行功能开发中') }
-function freezeCols() { ElMessage.info('冻结列功能开发中') }
-function handleConditionalFormat() { ElMessage.info('条件格式功能开发中') }
-function cancelEdit() { ElMessage.info('取消编辑') }
-function commitEditFromBar() { ElMessage.info('确认编辑') }
-function insertFunction() { ElMessage.info('插入函数') }
-function showHelp() { ElMessage.info('帮助文档开发中') }
-function toggleFullscreen() { ElMessage.info('全屏功能开发中') }
-function showPermissionDialog() { ElMessage.info('权限控制开发中') }
-function showExtensionDialog() { ElMessage.info('扩展设置开发中') }
+// ==================== 工具栏操作（通过模块级引用操作） ====================
+function getDesigner() { return designerRef.state }
+
+function handleUndo() {
+  const d = getDesigner()
+  if (d && d.canUndo) { d.undo(); ElMessage.success('已撤销') }
+}
+function handleRedo() {
+  const d = getDesigner()
+  if (d && d.canRedo) { d.redo(); ElMessage.success('已重做') }
+}
+function handleCut() {
+  ElMessage.info('剪切：请直接删除行/列维度')
+}
+function handleCopy() {
+  ElMessage.info('复制：请使用 Ctrl+C 复制单元格内容')
+}
+function handlePaste() {
+  ElMessage.info('粘贴：请使用 Ctrl+V 粘贴单元格内容')
+}
+function handleFormatPainter() {
+  ElMessage.info('格式刷功能开发中')
+}
+function handleMergeCells() {
+  ElMessage.info('合并单元格：在选中行/列时点击"添加子行"')
+}
+function handleSplitCells() {
+  ElMessage.info('拆分单元格功能开发中')
+}
+function freezeRows() {
+  const d = getDesigner()
+  if (!d) return
+  d.layout.freezeRows = d.selectedRegion?.rowNodeId ? flatRowIndex(d) : 0
+  ElMessage.success(`已冻结前 ${d.layout.freezeRows} 行`)
+}
+function freezeCols() {
+  const d = getDesigner()
+  if (!d) return
+  d.layout.freezeCols = d.selectedRegion?.colNodeId ? flatColIndex(d) : 0
+  ElMessage.success(`已冻结前 ${d.layout.freezeCols} 列`)
+}
+function flatRowIndex(d) {
+  if (!d.selectedRegion?.rowNodeId) return 0
+  return d.flatRowTree.value.findIndex(n => n.id === d.selectedRegion.rowNodeId) + 1
+}
+function flatColIndex(d) {
+  if (!d.selectedRegion?.colNodeId) return 0
+  // 多行表头下，列号按叶子列编号（父分组节点不占独立列号）
+  const leafIdx = d.flatColumnLeaves && d.flatColumnLeaves.value
+    ? d.flatColumnLeaves.value.findIndex(n => n.id === d.selectedRegion.colNodeId)
+    : -1
+  if (leafIdx >= 0) return leafIdx + 1
+  return d.flatColumnTree.value.findIndex(n => n.id === d.selectedRegion.colNodeId) + 1
+}
+function handleConditionalFormat() {
+  ElMessage.info('条件格式：请在右侧"高级"面板配置')
+}
+
+function handleAddCol() {
+  const d = getDesigner()
+  if (d) {
+    const newCol = d.addColNode()
+    if (newCol) {
+      d.selectRegion('col', null, newCol.id)
+      ElMessage.success('已添加列维度')
+    }
+  }
+}
+function handleAddRow() {
+  const d = getDesigner()
+  if (d) {
+    const newRow = d.addRowNode()
+    if (newRow) {
+      d.selectRegion('row', newRow.id, null)
+      ElMessage.success('已添加行维度')
+    }
+  }
+}
+function handleDeleteCol() {
+  const d = getDesigner()
+  if (!d || !d.selectedRegion?.colNodeId) {
+    ElMessage.warning('请先选择要删除的列维度')
+    return
+  }
+  ElMessageBox.confirm(`确定删除列维度？`, '删除列', {
+    confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning'
+  }).then(() => {
+    d.deleteColNode(d.selectedRegion.colNodeId)
+    ElMessage.success('已删除列')
+  }).catch(() => {})
+}
+function handleDeleteRow() {
+  const d = getDesigner()
+  if (!d || !d.selectedRegion?.rowNodeId) {
+    ElMessage.warning('请先选择要删除的行维度')
+    return
+  }
+  ElMessageBox.confirm(`确定删除行维度？`, '删除行', {
+    confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning'
+  }).then(() => {
+    d.deleteRowNode(d.selectedRegion.rowNodeId)
+    ElMessage.success('已删除行')
+  }).catch(() => {})
+}
+
+function cancelEdit() { formulaBarDisplay.value = '' }
+function commitEditFromBar() {
+  const d = getDesigner()
+  if (!d || !d.selectedRegion) return
+  const value = formulaBarDisplay.value
+  if (value == null || value === '') return
+  // 公式栏编辑只在选中单元格时生效
+  if (d.selectedRegion.type === 'cell' && d.selectedRegion.rowNodeId && d.selectedRegion.colNodeId) {
+    d.pushHistory()
+    d.setCellValue(d.selectedRegion.rowNodeId, d.selectedRegion.colNodeId, value)
+    ElMessage.success('已保存')
+  } else {
+    ElMessage.info('请先选中数据单元格')
+  }
+}
+function insertFunction() {
+  showFunctionPicker.value = true
+}
+
+function handleFunctionSelect(func) {
+  // 构造函数插入文本
+  const paramCount = func.params?.length || 0
+  const requiredParams = func.params?.filter(p => p.required)?.length || 0
+  // 生成参数占位符
+  const placeholders = []
+  if (func.params) {
+    func.params.forEach((p, i) => {
+      if (i < Math.max(requiredParams, 1)) {
+        placeholders.push('')
+      }
+    })
+  }
+  const funcText = `=${func.name}(${placeholders.join(', ')})`
+
+  const d = getDesigner()
+  if (d && d.selectedRegion?.type === 'cell' && d.selectedRegion.rowNodeId && d.selectedRegion.colNodeId) {
+    // 有选中单元格：直接写入
+    d.pushHistory()
+    d.setCellValue(d.selectedRegion.rowNodeId, d.selectedRegion.colNodeId, funcText)
+    formulaBarDisplay.value = funcText
+    ElMessage.success(`已插入函数 ${func.name}`)
+  } else {
+    // 无选中单元格：填入公式栏
+    formulaBarDisplay.value = funcText
+    ElMessage.info(`请在公式栏编辑后点击确认按钮`)
+  }
+}
+function showHelp() {
+  ElMessageBox.alert(
+    '快捷键：\nCtrl+S 保存 | Ctrl+Z 撤销 | Ctrl+Y 重做\n\n报表设计器用于创建结构化报表模板（行维度 × 列维度 × 指标）',
+    '使用帮助',
+    { confirmButtonText: '知道了' }
+  )
+}
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    document.exitFullscreen()
+    ElMessage.info('已退出全屏')
+  } else {
+    document.documentElement.requestFullscreen()
+    ElMessage.success('已进入全屏')
+  }
+}
+function showPermissionDialog() {
+  ElMessageBox.alert('权限控制：可设置模板的查看、编辑、审批权限', '权限控制', { confirmButtonText: '关闭' })
+}
+function showExtensionDialog() {
+  ElMessageBox.alert('扩展设置：自定义校验规则、消息模板、流程节点等', '扩展设置', { confirmButtonText: '关闭' })
+}
+
 </script>
 
 <style scoped>

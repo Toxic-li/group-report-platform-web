@@ -47,9 +47,8 @@ defineEmits(['back', 'showHistory', 'showReview'])
 
 const statusText = computed(() => {
   const map = {
-    draft: '草稿', filling: '填写中', pending: '待填报',
-    submitted: '已提交', reviewing: '审核中',
-    approved: '已通过', rejected: '已退回',
+    draft: '草稿', submitted: '已提交',
+    approved: '已通过', rejected: '已退回', withdrawn: '已撤回',
   }
   return map[props.entry.status] || props.entry.status
 })
@@ -83,18 +82,14 @@ const statusText = computed(() => {
 .de-header-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
 .de-header-status--draft { background: rgba(148, 163, 184, 0.1); color: var(--color-gray-600); }
 .de-header-status--draft::before { background: var(--color-gray-500); }
-.de-header-status--filling { background: var(--app-primary-bg); color: var(--app-primary); }
-.de-header-status--filling::before { background: var(--app-primary); }
-.de-header-status--pending { background: var(--app-primary-bg); color: var(--app-primary); }
-.de-header-status--pending::before { background: var(--app-primary); }
 .de-header-status--submitted { background: var(--app-info-bg); color: var(--app-info); }
 .de-header-status--submitted::before { background: var(--app-info); }
-.de-header-status--reviewing { background: var(--app-warning-bg); color: var(--app-warning); }
-.de-header-status--reviewing::before { background: var(--app-warning); animation: de-pulse 1.5s infinite; }
 .de-header-status--approved { background: var(--app-success-bg); color: var(--app-success); }
 .de-header-status--approved::before { background: var(--app-success); }
 .de-header-status--rejected { background: var(--app-danger-bg); color: var(--app-danger); }
 .de-header-status--rejected::before { background: var(--app-danger); }
+.de-header-status--withdrawn { background: var(--app-surface-hover); color: var(--app-text-muted); }
+.de-header-status--withdrawn::before { background: var(--app-text-muted); }
 
 @keyframes de-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 

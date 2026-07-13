@@ -60,5 +60,5 @@ export function getAuditLogs(submitId) {
 /** 对接审批流 - 获取待办任务 */
 export function getWorkflowTasks(params = {}) {
   const query = new URLSearchParams(params).toString()
-  return get(`/workflow/tasks${query ? `?${query}` : ''}`)
+  return get(`/report-designer/workflow/tasks${query ? `?${query}` : ''}`)
 }

@@ -43,7 +43,7 @@ export function useReportData(props, { config, currentTemplate, useV2, v2Parser,
   ]
   const collapsedGroups = ref(new Set())
 
-  const ROW_H = 32
+  const ROW_H = 40
   const ANOMALY_CONFIG = {
     inventory: { threshold: 50000, label: '库存超限' },
     growthRate: { min: -20, max: 50, label: '增长率异常' },

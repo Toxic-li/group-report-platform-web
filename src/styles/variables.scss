@@ -6,28 +6,28 @@
 // ==========================================================================
 
 :root {
-  // ==================== 品牌色 Primary ====================
-  // Primary-500 为全局品牌色
-  --color-primary-50: #EAF4FF;
-  --color-primary-100: #D6E9FF;
-  --color-primary-200: #ADD4FF;
-  --color-primary-300: #84BEFF;
-  --color-primary-400: #5AA8FF;
-  --color-primary-500: #1677FF;
-  --color-primary-600: #0958D9;
-  --color-primary-700: #003EB3;
-  --color-primary-800: #002C8C;
-  --color-primary-900: #001D66;
+  // ==================== 品牌色 Primary（科技蓝 #2563EB） ====================
+  // v2.1 升级：对齐飞书/阿里云/Salesforce 级企业产品色
+  --color-primary-50: #EEF4FF;
+  --color-primary-100: #D6E4FF;
+  --color-primary-200: #ADC8FF;
+  --color-primary-300: #85ADFF;
+  --color-primary-400: #5C91FF;
+  --color-primary-500: #2563EB;
+  --color-primary-600: #1D4ED8;
+  --color-primary-700: #1E40AF;
+  --color-primary-800: #1E3A8A;
+  --color-primary-900: #172554;
 
   // ==================== 语义色 Semantic ====================
-  --color-success: #00B578;
-  --color-success-bg: #E6F7F0;
-  --color-warning: #FFB020;
-  --color-warning-bg: #FFF8E8;
-  --color-error: #F04438;
-  --color-error-bg: #FEECEA;
-  --color-info: #18C8FF;
-  --color-info-bg: #E8FAFF;
+  --color-success: #14B8A6;      // 青绿
+  --color-success-bg: #E6FAF7;
+  --color-warning: #F59E0B;       // 琥珀
+  --color-warning-bg: #FFFBF0;
+  --color-error: #EF4444;         // 红色
+  --color-error-bg: #FEF2F2;
+  --color-info: #3B82F6;          // 与主色同系
+  --color-info-bg: #EFF6FF;
 
   // ==================== 中性色 Gray ====================
   --color-gray-0: #FFFFFF;
@@ -182,25 +182,25 @@
   --app-z-toast: 3000;
 
   // ==================== Element Plus 主题覆盖 ====================
-  // 品牌色 #1677FF
-  --el-color-primary: #1677FF;
-  --el-color-primary-light-3: #5BA0FF;
-  --el-color-primary-light-5: #8ABBFF;
-  --el-color-primary-light-7: #B9D6FF;
-  --el-color-primary-light-8: #D0E4FF;
-  --el-color-primary-light-9: #EAF4FF;
-  --el-color-primary-dark-2: #0958D9;
+  // 品牌色 #2563EB
+  --el-color-primary: #2563EB;
+  --el-color-primary-light-3: #6093F1;
+  --el-color-primary-light-5: #8DB3F5;
+  --el-color-primary-light-7: #B9D2F9;
+  --el-color-primary-light-8: #CFE1FB;
+  --el-color-primary-light-9: #EAF1FD;
+  --el-color-primary-dark-2: #1D4ED8;
 
-  --el-color-success: #00B578;
-  --el-color-success-light-9: #E6F7F0;
-  --el-color-warning: #FFB020;
-  --el-color-warning-light-9: #FFF8E8;
-  --el-color-danger: #F04438;
-  --el-color-danger-light-9: #FEECEA;
-  --el-color-error: #F04438;
-  --el-color-error-light-9: #FEECEA;
-  --el-color-info: #18C8FF;
-  --el-color-info-light-9: #E8FAFF;
+  --el-color-success: #14B8A6;
+  --el-color-success-light-9: #E6FAF7;
+  --el-color-warning: #F59E0B;
+  --el-color-warning-light-9: #FFFBF0;
+  --el-color-danger: #EF4444;
+  --el-color-danger-light-9: #FEF2F2;
+  --el-color-error: #EF4444;
+  --el-color-error-light-9: #FEF2F2;
+  --el-color-info: #3B82F6;
+  --el-color-info-light-9: #EFF6FF;
 
   --el-border-radius-base: 8px;
   --el-border-radius-small: 6px;

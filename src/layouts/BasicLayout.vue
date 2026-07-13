@@ -2,95 +2,166 @@
   <div class="basic-layout" :class="{ collapsed: sidebarCollapsed, immersive: isImmersive }">
     <!-- ==================== 侧边栏 ==================== -->
     <aside class="bl-sidebar" v-show="!isImmersive">
-      <!-- 品牌 Logo -->
+      <!-- 品牌 Logo – 升级为品牌卡片 -->
       <div class="bl-brand" @click="$router.push('/')">
         <div class="bl-brand-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="3" width="18" height="18" rx="5" fill="currentColor" opacity="0.15"/>
-            <path d="M7 8h10M7 12h7M7 16h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <circle cx="17" cy="16" r="3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="2" width="20" height="20" rx="6" fill="var(--app-primary)" opacity="0.12"/>
+            <path d="M8 9h8M8 13h6M8 17h4" stroke="var(--app-primary)" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="17" cy="17" r="3.5" stroke="var(--app-primary)" stroke-width="1.8" fill="none"/>
           </svg>
         </div>
         <transition name="fade">
           <div v-show="!sidebarCollapsed" class="bl-brand-text">
             <span class="bl-brand-name">集团报表平台</span>
-            <span class="bl-brand-sub">Report Center</span>
+            <span class="bl-brand-sub">Enterprise Reporting</span>
           </div>
         </transition>
       </div>
 
       <!-- 导航菜单 -->
       <nav class="bl-nav">
-        <template v-for="item in menuItems" :key="item.path">
+        <!-- 按分组遍历 -->
+        <template v-for="(group, gIdx) in groupedMenuItems" :key="'g-' + gIdx">
           <!-- 分组标题 -->
-          <div v-if="item.divider" v-show="!sidebarCollapsed" class="bl-nav-divider">
-            {{ item.label }}
+          <div v-show="!sidebarCollapsed" class="bl-nav-section">
+            <span class="bl-nav-section-label">{{ group.label }}</span>
           </div>
 
-          <!-- 可展开的分组 -->
-          <template v-else-if="item.children">
-            <div
-              class="bl-nav-group"
-              :class="{ active: isGroupActive(item.children) }"
-              @click="toggleGroup(item.path)"
+          <template v-for="item in group.items" :key="item.path">
+            <!-- 含子菜单的一级菜单 -->
+            <template v-if="item.children">
+              <div
+                class="bl-nav-group"
+                :class="{ active: isGroupActive(item.children) }"
+                @click="toggleGroup(item.path)"
+                :title="sidebarCollapsed ? item.label : ''"
+              >
+                <span class="bl-nav-icon" v-html="item.icon"></span>
+                <transition name="fade">
+                  <span v-show="!sidebarCollapsed" class="bl-nav-label">{{ item.label }}</span>
+                </transition>
+                <svg
+                  v-show="!sidebarCollapsed"
+                  class="bl-nav-arrow"
+                  :class="{ expanded: isGroupExpanded(item.path, item.children) }"
+                  width="14" height="14" viewBox="0 0 24 24" fill="none"
+                >
+                  <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+
+              <!-- 子菜单 – 缩进 + 左侧高亮条 -->
+              <transition name="subnav-slide">
+                <div
+                  v-if="!sidebarCollapsed && isGroupExpanded(item.path, item.children)"
+                  class="bl-subnav"
+                >
+                  <div class="bl-subnav-inner">
+                    <router-link
+                      v-for="child in item.children"
+                      :key="child.path"
+                      :to="child.path"
+                      class="bl-subnav-item"
+                      :class="{ active: isExactRouteActive(child.path) }"
+                      @click="addRecent(child)"
+                    >
+                      <span class="bl-subnav-bar"></span>
+                      <span class="bl-subnav-label">{{ child.label }}</span>
+                    </router-link>
+                  </div>
+                </div>
+              </transition>
+            </template>
+
+            <!-- 叶子菜单项 – 左侧高亮条 -->
+            <router-link
+              v-else
+              :to="item.path"
+              class="bl-nav-item"
+              :class="{ active: isRouteActive(item.path) }"
+              :title="sidebarCollapsed ? item.label : ''"
+              @click="addRecent(item)"
             >
+              <span class="bl-nav-accent"></span>
               <span class="bl-nav-icon" v-html="item.icon"></span>
               <transition name="fade">
                 <span v-show="!sidebarCollapsed" class="bl-nav-label">{{ item.label }}</span>
               </transition>
-              <svg
-                v-show="!sidebarCollapsed"
-                class="bl-nav-arrow"
-                :class="{ expanded: isGroupExpanded(item.path, item.children) }"
-                width="12" height="12" viewBox="0 0 12 12" fill="none"
-              >
-                <path d="M4 3l4 3-4 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </div>
-
-            <!-- 子菜单 -->
-            <transition name="subnav">
-              <div
-                v-show="!sidebarCollapsed && isGroupExpanded(item.path, item.children)"
-                class="bl-subnav"
-              >
-                <router-link
-                  v-for="child in item.children"
-                  :key="child.path"
-                  :to="child.path"
-                  class="bl-subnav-item"
-                  :class="{ active: isRouteActive(child.path) }"
-                >
-                  <span class="bl-subnav-dot"></span>
-                  <span class="bl-subnav-label">{{ child.label }}</span>
-                </router-link>
-              </div>
-            </transition>
+            </router-link>
           </template>
-
-          <!-- 普通菜单项 -->
-          <router-link
-            v-else
-            :to="item.path"
-            class="bl-nav-item"
-            :class="{ active: isRouteActive(item.path) }"
-          >
-            <span class="bl-nav-icon" v-html="item.icon"></span>
-            <transition name="fade">
-              <span v-show="!sidebarCollapsed" class="bl-nav-label">{{ item.label }}</span>
-            </transition>
-          </router-link>
         </template>
+
+        <!-- ===== 收藏菜单 ===== -->
+        <div v-show="!sidebarCollapsed && favoriteMenus.length > 0" class="bl-nav-section">
+          <span class="bl-nav-section-label">⭐ 收藏</span>
+        </div>
+        <router-link
+          v-for="fav in visibleFavorites"
+          :key="'fav-' + fav.path"
+          :to="fav.path"
+          class="bl-nav-item bl-nav-item--compact"
+          :class="{ active: isRouteActive(fav.path) }"
+          :title="sidebarCollapsed ? fav.label : ''"
+        >
+          <span v-show="sidebarCollapsed" class="bl-nav-accent"></span>
+          <span class="bl-nav-icon" v-show="sidebarCollapsed">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </span>
+          <transition name="fade">
+            <span v-show="!sidebarCollapsed" class="bl-nav-label bl-nav-label--compact">{{ fav.label }}</span>
+          </transition>
+        </router-link>
+
+        <!-- ===== 最近访问 ===== -->
+        <div v-show="!sidebarCollapsed && recentMenus.length > 0" class="bl-nav-section">
+          <span class="bl-nav-section-label">🕐 最近访问</span>
+        </div>
+        <router-link
+          v-for="rec in visibleRecents"
+          :key="'rec-' + rec.path"
+          :to="rec.path"
+          class="bl-nav-item bl-nav-item--compact"
+          :class="{ active: isRouteActive(rec.path) }"
+          :title="sidebarCollapsed ? rec.label : ''"
+          @click="addRecent(rec)"
+        >
+          <span v-show="sidebarCollapsed" class="bl-nav-accent"></span>
+          <span class="bl-nav-icon" v-show="sidebarCollapsed">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </span>
+          <transition name="fade">
+            <span v-show="!sidebarCollapsed" class="bl-nav-label bl-nav-label--compact">{{ rec.label }}</span>
+          </transition>
+        </router-link>
       </nav>
 
-      <!-- 侧边栏底部 -->
+      <!-- 侧边栏底部固定区域 -->
       <div class="bl-sidebar-footer">
-        <button class="bl-collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
+        <router-link to="/profile" class="bl-footer-item" :title="sidebarCollapsed ? '个人中心' : ''">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <transition name="fade">
+            <span v-show="!sidebarCollapsed">个人中心</span>
+          </transition>
+        </router-link>
+        <a href="#" class="bl-footer-item" :title="sidebarCollapsed ? '帮助中心' : ''" @click.prevent>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <transition name="fade">
+            <span v-show="!sidebarCollapsed">帮助中心</span>
+          </transition>
+        </a>
+        <div class="bl-footer-version" v-show="!sidebarCollapsed">v2.0.0</div>
+        <button class="bl-collapse-btn" @click="toggleSidebar" :title="sidebarCollapsed ? '展开菜单' : '收起菜单'">
           <svg
-            width="16" height="16" viewBox="0 0 16 16" fill="none"
+            width="16" height="16" viewBox="0 0 24 24" fill="none"
             :style="{ transform: sidebarCollapsed ? 'rotate(180deg)' : 'none' }"
           >
-            <path d="M10 12L6 8l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <transition name="fade">
             <span v-show="!sidebarCollapsed">收起菜单</span>
@@ -104,7 +175,7 @@
       <!-- 顶部栏 -->
       <header class="bl-topbar">
         <div class="bl-topbar-left">
-          <button class="bl-icon-btn bl-collapse-trigger" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? '展开菜单' : '收起菜单'">
+          <button class="bl-icon-btn bl-collapse-trigger" @click="toggleSidebar" :title="sidebarCollapsed ? '展开菜单' : '收起菜单'">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
@@ -282,15 +353,23 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/userStore.js'
 import { usePermission } from '@/composables/usePermission.js'
+import { useNavigation } from '@/composables/useNavigation.js'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 const { hasPermission } = usePermission()
+const { recordPath } = useNavigation()
 
-const sidebarCollapsed = ref(false)
+const SIDEBAR_KEY = 'rpt_sidebar_collapsed'
+const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_KEY) === '1')
 const expandedGroups = reactive({})
 const currentTime = ref('')
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  localStorage.setItem(SIDEBAR_KEY, sidebarCollapsed.value ? '1' : '0')
+}
 
 // ==================== 主题模式 ====================
 const isDark = ref(false)
@@ -336,7 +415,7 @@ const searchResults = computed(() => {
   const flat = []
   const collect = (items, groupLabel) => {
     items.forEach(it => {
-      if (it.divider || !it.label) return
+      if (!it.label) return
       if (it.children) {
         it.children.forEach(c => flat.push({ path: c.path, label: c.label, group: it.label, icon: it.icon }))
       } else {
@@ -344,7 +423,8 @@ const searchResults = computed(() => {
       }
     })
   }
-  collect(menuItems.value, '菜单')
+  // collect from flat menuItems for search
+  groupedMenuItems.value.forEach(g => collect(g.items, g.label))
   if (!kw) return flat.slice(0, 8)
   return flat.filter(r => r.label.toLowerCase().includes(kw) || r.group.toLowerCase().includes(kw)).slice(0, 8)
 })
@@ -376,7 +456,7 @@ function closeTab(path) {
   openTabs.value.splice(idx, 1)
   if (route.path === path) {
     const next = openTabs.value[idx] || openTabs.value[idx - 1] || openTabs.value[openTabs.value.length - 1]
-    if (next) router.push(next.path)
+    if (next) router.push(next)
   }
 }
 
@@ -399,42 +479,36 @@ const isImmersive = computed(() => {
   return route.meta?.immersive === true
 })
 
-// ==================== 图标 SVG ====================
+// ==================== 图标 SVG（升级到 20-22px） ====================
 const ICONS = {
-  dashboard: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
-  designer: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
-  audit: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>',
-  chart: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
-  entry: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-  profile: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
-  tools: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>',
-  settings: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
-  users: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
-  shield: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
-  building: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg>',
-  workflow: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6a3 3 0 013 3v6"/></svg>',
-  log: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>',
-  folder: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>',
-  history: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>',
-  star: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
-  file: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/></svg>',
-  database: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
-  key: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-  message: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
-  download: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
-  print: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 1 1 1 1 23 23 23"/><path d="M19 15v-2a4 4 0 00-4-4H9a4 4 0 00-4 4v2"/><polyline points="16 15 14 17 12 15"/><line x1="13" y1="9" x2="19" y2="9"/></svg>',
-  job: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M12 12v4"/></svg>'
+  dashboard: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  designer: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>',
+  audit: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>',
+  chart: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
+  entry: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+  profile: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  settings: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>',
+  users: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>',
+  shield: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+  building: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg>',
+  workflow: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/><path d="M9 6h6a3 3 0 013 3v6"/></svg>',
+  log: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>',
+  folder: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>',
+  database: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>',
+  key: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>',
+  message: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
 }
 
-// ==================== 菜单配置 ====================
-const allMenuItems = computed(() => {
+// ==================== 菜单分组结构 ====================
+const allFlatMenuItems = computed(() => {
   const items = [
-    { path: '/', label: '工作台', icon: ICONS.dashboard, perm: 'menu:dashboard' },
+    { path: '/', label: '工作台', icon: ICONS.dashboard, perm: 'menu:dashboard', group: '工作' },
     {
       path: '/report-center',
       label: '报表中心',
       icon: ICONS.folder,
       perm: 'menu:reportCenter',
+      group: '报表',
       children: [
         { path: '/report-center', label: '全部报表', perm: 'menu:reportCenter' },
         { path: '/report-center/my-reports', label: '我的报表', perm: 'menu:myReports' },
@@ -447,6 +521,7 @@ const allMenuItems = computed(() => {
       label: '表样设计',
       icon: ICONS.designer,
       perm: 'template:create',
+      group: '报表',
       children: [
         { path: '/designer/templates', label: '模板管理', perm: 'template:manage' },
         { path: '/designer', label: '新建模板', perm: 'template:create' },
@@ -463,6 +538,7 @@ const allMenuItems = computed(() => {
       label: '填报中心',
       icon: ICONS.entry,
       perm: 'menu:entryCenter',
+      group: '业务',
       children: [
         { path: '/entry', label: '我的填报', perm: 'menu:myEntry' },
         { path: '/entry/draft', label: '草稿箱', perm: 'menu:draft' },
@@ -477,6 +553,7 @@ const allMenuItems = computed(() => {
       label: '审核中心',
       icon: ICONS.audit,
       perm: 'menu:auditCenter',
+      group: '业务',
       children: [
         { path: '/audit', label: '待审核', perm: 'menu:pendingAudit' },
         { path: '/audit/approved', label: '已审核', perm: 'menu:approved' },
@@ -490,6 +567,7 @@ const allMenuItems = computed(() => {
       label: '数据分析',
       icon: ICONS.chart,
       perm: 'menu:analytics',
+      group: '分析',
       children: [
         { path: '/analytics', label: '汇总分析', perm: 'menu:summary' },
         { path: '/analytics/trend', label: '趋势分析', perm: 'menu:trend' },
@@ -498,12 +576,12 @@ const allMenuItems = computed(() => {
         { path: '/analytics/print', label: '数据打印', perm: 'menu:print' }
       ]
     },
-    { divider: true, label: '系统管理' },
     {
       path: '/admin',
       label: '系统管理',
       icon: ICONS.settings,
       perm: 'menu:admin',
+      group: '管理',
       children: [
         { path: '/admin/users', label: '用户管理', perm: 'menu:userManage' },
         { path: '/admin/depts', label: '部门管理', perm: 'menu:deptManage' },
@@ -520,6 +598,7 @@ const allMenuItems = computed(() => {
       label: '个人中心',
       icon: ICONS.profile,
       perm: 'menu:profile',
+      group: '个人',
       children: [
         { path: '/profile', label: '我的信息', perm: 'menu:myInfo' },
         { path: '/profile/messages', label: '我的消息', perm: 'menu:messages' },
@@ -532,21 +611,13 @@ const allMenuItems = computed(() => {
 
   // 权限过滤
   return items.filter(item => {
-    if (item.divider) return true
     if (!item.perm) return true
-    // 开发模式：无权限数据时显示全部
     if (!userStore.permissions.length) return true
     if (item.children) {
       return item.children.some(c => !c.perm || hasPermission(c.perm))
     }
     return hasPermission(item.perm)
-  })
-})
-
-const menuItems = computed(() => {
-  const items = allMenuItems.value
-  // 过滤掉权限不足的子项
-  return items.map(item => {
+  }).map(item => {
     if (!item.children) return item
     const visibleChildren = item.children.filter(c => {
       if (!c.perm) return true
@@ -556,6 +627,97 @@ const menuItems = computed(() => {
     return { ...item, children: visibleChildren.length > 0 ? visibleChildren : null }
   }).filter(item => !item.children || item.children)
 })
+
+// 按 group 字段分组
+const groupedMenuItems = computed(() => {
+  const groups = []
+  const all = allFlatMenuItems.value
+  all.forEach(item => {
+    const groupName = item.group || '其他'
+    let group = groups.find(g => g.label === groupName)
+    if (!group) {
+      group = { label: groupName, items: [] }
+      groups.push(group)
+    }
+    group.items.push(item)
+  })
+  return groups
+})
+
+// ==================== 收藏 & 最近访问 ====================
+const FAVORITES_KEY = 'rpt_nav_favorites'
+const RECENTS_KEY = 'rpt_nav_recents'
+const MAX_RECENTS = 5
+const MAX_FAVORITES = 8
+
+const favoriteMenus = ref(loadFromStorage(FAVORITES_KEY, []))
+const recentMenus = ref(loadFromStorage(RECENTS_KEY, []))
+
+function loadFromStorage(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
+  } catch { return fallback }
+}
+
+function saveToStorage(key, data) {
+  try { localStorage.setItem(key, JSON.stringify(data)) } catch { /* quota exceeded */ }
+}
+
+const visibleFavorites = computed(() => sidebarCollapsed.value ? [] : favoriteMenus.value.slice(0, MAX_FAVORITES))
+const visibleRecents = computed(() => sidebarCollapsed.value ? [] : recentMenus.value.slice(0, MAX_RECENTS))
+
+// 从后端拉取真实收藏/最近访问
+import { queryFavoriteReports, queryRecentReports } from '@/api/reportCenter'
+
+async function loadRemoteFavorites() {
+  try {
+    const data = await queryFavoriteReports({ page: 1, size: MAX_FAVORITES })
+    const records = data?.records || data?.list || (Array.isArray(data) ? data : [])
+    if (records.length > 0) {
+      favoriteMenus.value = records.map(r => ({ path: '/report-center/detail/' + (r.id || r.templateId), label: r.templateName || r.name || '报表' }))
+      saveToStorage(FAVORITES_KEY, favoriteMenus.value)
+    }
+  } catch { /* keep local cache */ }
+}
+
+async function loadRemoteRecents() {
+  try {
+    const data = await queryRecentReports({ page: 1, size: MAX_RECENTS })
+    const records = data?.records || data?.list || (Array.isArray(data) ? data : [])
+    if (records.length > 0) {
+      recentMenus.value = records.map(r => ({ path: '/report-center/detail/' + (r.id || r.templateId), label: r.templateName || r.name || '报表' }))
+      saveToStorage(RECENTS_KEY, recentMenus.value)
+    }
+  } catch { /* keep local cache */ }
+}
+
+// 将某个菜单路径加入收藏（保留本地逻辑作快速切换）
+function toggleFavorite(item) {
+  const idx = favoriteMenus.value.findIndex(f => f.path === item.path)
+  if (idx >= 0) {
+    favoriteMenus.value.splice(idx, 1)
+  } else {
+    favoriteMenus.value.unshift({ path: item.path, label: item.label })
+    if (favoriteMenus.value.length > MAX_FAVORITES) favoriteMenus.value.pop()
+  }
+  saveToStorage(FAVORITES_KEY, favoriteMenus.value)
+}
+
+// 记录最近访问
+function addRecent(item) {
+  if (!item || !item.path || item.path === '/') return
+  recentMenus.value = recentMenus.value.filter(r => r.path !== item.path)
+  recentMenus.value.unshift({ path: item.path, label: item.label })
+  if (recentMenus.value.length > MAX_RECENTS) recentMenus.value.pop()
+  saveToStorage(RECENTS_KEY, recentMenus.value)
+  // 异步同步到后端（如有 templateId）
+  if (item.templateId) {
+    import('@/api/reportCenter').then(({ recordRecentView }) => {
+      recordRecentView(item.templateId).catch(() => {})
+    })
+  }
+}
 
 // ==================== 页面标题 ====================
 const pageTitle = computed(() => {
@@ -587,6 +749,8 @@ watch(() => route.path, (path) => {
   if (!exists) {
     openTabs.value.push({ path, label: pageTitle.value, closable: path !== '/' })
   }
+  // 记录导航历史用于安全返回
+  recordPath(path)
 }, { immediate: true })
 
 // ==================== Breadcrumb ====================
@@ -596,7 +760,8 @@ const breadcrumbItems = computed(() => {
 
   if (path === '/') {
     items.push({ label: '工作台', path: '/' })
-  } else if (path.startsWith('/report-center')) {    items.push({ label: '工作台', path: '/' })
+  } else if (path.startsWith('/report-center')) {
+    items.push({ label: '工作台', path: '/' })
     items.push({ label: '报表中心', path: '/report-center' })
   } else if (path.startsWith('/admin/')) {
     items.push({ label: '工作台', path: '/' })
@@ -655,7 +820,12 @@ const userInitial = computed(() => {
 // ==================== 路由激活检测 ====================
 function isRouteActive(path) {
   if (path === '/') return route.path === '/'
-  return route.path.startsWith(path)
+  return route.path === path || route.path.startsWith(path + '/')
+}
+
+function isExactRouteActive(path) {
+  if (path === '/') return route.path === '/'
+  return route.path === path
 }
 
 function isGroupActive(children) {
@@ -664,15 +834,20 @@ function isGroupActive(children) {
 
 // ==================== 分组展开 ====================
 function isGroupExpanded(path, children) {
+  // 如果用户已经手动切换过，始终尊重用户选择
   if (expandedGroups[path] !== undefined) {
     return expandedGroups[path]
   }
-  return isGroupActive(children)
+  // 首次访问时，如果当前路由匹配，自动展开
+  if (isGroupActive(children)) return true
+  return false
 }
 
 function toggleGroup(path) {
   if (expandedGroups[path] === undefined) {
-    expandedGroups[path] = !isGroupActive(menuItems.value.find(i => i.path === path)?.children || [])
+    const items = allFlatMenuItems.value
+    const found = items.find(i => i.path === path)
+    expandedGroups[path] = !isGroupActive(found?.children || [])
   } else {
     expandedGroups[path] = !expandedGroups[path]
   }
@@ -727,7 +902,6 @@ function updateTime() {
 }
 
 function onGlobalKeydown(e) {
-  // Ctrl/Cmd + K 全局搜索
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
     toggleSearch()
@@ -738,13 +912,15 @@ onMounted(() => {
   updateTime()
   timeTimer = setInterval(updateTime, 1000)
 
-  // 初始化主题
   const savedTheme = localStorage.getItem('rpt_theme')
   if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
     applyTheme(true)
   }
 
   window.addEventListener('keydown', onGlobalKeydown)
+  // 异步加载远程收藏/最近访问
+  loadRemoteFavorites()
+  loadRemoteRecents()
 })
 
 onUnmounted(() => {
@@ -754,6 +930,16 @@ onUnmounted(() => {
 </script>
 
 <style lang="scss" scoped>
+// ===== Sidebar Design Tokens =====
+$sidebar-bg: #F7F9FC;
+$sidebar-width: var(--app-sidebar-width, 240px);
+$sidebar-collapsed: var(--app-sidebar-collapsed, 72px);
+$brand-height: 52px;
+$nav-item-gap: 10px;
+$nav-item-radius: 12px;
+$nav-l1-size: 15px;
+$nav-l2-size: 13px;
+
 .basic-layout {
   display: flex;
   height: 100vh;
@@ -762,132 +948,181 @@ onUnmounted(() => {
 
   // ==================== 侧边栏 ====================
   .bl-sidebar {
-    width: var(--app-sidebar-width);
-    min-width: var(--app-sidebar-width);
-    background: var(--app-surface);
+    width: $sidebar-width;
+    min-width: $sidebar-width;
+    background: $sidebar-bg;
     border-right: 1px solid var(--app-border);
     display: flex;
     flex-direction: column;
-    transition: width 0.25s ease, min-width 0.25s ease;
+    transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                min-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: var(--app-z-sidebar);
-    box-shadow: 1px 0 8px rgba(0, 0, 0, 0.02);
   }
 
   &.collapsed .bl-sidebar {
-    width: var(--app-sidebar-collapsed);
-    min-width: var(--app-sidebar-collapsed);
+    width: $sidebar-collapsed;
+    min-width: $sidebar-collapsed;
   }
 
-  // 品牌
+  // ===== 品牌 Logo – 48~56px 品牌卡片 =====
   .bl-brand {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 0 16px;
-    height: var(--app-topbar-height);
-    border-bottom: 1px solid var(--app-border-light);
-    cursor: pointer;
+    gap: 12px;
+    padding: 0 18px;
+    height: $brand-height;
     flex-shrink: 0;
+    cursor: pointer;
     overflow: hidden;
+    transition: padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 
-    &:hover {
-      background: var(--app-surface-hover);
+    &:hover .bl-brand-icon {
+      transform: scale(1.05);
+      box-shadow: 0 2px 12px rgba(37, 99, 235, 0.18);
     }
   }
 
+  &.collapsed .bl-brand {
+    padding: 0 20px;
+    justify-content: center;
+  }
+
   .bl-brand-icon {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    border-radius: 8px;
-    background: var(--app-primary-bg);
-    color: var(--app-primary);
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(24, 200, 255, 0.1));
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
   }
 
   .bl-brand-text {
     display: flex;
     flex-direction: column;
-    line-height: 1.3;
+    line-height: 1.35;
     overflow: hidden;
   }
 
   .bl-brand-name {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--app-text-primary);
     white-space: nowrap;
+    letter-spacing: 0.3px;
   }
 
   .bl-brand-sub {
     font-size: 10px;
     color: var(--app-text-muted);
-    letter-spacing: 1px;
+    letter-spacing: 1.2px;
     white-space: nowrap;
+    text-transform: uppercase;
   }
 
-  // 导航
+  // ===== 导航 =====
   .bl-nav {
     flex: 1;
-    padding: 8px;
+    padding: 8px 10px;
     overflow-y: auto;
     overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 2px;
+
+    &::-webkit-scrollbar { width: 0; }
   }
 
-  .bl-nav-divider {
-    padding: 12px 12px 4px;
+  // ===== 分组标题 =====
+  .bl-nav-section {
+    padding: 14px 12px 6px;
+    flex-shrink: 0;
+  }
+
+  .bl-nav-section-label {
     font-size: 11px;
     font-weight: 600;
     color: var(--app-text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
     white-space: nowrap;
   }
 
+  // ===== 一级菜单项（叶子 + 可展开分组） =====
   .bl-nav-item,
   .bl-nav-group {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border-radius: var(--app-radius-sm);
-    font-size: 13px;
-    font-weight: 500;
+    gap: $nav-item-gap;
+    padding: 0 12px;
+    height: 40px;
+    border-radius: $nav-item-radius;
+    font-size: $nav-l1-size;
+    font-weight: 600;
     color: var(--app-text-secondary);
     text-decoration: none;
     cursor: pointer;
-    transition: all var(--app-transition-fast);
+    transition: all 0.18s ease;
     white-space: nowrap;
     position: relative;
+    flex-shrink: 0;
 
     &:hover {
-      background: var(--app-surface-hover);
+      background: rgba(37, 99, 235, 0.06);
       color: var(--app-text-primary);
     }
 
     &.active {
-      background: var(--app-primary-bg);
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(37, 99, 235, 0.06));
       color: var(--app-primary);
+      box-shadow: 0 1px 4px rgba(37, 99, 235, 0.08);
 
-      .bl-nav-icon {
-        color: var(--app-primary);
+      .bl-nav-accent {
+        opacity: 1;
+        transform: scaleY(1);
       }
     }
   }
 
+  .bl-nav-item--compact {
+    height: 32px;
+    font-size: 13px;
+    font-weight: 400;
+    padding: 0 12px;
+  }
+
+  // 左侧高亮指示条
+  .bl-nav-accent {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    background: var(--app-primary);
+    border-radius: 0 3px 3px 0;
+    opacity: 0;
+    transform: scaleY(0);
+    transition: all 0.22s ease;
+  }
+
+  // 图标
   .bl-nav-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 18px;
+    min-width: 20px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
     color: var(--app-text-muted);
-    transition: color var(--app-transition-fast);
+    transition: color 0.18s;
+
+    .bl-nav-item.active &,
+    .bl-nav-group.active & {
+      color: var(--app-primary);
+    }
   }
 
   .bl-nav-label {
@@ -896,9 +1131,15 @@ onUnmounted(() => {
     text-overflow: ellipsis;
   }
 
+  .bl-nav-label--compact {
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  // 箭头
   .bl-nav-arrow {
     color: var(--app-text-muted);
-    transition: transform 0.2s ease;
+    transition: transform 0.22s ease;
     flex-shrink: 0;
 
     &.expanded {
@@ -906,53 +1147,117 @@ onUnmounted(() => {
     }
   }
 
-  // 子导航
+  // ===== 二级菜单 – 缩进 + 左侧高亮条 =====
   .bl-subnav {
+    display: grid;
+    grid-template-rows: 1fr;
+  }
+
+  .bl-subnav-inner {
     overflow: hidden;
-    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 14px;
   }
 
   .bl-subnav-item {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px;
-    border-radius: var(--app-radius-sm);
-    font-size: 12px;
-    color: var(--app-text-muted);
+    padding: 0 12px 0 8px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: $nav-l2-size;
+    font-weight: 400;
+    color: var(--app-text-secondary);
     text-decoration: none;
-    transition: all var(--app-transition-fast);
+    transition: background 0.16s ease, color 0.16s ease;
     white-space: nowrap;
+    position: relative;
 
     &:hover {
-      background: var(--app-surface-hover);
+      background: rgba(37, 99, 235, 0.05);
       color: var(--app-text-primary);
+
+      .bl-subnav-bar {
+        opacity: 0.6;
+      }
     }
 
     &.active {
+      background: linear-gradient(90deg, rgba(37, 99, 235, 0.08), transparent);
       color: var(--app-primary);
       font-weight: 500;
 
-      .bl-subnav-dot {
+      .bl-subnav-bar {
+        opacity: 1;
         background: var(--app-primary);
       }
     }
   }
 
-  .bl-subnav-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
+  // 二级菜单左侧高亮条
+  .bl-subnav-bar {
+    width: 3px;
+    height: 16px;
+    border-radius: 0 2px 2px 0;
     background: var(--app-border-dark);
     flex-shrink: 0;
-    transition: background var(--app-transition-fast);
+    opacity: 0.45;
+    transition: opacity 0.18s ease, background 0.18s ease;
   }
 
-  // 侧边栏底部
+  .bl-subnav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // ===== 侧边栏底部固定区域 =====
   .bl-sidebar-footer {
-    padding: 8px;
-    border-top: 1px solid var(--app-border-light);
     flex-shrink: 0;
+    border-top: 1px solid var(--app-border-light);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .bl-footer-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+    height: 36px;
+    border-radius: 10px;
+    color: var(--app-text-secondary);
+    font-size: 13px;
+    font-weight: 400;
+    text-decoration: none;
+    transition: all 0.16s ease;
+    white-space: nowrap;
+
+    &:hover {
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--app-primary);
+    }
+
+    svg {
+      flex-shrink: 0;
+      color: var(--app-text-muted);
+      transition: color 0.16s;
+    }
+
+    &:hover svg { color: var(--app-primary); }
+  }
+
+  .bl-footer-version {
+    text-align: center;
+    font-size: 10px;
+    color: var(--app-text-muted);
+    padding: 4px 0 0;
+    opacity: 0.5;
   }
 
   .bl-collapse-btn {
@@ -960,24 +1265,92 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 12px;
+    padding: 0 12px;
+    height: 36px;
     border: none;
-    border-radius: var(--app-radius-sm);
+    border-radius: 10px;
     background: transparent;
     color: var(--app-text-muted);
     font-size: 12px;
     cursor: pointer;
-    transition: all var(--app-transition-fast);
+    transition: all 0.16s ease;
     white-space: nowrap;
 
     &:hover {
-      background: var(--app-surface-hover);
+      background: rgba(37, 99, 235, 0.06);
       color: var(--app-text-secondary);
     }
 
     svg {
       flex-shrink: 0;
-      transition: transform 0.25s ease;
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  }
+
+  // ===== Collapse State =====
+  &.collapsed {
+    .bl-nav-item,
+    .bl-nav-group {
+      justify-content: center;
+      padding: 0;
+      height: 40px;
+      width: 48px;
+      margin: 0 auto;
+      border-radius: 12px;
+      gap: 0;
+    }
+
+    .bl-nav-item--compact {
+      display: none;
+    }
+
+    .bl-nav-icon {
+      min-width: 20px;
+    }
+
+    .bl-footer-item {
+      justify-content: center;
+      padding: 0;
+
+      span { display: none; }
+    }
+
+    .bl-footer-version { display: none; }
+
+    .bl-collapse-btn {
+      justify-content: center;
+      padding: 0;
+
+      span { display: none; }
+    }
+  }
+
+  // ===== 过渡动画 – 使用 :deep() 避免 scoped 选择器阻断 Vue Transition 类名 =====
+  :deep(.fade-enter-active),
+  :deep(.fade-leave-active) {
+    transition: opacity 0.2s ease;
+  }
+  :deep(.fade-enter-from),
+  :deep(.fade-leave-to) {
+    opacity: 0;
+  }
+
+  // 子菜单展开/收起 – 使用 grid-template-rows 实现 GPU 加速的高度动画，避免 max-height 导致的 layout thrashing
+  :deep(.subnav-slide-enter-from),
+  :deep(.subnav-slide-leave-to) {
+    &.bl-subnav {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+  }
+  :deep(.subnav-slide-enter-active) {
+    &.bl-subnav {
+      transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s ease;
+    }
+  }
+  :deep(.subnav-slide-leave-active) {
+    &.bl-subnav {
+      transition: grid-template-rows 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease;
     }
   }
 
@@ -988,6 +1361,7 @@ onUnmounted(() => {
     flex-direction: column;
     overflow: hidden;
     min-width: 0;
+    background: #fff;
   }
 
   // 顶部栏
@@ -1150,17 +1524,13 @@ onUnmounted(() => {
     }
   }
 
-  .bl-collapse-trigger {
-    display: none;
-  }
-
   .bl-badge {
     position: absolute;
     top: 2px;
     right: 2px;
     min-width: 16px;
     height: 16px;
-    padding: 0 4px;
+    padding: 0 5px;
     border-radius: 8px;
     background: var(--app-danger);
     color: #fff;
@@ -1168,54 +1538,140 @@ onUnmounted(() => {
     font-weight: 600;
     line-height: 16px;
     text-align: center;
-    border: 2px solid var(--app-surface);
   }
 
-  // ==================== 多页签 Tabs ====================
+  // ==================== 内容动画 ====================
+  .route-enter-active,
+  .route-leave-active {
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+  .route-enter-from { opacity: 0; transform: translateY(4px); }
+  .route-leave-to { opacity: 0; transform: translateY(-4px); }
+
+  // ==================== 全局搜索 ====================
+  .bl-search-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    display: flex;
+    justify-content: center;
+    padding-top: 12vh;
+    z-index: 3000;
+    backdrop-filter: blur(4px);
+  }
+
+  .bl-search-box {
+    width: 560px;
+    max-height: 480px;
+    background: var(--app-surface);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+  }
+
+  .bl-search-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--app-border);
+
+    svg { color: var(--app-text-muted); flex-shrink: 0; }
+
+    input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 15px;
+      color: var(--app-text-primary);
+      background: transparent;
+      &::placeholder { color: var(--app-text-muted); }
+    }
+
+    kbd {
+      font-size: 11px;
+      padding: 2px 6px;
+      background: var(--app-surface-hover);
+      border-radius: 4px;
+      color: var(--app-text-muted);
+      font-family: monospace;
+    }
+  }
+
+  .bl-search-empty {
+    padding: 40px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--app-text-muted);
+  }
+
+  .bl-search-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: background 0.12s;
+
+    &:hover,
+    &.first { background: var(--app-surface-hover); }
+  }
+
+  .bl-search-result-icon {
+    color: var(--app-text-muted);
+    display: flex;
+  }
+
+  .bl-search-result-label {
+    font-size: 14px;
+    color: var(--app-text-primary);
+    flex: 1;
+  }
+
+  .bl-search-result-path {
+    font-size: 11px;
+    color: var(--app-text-muted);
+  }
+
+  // ==================== Tabs ====================
   .bl-tabs {
     display: flex;
     align-items: center;
     height: 40px;
+    min-height: 40px;
     background: var(--app-surface);
-    border-bottom: 1px solid var(--app-border-light);
-    padding: 0 8px;
+    border-bottom: 1px solid var(--app-border);
     flex-shrink: 0;
-    gap: 4px;
+    overflow: hidden;
   }
 
   .bl-tabs-scroll {
+    flex: 1;
     display: flex;
-    align-items: center;
-    gap: 4px;
     overflow-x: auto;
     overflow-y: hidden;
-    flex: 1;
-    scrollbar-width: thin;
-
-    &::-webkit-scrollbar { height: 0; }
+    padding: 0 8px;
+    gap: 2px;
+    &::-webkit-scrollbar { width: 0; height: 0; }
   }
 
   .bl-tab {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 6px;
-    height: 28px;
-    padding: 0 10px;
-    border-radius: var(--app-radius-sm);
-    font-size: 13px;
+    padding: 0 14px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 12px;
     color: var(--app-text-secondary);
     text-decoration: none;
     white-space: nowrap;
-    transition: all var(--app-transition-fast);
+    transition: all 0.15s;
+    position: relative;
     flex-shrink: 0;
 
-    &:hover {
-      background: var(--app-surface-hover);
-      color: var(--app-text-primary);
-
-      .bl-tab-close { opacity: 1; }
-    }
-
+    &:hover { background: var(--app-surface-hover); }
     &.active {
       background: var(--app-primary-bg);
       color: var(--app-primary);
@@ -1228,189 +1684,69 @@ onUnmounted(() => {
     height: 6px;
     border-radius: 50%;
     background: var(--app-primary);
-    flex-shrink: 0;
   }
 
+  .bl-tab-label { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
   .bl-tab-close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    border-radius: 50%;
+    width: 16px; height: 16px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
     opacity: 0;
-    color: var(--app-text-muted);
-    transition: all var(--app-transition-fast);
-    margin-left: 2px;
-
-    &:hover {
-      background: var(--app-danger-bg);
-      color: var(--app-danger);
-      opacity: 1;
-    }
+    &:hover { background: var(--app-surface-hover); opacity: 1; }
   }
+  .bl-tab:hover .bl-tab-close { opacity: 1; }
 
   .bl-tabs-actions {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
+    padding: 0 8px;
+    border-left: 1px solid var(--app-border-light);
+    margin-left: 4px;
   }
 
-  .bl-tab-more {
-    width: 28px;
-    height: 28px;
-  }
-
-  // ==================== 消息抽屉 ====================
+  // ==================== 消息通知 ====================
   .bl-message-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    padding: 0;
   }
-
   .bl-message-item {
     display: flex;
     gap: 12px;
-    padding: 12px;
-    border-radius: var(--app-radius-md);
-    transition: background var(--app-transition-fast);
+    padding: 16px;
+    border-bottom: 1px solid var(--app-border-light);
+    cursor: pointer;
+    transition: background 0.15s;
 
     &:hover { background: var(--app-surface-hover); }
-    &.unread { background: var(--app-primary-bg); }
-    &.unread .bl-message-title { font-weight: 600; }
+    &.unread { background: rgba(37, 99, 235, 0.02); }
   }
-
   .bl-message-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
+    color: var(--app-text-secondary);
 
-    &.audit { background: var(--app-warning-bg); color: var(--app-warning); }
-    &.system { background: var(--app-info-bg); color: var(--app-info); }
-    &.business { background: var(--app-primary-bg); color: var(--app-primary); }
+    &.audit { background: rgba(255,176,32,0.1); color: var(--app-warning); }
+    &.system { background: rgba(22,119,255,0.1); color: var(--app-primary); }
+    &.business { background: rgba(0,181,120,0.1); color: var(--app-success); }
   }
-
   .bl-message-body { flex: 1; min-width: 0; }
-  .bl-message-title { font-size: 14px; color: var(--app-text-primary); margin-bottom: 2px; }
-  .bl-message-desc { font-size: 13px; color: var(--app-text-secondary); line-height: 1.4; }
-  .bl-message-time { font-size: 12px; color: var(--app-text-muted); margin-top: 4px; }
-  .bl-message-empty { text-align: center; padding: 40px 0; color: var(--app-text-muted); font-size: 14px; }
+  .bl-message-title { font-size: 14px; font-weight: 500; }
+  .bl-message-desc { font-size: 12px; color: var(--app-text-secondary); margin-top: 4px; }
+  .bl-message-time { font-size: 11px; color: var(--app-text-muted); margin-top: 6px; }
+  .bl-message-empty { padding: 60px; text-align: center; color: var(--app-text-muted); }
 
-  // ==================== 全局搜索弹层 ====================
-  .bl-search-modal {
-    position: fixed;
-    inset: 0;
-    background: var(--app-overlay);
-    backdrop-filter: blur(4px);
-    z-index: var(--app-z-modal);
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 12vh;
+  // ==================== 沉浸模式 ====================
+  &.immersive {
+    .bl-topbar, .bl-tabs { display: none; }
   }
+}
 
-  .bl-search-box {
-    width: 560px;
-    max-width: 92vw;
-    background: var(--app-surface);
-    border-radius: var(--app-radius-lg);
-    box-shadow: var(--app-shadow-xl);
-    overflow: hidden;
-  }
+// ===== 暗色模式侧边栏 =====
+:global(html.dark) .basic-layout .bl-sidebar {
+  background: #1a1d23;
+  border-right-color: rgba(255,255,255,0.06);
+}
 
-  .bl-search-input-wrap {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--app-border-light);
-    color: var(--app-text-muted);
-
-    input {
-      flex: 1;
-      border: none;
-      outline: none;
-      background: transparent;
-      font-size: 16px;
-      color: var(--app-text-primary);
-      font-family: var(--app-font-family);
-    }
-  }
-
-  .bl-search-results {
-    max-height: 360px;
-    overflow-y: auto;
-    padding: 6px;
-  }
-
-  .bl-search-result {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: var(--app-radius-sm);
-    cursor: pointer;
-    transition: background var(--app-transition-fast);
-
-    &:hover, &.first { background: var(--app-surface-hover); }
-  }
-
-  .bl-search-result-icon {
-    display: flex;
-    color: var(--app-primary);
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-  }
-
-  .bl-search-result-label {
-    font-size: 14px;
-    color: var(--app-text-primary);
-    font-weight: 500;
-  }
-
-  .bl-search-result-path {
-    margin-left: auto;
-    font-size: 12px;
-    color: var(--app-text-muted);
-  }
-
-  .bl-search-empty {
-    text-align: center;
-    padding: 32px 0;
-    color: var(--app-text-muted);
-    font-size: 14px;
-  }
-
-  // ==================== 响应式：窄屏显示折叠按钮 ====================
-  @media (max-width: 1199px) {
-    .bl-collapse-trigger { display: inline-flex; }
-  }
-
-  // ==================== 过渡动画 ====================
-  .fade-enter-active,
-  .fade-leave-active {
-    transition: opacity 0.2s ease;
-  }
-  .fade-enter-from,
-  .fade-leave-to {
-    opacity: 0;
-  }
-
-  .subnav-enter-active,
-  .subnav-leave-active {
-    transition: max-height 0.25s ease, opacity 0.2s ease;
-    overflow: hidden;
-    max-height: 300px;
-  }
-  .subnav-enter-from,
-  .subnav-leave-to {
-    max-height: 0;
-    opacity: 0;
-  }
+:global(html.dark) .bl-main {
+  background: #141518;
 }
 </style>

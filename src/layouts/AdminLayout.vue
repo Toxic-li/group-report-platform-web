@@ -109,7 +109,7 @@ async function handleLogout() {
 }
 .als-logo {
   width: 36px; height: 36px; border-radius: 8px;
-  background: #1677FF; color: #fff; font-weight: 700; font-size: 16px;
+  background: rgba(37, 99, 235; color: #fff; font-weight: 700; font-size: 16px;
   display: flex; align-items: center; justify-content: center;
 }
 .als-title { font-size: 15px; font-weight: 600; color: #F1F5F9; }
@@ -120,7 +120,7 @@ async function handleLogout() {
   padding: 10px 12px; border-radius: 6px; font-size: 13px;
   text-decoration: none; color: #94A3B8; transition: all .15s;
   &:hover { background: #334155; color: #E2E8F0; }
-  &.active { background: #1677FF; color: #fff; }
+  &.active { background: rgba(37, 99, 235; color: #fff; }
 }
 .als-nav-icon { font-size: 16px; }
 .als-nav-label { font-weight: 500; }

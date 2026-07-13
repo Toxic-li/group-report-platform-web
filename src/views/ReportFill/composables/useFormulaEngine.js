@@ -25,10 +25,11 @@ export function useFormulaEngine({ config, currentTemplate, v2Parser, useV2 }) {
   }
 
   function parseTargetCell(targetCell, rows, rowIdToIdx, colIdToIdx) {
-    const lastDash = targetCell.lastIndexOf('-')
-    if (lastDash <= 0) return null
-    const rPart = targetCell.substring(0, lastDash)
-    const cPart = targetCell.substring(lastDash + 1)
+    // 支持两种分隔符： "rowId-colId" 和 "rowId:colId"
+    const sepIdx = Math.max(targetCell.lastIndexOf('-'), targetCell.lastIndexOf(':'))
+    if (sepIdx <= 0) return null
+    const rPart = targetCell.substring(0, sepIdx)
+    const cPart = targetCell.substring(sepIdx + 1)
 
     let targetRi, targetCi
     if (!isNaN(rPart) && !isNaN(cPart)) {
@@ -156,9 +157,43 @@ export function useFormulaEngine({ config, currentTemplate, v2Parser, useV2 }) {
         }
       }
 
+      // 小计/合计行整行展开：目标行是 summary 且表达式含 rowId:colId 引用时，
+      // 自动把公式按列展开（每列 colId 替换为对应列 id），无需设计器为每列保存 metric
+      const targetRowObj = rows[targetRi]
+      if (targetRowObj?.isSummary && /\w+:\w+/.test(fc.expression)) {
+        const refPattern = /(\w+):(\w+)/g
+        const hasAnyRef = refPattern.test(fc.expression)
+        if (hasAnyRef) {
+          const rowOffset = frozenRows - 1
+          const colOffset = 2
+          for (let c = 0; c < cols.length; c++) {
+            const targetColId = cols[c].id
+            const newExpr = fc.expression.replace(/(\w+):(\w+)/g, (m, rId, cId) => {
+              return `${rId}:${targetColId}`
+            })
+            let expr = convertCellRefs(newExpr, rowIdToIdx, colIdToIdx, frozenRows)
+            expr = shiftFormulaRefs(expr, rowOffset, colOffset)
+            if (!expr.startsWith('=')) expr = '=' + expr
+            const colKey = mckey(targetRi, c, frozenRows)
+            if (config.value.cellData[colKey]) {
+              setFormulaCell(colKey, expr, fc, targetRi, c, rows)
+              convertedFormulas.push({
+                id: `${fc.id}_c${c}`, expression: expr, targetCell: colKey,
+                fieldName: fc.fieldName || '', dependencies: fc.dependencies || []
+              })
+            }
+          }
+          appliedCount++
+          continue
+        }
+      }
+
       const rowOffset = frozenRows - 1
       const colOffset = 2  // 跳过2个冻结列（序号+指标名），用户 A→内部 C(2), B→D(3)...
-      let expr = shiftFormulaRefs(fc.expression, rowOffset, colOffset)
+
+      // 将 [rowId:colId] 格式的单元格引用转换为 Excel 风格引用（如 C5）
+      let expr = convertCellRefs(fc.expression, rowIdToIdx, colIdToIdx, frozenRows)
+      expr = shiftFormulaRefs(expr, rowOffset, colOffset)
       if (!expr.startsWith('=')) expr = '=' + expr
       setFormulaCell(key, expr, fc, targetRi, targetCi, rows)
       convertedFormulas.push({
@@ -185,14 +220,29 @@ export function useFormulaEngine({ config, currentTemplate, v2Parser, useV2 }) {
 
   function extractRowListExpr(expr) {
     if (!expr) return null
+    // 如果表达式包含方括号引用（如 [r1:c1]），不做行列表处理
+    if (/\[/.test(expr)) return null
     const inner = expr.trim().replace(/^(SUM|AVERAGE|MAX|MIN)\((.*)\)$/i, '$2').trim()
     if (/^[A-Z]+\d+:[A-Z]+\d+$/.test(inner)) return null
     const parts = inner.split(/[,，]\s*/)
       .map(p => p.trim().replace(/^\[(.*)\]$/, '$1'))
       .filter(Boolean)
     if (parts.some(p => /^[A-Z]+\d+:[A-Z]+\d+$/.test(p))) return null
+    // 如果 parts 中包含 rowId:colId 格式的单元格引用（含:且不是 A1 格式），不做行列表处理
+    if (parts.some(p => isCellRef(p))) return null
     const hasRowIds = parts.some(p => p && !/^[A-Z]+\d+$/.test(p))
     return hasRowIds ? parts : null
+  }
+
+  // 检测是否是 rowId:colId 格式的单元格引用（含:分隔符，且不是 A1 格式）
+  function isCellRef(token) {
+    if (!token.includes(':')) return false
+    const sepIdx = token.lastIndexOf(':')
+    const rPart = token.substring(0, sepIdx)
+    const cPart = token.substring(sepIdx + 1)
+    const isA1 = /^[A-Z]+\d+$/
+    // 两部分都是 A1 格式 → A1:A1 范围（已上面处理）；否则视为 rowId:colId
+    return !isA1.test(rPart) || !isA1.test(cPart)
   }
 
   function shiftFormulaRefs(expr, rowOffset, colOffset) {
@@ -203,6 +253,49 @@ export function useFormulaEngine({ config, currentTemplate, v2Parser, useV2 }) {
       if (colNum < 0 || rowNum < 0) return `${col}${row}`
       return `${numToColLetter(colNum)}${rowNum}`
     })
+  }
+
+  /**
+   * 将单元格引用转换为 Excel 风格引用（如 A1）
+   * 支持两种格式：
+   *   1. [rowId:colId] 方括号格式: SUM([r1:c1, r2:c2]) → SUM(A1, A2)
+   *   2. 裸 rowId:colId 格式: SUM(r1:c1, r2:c2) → SUM(A1, A2)
+   */
+  function convertCellRefs(expr, rowIdToIdx, colIdToIdx, frozenRows) {
+    if (!expr) return expr
+    // 先处理 [rowId:colId] 方括号格式
+    let result = expr.replace(/\[([^\]]+)\]/g, (match, content) => {
+      const refs = content.split(',').map(s => s.trim()).filter(Boolean)
+      const converted = refs.map(ref => convertSingleRef(ref, rowIdToIdx, colIdToIdx))
+      return converted.join(', ')
+    })
+    // 再处理裸 rowId:colId 引用（如 SUM(r_east:c_h1_q1, r_south:c_h1_q1)）
+    // 匹配 \w+:\w+ 格式，排除 A1 格式（如 A1:B2 范围）
+    result = result.replace(/(\w+):(\w+)/g, (match, rPart, cPart) => {
+      if (/^[A-Z]+\d+$/.test(rPart) && /^[A-Z]+\d+$/.test(cPart)) return match
+      const ri = rowIdToIdx.get(rPart) ?? rowIdToIdx.get(String(rPart)) ?? rowIdToIdx.get(Number(rPart))
+      const ci = colIdToIdx.get(cPart) ?? colIdToIdx.get(String(cPart)) ?? colIdToIdx.get(Number(cPart))
+      if (ri === undefined || ci === undefined) return match
+      const colLetter = numToColLetter(ci)
+      const rowNum = ri + 1
+      return `${colLetter}${rowNum}`
+    })
+    return result
+  }
+
+  // 转换单个单元格引用（用于 [...] 内部）
+  function convertSingleRef(ref, rowIdToIdx, colIdToIdx) {
+    // ref 格式: "rowId:colId" 或 "rowId-colId"
+    const sepIdx = Math.max(ref.lastIndexOf(':'), ref.lastIndexOf('-'))
+    if (sepIdx <= 0) return ref
+    const rPart = ref.substring(0, sepIdx)
+    const cPart = ref.substring(sepIdx + 1)
+    const ri = rowIdToIdx.get(rPart) ?? rowIdToIdx.get(String(rPart)) ?? rowIdToIdx.get(Number(rPart))
+    const ci = colIdToIdx.get(cPart) ?? colIdToIdx.get(String(cPart)) ?? colIdToIdx.get(Number(cPart))
+    if (ri === undefined || ci === undefined) return ref
+    const colLetter = numToColLetter(ci)
+    const rowNum = ri + 1
+    return `${colLetter}${rowNum}`
   }
 
   function colToNum(col) {
@@ -402,13 +495,19 @@ export function useFormulaEngine({ config, currentTemplate, v2Parser, useV2 }) {
     if (!target) return
 
     const expr = typeof formulaData === 'string' ? formulaData : formulaData.expression
+    const applyToRow = typeof formulaData === 'object' && formulaData.applyToRow
     const frozenRows = config.value?.frozenRowCount || 4
-    // cellData 使用 mckey 格式（"4-2"），而非 "0-0" 格式
-    const cellKey = mckey(target.rowIdx, target.colIdx, frozenRows)
-    // savedFormulas / 后端使用 "rowIdx-colIdx" 格式（"0-0"）
-    const targetCellStr = `${target.rowIdx}-${target.colIdx}`
+    const colsLen = (config.value?.columnData?.length || 3) - 2
 
-    if (config.value.cellData[cellKey]) {
+    // 单元格或整行写入
+    const colIndices = applyToRow
+      ? Array.from({ length: colsLen }, (_, i) => i)
+      : [target.colIdx]
+
+    for (const ci of colIndices) {
+      const cellKey = mckey(target.rowIdx, ci, frozenRows)
+      if (!config.value.cellData[cellKey]) continue
+
       config.value.cellData[cellKey] = {
         ...config.value.cellData[cellKey],
         v: expr, readOnly: true,
@@ -422,20 +521,29 @@ export function useFormulaEngine({ config, currentTemplate, v2Parser, useV2 }) {
           createdAt: formulaData.createdAt
         } : null
       }
+      syncCellToRows(target.rowIdx, ci, expr)
     }
-
-    syncCellToRows(target.rowIdx, target.colIdx, expr)
 
     if (typeof formulaData === 'object') {
-      savedFormulas.push({
-        ...formulaData,
-        targetCell: targetCellStr,
-        rowName: target.row?.name,
-        colTitle: target.val?.colTitle
-      })
+      if (applyToRow) {
+        // 整行应用：记录行级公式
+        savedFormulas.push({
+          ...formulaData,
+          targetCell: `${target.rowIdx}`,
+          rowName: target.row?.name,
+          colTitle: '整行'
+        })
+      } else {
+        savedFormulas.push({
+          ...formulaData,
+          targetCell: `${target.rowIdx}-${target.colIdx}`,
+          rowName: target.row?.name,
+          colTitle: target.val?.colTitle
+        })
+      }
     }
 
-    showToast('公式已保存', 'success')
+    showToast(applyToRow ? '公式已应用到整行' : '公式已保存', 'success')
     formulaEditor.visible = false
 
     nextTick(() => {

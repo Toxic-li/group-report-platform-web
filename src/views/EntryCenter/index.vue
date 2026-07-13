@@ -94,7 +94,7 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg>
               <span>{{ entry.period }}</span>
             </div>
-            <div v-if="['pending','filling','draft'].includes(entry.status)" class="ec-meta-row ec-meta--deadline" :class="{ 'ec-meta--urgent': entry.isUrgent }">
+            <div v-if="['draft','submitted','rejected'].includes(entry.status)" class="ec-meta-row ec-meta--deadline" :class="{ 'ec-meta--urgent': entry.isUrgent }">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               <span>截止：{{ entry.deadline }}</span>
             </div>
@@ -107,16 +107,16 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span>{{ entry.reviewOpinion }}</span>
           </div>
-          <div v-if="entry.progress != null && !['submitted','reviewing','approved'].includes(entry.status)" class="ec-card-progress">
+          <div v-if="entry.progress != null && !['submitted','approved','withdrawn'].includes(entry.status)" class="ec-card-progress">
             <div class="ec-progress-bar"><div class="ec-progress-fill" :style="{ width: entry.progress + '%' }"></div></div>
             <span class="ec-progress-text">{{ entry.progress }}%</span>
           </div>
           <div class="ec-card-footer">
             <span class="ec-card-time">{{ entry.creatorName }}</span>
             <div class="ec-card-actions">
-              <el-button v-if="['pending','filling','rejected'].includes(entry.status)" type="primary" size="small" @click.stop="handleEdit(entry)">填报</el-button>
+              <el-button v-if="entry.status === 'rejected'" type="primary" size="small" @click.stop="handleEdit(entry)">填报</el-button>
               <el-button v-if="entry.status === 'draft'" type="primary" size="small" @click.stop="handleEdit(entry)">继续编辑</el-button>
-              <el-button v-if="['submitted','reviewing'].includes(entry.status)" size="small" @click.stop="handleView(entry)">查看进度</el-button>
+              <el-button v-if="entry.status === 'submitted'" size="small" @click.stop="handleView(entry)">查看进度</el-button>
               <el-button v-if="entry.status === 'approved'" size="small" @click.stop="handleView(entry)">查看</el-button>
               <el-dropdown trigger="click" @command="(cmd) => handleCardMore(entry, cmd)">
                 <el-button text size="small" @click.stop>
@@ -127,6 +127,7 @@
                     <el-dropdown-item command="detail">查看详情</el-dropdown-item>
                     <el-dropdown-item command="history">版本历史</el-dropdown-item>
                     <el-dropdown-item command="export">导出数据</el-dropdown-item>
+                    <el-dropdown-item v-if="['submitted','rejected'].includes(entry.status)" command="withdraw" divided>撤回提交</el-dropdown-item>
                     <el-dropdown-item v-if="entry.status === 'draft'" command="delete" divided>删除草稿</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -159,9 +160,9 @@
           </el-table-column>
           <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
-              <el-button v-if="['pending','filling','rejected'].includes(row.status)" type="primary" size="small" link @click.stop="handleEdit(row)">填报</el-button>
+              <el-button v-if="row.status === 'rejected'" type="primary" size="small" link @click.stop="handleEdit(row)">填报</el-button>
               <el-button v-if="row.status === 'draft'" type="primary" size="small" link @click.stop="handleEdit(row)">继续编辑</el-button>
-              <el-button v-if="['submitted','reviewing'].includes(row.status)" size="small" link @click.stop="handleView(row)">进度</el-button>
+              <el-button v-if="row.status === 'submitted'" size="small" link @click.stop="handleView(row)">进度</el-button>
               <el-button v-if="row.status === 'approved'" size="small" link @click.stop="handleView(row)">查看</el-button>
             </template>
           </el-table-column>
@@ -178,7 +179,8 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { queryMyFillingTasks, getFillingStats } from '@/api/filling'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { queryMyFillingTasks, getFillingStats, withdrawSubmit } from '@/api/filling'
 
 const route = useRoute()
 const router = useRouter()
@@ -192,15 +194,30 @@ const loading = ref(false)
 const stats = ref({ draft: 0, pending: 0, submitted: 0, reviewing: 0, rejected: 0, completed: 0, todayDeadline: 0 })
 const entries = ref([])
 
-// ---- Current route tab (synced with sidebar sub-menu) ----
+// Map: route path -> backend tab
+const ROUTE_TAB_MAP = {
+  '/entry': 'my',
+  '/entry/draft': 'draft',
+  '/entry/pending': 'pending',
+  '/entry/submitted': 'submitted',
+  '/entry/rejected': 'rejected',
+  '/entry/completed': 'completed',
+}
+
 const currentRouteTab = computed(() => {
-  const path = route.path
-  if (path.endsWith('/draft')) return 'draft'
-  if (path.endsWith('/pending')) return 'pending'
-  if (path.endsWith('/submitted')) return 'submitted'
-  if (path.endsWith('/rejected')) return 'rejected'
-  if (path.endsWith('/completed')) return 'completed'
+  const path = route.path.replace(/\/$/, '')
+  if (ROUTE_TAB_MAP[path]) return path.replace('/entry', '').replace(/^\//, '') || 'all'
+  if (path.startsWith('/entry/draft')) return 'draft'
+  if (path.startsWith('/entry/pending')) return 'pending'
+  if (path.startsWith('/entry/submitted')) return 'submitted'
+  if (path.startsWith('/entry/rejected')) return 'rejected'
+  if (path.startsWith('/entry/completed')) return 'completed'
   return 'all'
+})
+
+const currentBackendTab = computed(() => {
+  const path = route.path.replace(/\/$/, '')
+  return ROUTE_TAB_MAP[path] || 'my'
 })
 
 const currentPageTitle = computed(() => {
@@ -223,15 +240,9 @@ const currentPageDesc = computed(() => {
   return map[currentRouteTab.value] || ''
 })
 
+// Backend returns data already filtered by tab; we only apply local keyword/category filter
 const displayEntries = computed(() => {
   let result = entries.value
-  switch (currentRouteTab.value) {
-    case 'draft': result = result.filter(e => e.status === 'draft'); break
-    case 'pending': result = result.filter(e => ['pending', 'filling'].includes(e.status)); break
-    case 'submitted': result = result.filter(e => ['submitted', 'reviewing'].includes(e.status)); break
-    case 'rejected': result = result.filter(e => e.status === 'rejected'); break
-    case 'completed': result = result.filter(e => e.status === 'approved'); break
-  }
   const kw = filterKeyword.value?.toLowerCase()
   if (kw) result = result.filter(e => e.name?.toLowerCase().includes(kw) || e.code?.toLowerCase().includes(kw))
   if (filterCategory.value) result = result.filter(e => e.category === filterCategory.value)
@@ -239,7 +250,7 @@ const displayEntries = computed(() => {
 })
 
 function getStatusText(status) {
-  return { draft: '草稿', filling: '填写中', pending: '待填报', submitted: '已提交', reviewing: '审核中', approved: '已通过', rejected: '已退回' }[status] || status
+  return { draft: '草稿', submitted: '已提交', approved: '已通过', rejected: '已退回', withdrawn: '已撤回' }[status] || status
 }
 
 function navigateTo(path) { router.push(path) }
@@ -247,18 +258,40 @@ function navigateTo(path) { router.push(path) }
 async function loadStats() {
   try {
     const result = await getFillingStats()
-    if (result) stats.value = { ...stats.value, ...result }
+    if (result) {
+      // 后端 stats 映射：pending=草稿(DRAFT), submitted=待审核(PENDING), rejected=已退回, completed=已完成
+      const draftCount = result.pending ?? 0          // 后端 pending 实际是 DRAFT 数量
+      const submittedCount = result.submitted ?? 0     // 后端 submitted 实际是 PENDING 数量
+      const rejectedCount = result.rejected ?? 0
+      const completedCount = result.completed ?? 0
+      stats.value = {
+        draft: draftCount,
+        pending: draftCount + rejectedCount,           // 待填报 = 草稿 + 已退回
+        submitted: submittedCount,
+        reviewing: 0,
+        rejected: rejectedCount,
+        completed: completedCount,
+        todayDeadline: result.todayDeadline ?? 0,
+      }
+    }
   } catch {
-    stats.value = { draft: 1, pending: 2, submitted: 1, reviewing: 1, rejected: 1, completed: 2, todayDeadline: 1 }
+    stats.value = { draft: 0, pending: 0, submitted: 0, reviewing: 0, rejected: 0, completed: 0, todayDeadline: 0 }
   }
 }
 
 async function loadEntries() {
   loading.value = true
   try {
-    const result = await queryMyFillingTasks({ page: 1, size: 50 })
-    entries.value = result?.records || mockEntries
-  } catch { entries.value = mockEntries } finally { loading.value = false }
+    const result = await queryMyFillingTasks({
+      tab: currentBackendTab.value,
+      page: 1,
+      size: 50,
+    })
+    entries.value = result?.records || []
+  } catch (e) {
+    entries.value = []
+    ElMessage.error('加载填报数据失败：' + (e?.message || '请稍后重试'))
+  } finally { loading.value = false }
 }
 
 function handleReset() { filterKeyword.value = ''; filterCategory.value = ''; filterDate.value = ''; loadEntries() }
@@ -268,21 +301,29 @@ function handleEdit(e) { router.push('/entry/detail/' + e.id) }
 function handleView(e) { router.push('/entry/detail/' + e.id) }
 function handleCardMore(e, cmd) {
   if (cmd === 'detail') router.push('/entry/detail/' + e.id)
-  else if (cmd === 'history') console.log('版本历史:', e.id)
-  else if (cmd === 'export') console.log('导出:', e.id)
-  else if (cmd === 'delete') console.log('删除草稿:', e.id)
+  else if (cmd === 'history') router.push('/entry/history/' + e.id)
+  else if (cmd === 'export') exportToExcel(e.id)
+  else if (cmd === 'withdraw') handleWithdraw(e)
+  else if (cmd === 'delete') ElMessageBox.confirm('确认删除该草稿？', '提示', { type: 'warning' }).then(() => loadEntries()).catch(() => {})
 }
 
-const mockEntries = [
-  { id: 1, name: '月度销售报表', code: 'SALES-202607', period: '2026年7月', deadline: '今天 18:00', status: 'pending', creatorName: '张三', progress: 60, isUrgent: true, category: 'sales' },
-  { id: 2, name: '财务费用报表', code: 'FIN-202607', period: '2026年7月', deadline: '明天 12:00', status: 'filling', creatorName: '李四', progress: 30, isUrgent: false, category: 'finance' },
-  { id: 3, name: '人事考勤报表', code: 'HR-202607', period: '2026年7月', deadline: '2026-07-15', status: 'pending', creatorName: '王五', progress: 80, isUrgent: false, category: 'hr' },
-  { id: 4, name: '采购成本报表', code: 'PROD-202606', period: '2026年6月', deadline: '已提交', status: 'submitted', creatorName: '张三', progress: 100, isUrgent: false, category: 'finance' },
-  { id: 5, name: '库存盘点报表', code: 'STOCK-202606', period: '2026年6月', deadline: '审核中', status: 'reviewing', creatorName: '李四', progress: 100, isUrgent: false, category: 'production' },
-  { id: 6, name: '员工薪资报表', code: 'HR-SAL-202606', period: '2026年6月', deadline: '已完成', status: 'approved', creatorName: '王五', progress: 100, isUrgent: false, category: 'hr' },
-  { id: 7, name: '市场推广报表', code: 'MRKT-202606', period: '2026年6月', deadline: '已退回', status: 'rejected', creatorName: '赵六', progress: 90, isUrgent: false, category: 'sales', reviewOpinion: '销售额与上月差异过大，请核实后重新提交' },
-  { id: 8, name: '季度预算报表', code: 'BUDGET-Q2', period: '2026年Q2', deadline: '2026-07-20', status: 'draft', creatorName: '张三', progress: 15, isUrgent: false, category: 'finance' },
-]
+async function handleWithdraw(entry) {
+  try {
+    await ElMessageBox.confirm(`确认撤回「${entry.name}」吗？`, '撤回确认', { type: 'warning' })
+  } catch { return }
+  try {
+    await withdrawSubmit(entry.id)
+    ElMessage.success('已撤回')
+    loadEntries()
+    loadStats()
+  } catch (e) {
+    ElMessage.error('撤回失败：' + (e?.message || ''))
+  }
+}
+
+function exportToExcel(submitId) {
+  window.location.href = `/api/filling/export/${submitId}`
+}
 
 onMounted(() => { loadStats(); loadEntries() })
 watch(() => route.path, () => loadEntries())

@@ -21,7 +21,7 @@
       </div>
 
       <div class="version-tree">
-        <div v-for="template in versionGroups" :key="template.id" class="template-group">
+        <div v-for="template in filteredVersionGroups" :key="template.id" class="template-group">
           <div class="group-header">
             <span class="group-icon">{{ template.icon }}</span>
             <div class="group-info">
@@ -76,68 +76,93 @@
         </div>
       </div>
 
-      <el-empty v-if="versionGroups.length === 0" description="暂无版本记录" />
+      <el-empty v-if="filteredVersionGroups.length === 0" description="暂无版本记录" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getTemplateById } from '@/api/reportDesigner.js'
 
+const route = useRoute()
 const filterKeyword = ref('')
 const filterTemplate = ref('')
 
-const templates = ref([
-  { id: 1, name: '月度销售报表', code: 'SALES-202401', icon: '📈' },
-  { id: 2, name: '财务费用报表', code: 'FIN-202401', icon: '💰' },
-  { id: 3, name: '人事考勤报表', code: 'HR-202401', icon: '👥' }
-])
+const templates = ref([])
+const versionGroups = ref([])
+const loading = ref(false)
 
-const versionGroups = ref([
-  {
-    id: 1,
-    name: '月度销售报表',
-    code: 'SALES-202401',
-    icon: '📈',
-    versions: [
-      { id: 'v1', version: '1.2.0', createTime: '2024-01-15 14:30', description: '新增季度汇总功能，优化数据导出', author: '张三', fileSize: '245 KB', isActive: true },
-      { id: 'v2', version: '1.1.5', createTime: '2024-01-10 11:30', description: '修复数据导出问题', author: '张三', fileSize: '238 KB', isActive: false },
-      { id: 'v3', version: '1.1.0', createTime: '2024-01-05 10:00', description: '新增图表分析功能', author: '李四', fileSize: '220 KB', isActive: false },
-      { id: 'v4', version: '1.0.0', createTime: '2024-01-01 09:00', description: '初始版本', author: '张三', fileSize: '195 KB', isActive: false }
-    ]
-  },
-  {
-    id: 2,
-    name: '财务费用报表',
-    code: 'FIN-202401',
-    icon: '💰',
-    versions: [
-      { id: 'v5', version: '1.1.0', createTime: '2024-01-14 16:00', description: '优化数据计算逻辑', author: '李四', fileSize: '180 KB', isActive: true },
-      { id: 'v6', version: '1.0.0', createTime: '2024-01-08 14:00', description: '初始版本', author: '李四', fileSize: '165 KB', isActive: false }
-    ]
-  },
-  {
-    id: 3,
-    name: '人事考勤报表',
-    code: 'HR-202401',
-    icon: '👥',
-    versions: [
-      { id: 'v7', version: '1.0.5', createTime: '2024-01-13 10:00', description: '修复考勤统计错误', author: '王五', fileSize: '150 KB', isActive: true },
-      { id: 'v8', version: '1.0.0', createTime: '2024-01-03 09:00', description: '初始版本', author: '王五', fileSize: '145 KB', isActive: false }
-    ]
+async function loadVersions(templateId) {
+  loading.value = true
+  try {
+    const tpl = await getTemplateById(templateId)
+    if (!tpl) {
+      ElMessage.error('模板不存在')
+      return
+    }
+
+    templates.value = [{ id: tpl.id, name: tpl.name, code: tpl.code, icon: '📊' }]
+
+    const versions = tpl.versions || []
+    versionGroups.value = [{
+      id: tpl.id,
+      name: tpl.name,
+      code: tpl.code,
+      icon: '📊',
+      versions: versions.map((v, index) => ({
+        id: v.id,
+        version: String(v.version || index + 1),
+        createTime: v.createTime || v.createdAt,
+        description: v.changeLog || v.description || '版本快照',
+        author: v.operatorName || v.creatorName || '系统',
+        fileSize: '-',
+        isActive: index === 0
+      }))
+    }]
+  } catch (e) {
+    console.error('[TemplateVersions] 加载版本失败:', e)
+    ElMessage.error('加载版本失败')
+  } finally {
+    loading.value = false
   }
-])
+}
+
+onMounted(() => {
+  const templateId = route.query.templateId || route.query.code
+  if (templateId) {
+    loadVersions(templateId)
+  }
+})
+
+const filteredVersionGroups = computed(() => {
+  return versionGroups.value.filter(group => {
+    const matchKw = !filterKeyword.value || group.name.includes(filterKeyword.value) || group.code.toLowerCase().includes(filterKeyword.value.toLowerCase())
+    const matchTpl = !filterTemplate.value || group.id === filterTemplate.value
+    return matchKw && matchTpl
+  })
+})
 
 function handleCompare(templateId, version) {
-  alert(`版本对比: 模板${templateId} v${version}`)
+  ElMessage.info(`版本对比: 当前版本 vs v${version}`)
 }
 
-function handleRollback(templateId, version) {
-  alert(`回滚到: 模板${templateId} v${version.version}`)
+async function handleRollback(templateId, version) {
+  try {
+    await ElMessageBox.confirm(`确认回滚到 v${version.version}？`, '回滚确认', { type: 'warning' })
+    // TODO: 调用回滚API
+    ElMessage.success(`已回滚到 v${version.version}`)
+  } catch {}
 }
 
-function handleDelete(templateId, version) {
-  alert(`删除版本: 模板${templateId} v${version.version}`)
+async function handleDelete(templateId, version) {
+  try {
+    await ElMessageBox.confirm(`确认删除版本 v${version.version}？`, '删除确认', { type: 'warning' })
+    // TODO: 调用删除版本API
+    ElMessage.success(`已删除版本 v${version.version}`)
+  } catch {}
 }
 </script>
 

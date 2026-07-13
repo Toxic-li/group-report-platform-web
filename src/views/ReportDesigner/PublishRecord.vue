@@ -76,7 +76,10 @@ const filteredRecords = computed(() => {
   return records.value.filter(r => {
     const matchKeyword = !filterKeyword.value || r.templateName.includes(filterKeyword.value)
     const matchStatus = !filterStatus.value || r.status === filterStatus.value
-    return matchKeyword && matchStatus
+    const matchDate = !filterDate.value || filterDate.value.length < 2 || (
+      r.publishTime >= filterDate.value[0] && r.publishTime <= filterDate.value[1]
+    )
+    return matchKeyword && matchStatus && matchDate
   })
 })
 

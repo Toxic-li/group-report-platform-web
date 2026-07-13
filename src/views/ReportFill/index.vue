@@ -38,6 +38,7 @@
         :collapsed-groups="collapsedGroups"
         :selected-org-id="selectedOrgId"
         :selected-period="selectedPeriod"
+        :read-only="isReadOnly"
         @update:view-mode="viewMode = $event"
         @expand-all-rows="expandAllRows"
         @collapse-all-rows="collapseAllRows"
@@ -151,8 +152,10 @@
  * - components/ReportTableBody.vue   — 数据行
  * - components/CellDetailDrawer.vue  — 详情面板
  */
-import { ref, reactive, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import { getEntryDetail } from '@/api/filling.js'
+import { recordRecentView } from '@/api/reportCenter.js'
 import { ConditionalFormatEngine } from '@/services/engines/ConditionalFormatEngine.js'
 import { ValidationEngine } from '@/services/engines/ValidationEngine.js'
 import FormulaEditor from '@/components/FormulaEditor.vue'
@@ -169,8 +172,12 @@ import { useValidation } from './composables/useValidation.js'
 
 const route = useRoute()
 const props = defineProps({
-  templateId: { type: String, required: true }
+  templateId: { type: String, default: '' },
+  submitId: { type: String, default: '' }
 })
+
+// 只读模式：从路由 query 参数读取 mode=view
+const isReadOnly = computed(() => route.query.mode === 'view')
 
 // ==================== 共享状态 ====================
 const config = ref(null)
@@ -252,7 +259,8 @@ const {
   permissionEngine,
   colIndexMap, isColHidden,
   triggerAutoSave, recalcFormulas: formulaComposable.recalcFormulas,
-  showToast, containerRef, scrollToIndex
+  showToast, containerRef, scrollToIndex,
+  isReadOnly
 })
 
 // ==================== 详情 Drawer ====================
@@ -391,11 +399,28 @@ async function onBeforeUnload(event) {
 const { conditionalFormatClass, conditionalFormatStyle } = cfComposable
 
 // ==================== 生命周期 ====================
-onMounted(() => {
+onMounted(async () => {
   const tid = props.templateId || route.params.templateId
-  if (tid) {
+  const sid = props.submitId || route.params.submitId
+
+  if (sid) {
+    try {
+      const result = await getEntryDetail(sid)
+      const detail = result?.data || result
+      if (detail?.reportId) {
+        loadReport(String(detail.reportId))
+        recordRecentView(detail.reportId).catch(() => {})
+      } else {
+        error.value = '无法获取提交记录对应的模板'
+      }
+    } catch {
+      error.value = '加载提交记录失败'
+    }
+  } else if (tid) {
     loadReport(tid)
+    recordRecentView(tid).catch(() => {})
   }
+
   try { const s = localStorage.getItem('fr_col_folds'); if (s) collapsedGroups.value = new Set(JSON.parse(s)) } catch {}
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('resize', measureVP)
@@ -405,6 +430,12 @@ onMounted(() => {
 watch(() => route.params.templateId, (newId) => {
   if (newId && newId !== props.templateId) {
     loadReport(newId)
+  }
+})
+
+watch(() => route.params.submitId, (newId) => {
+  if (newId && newId !== props.submitId) {
+    window.location.reload()
   }
 })
 
@@ -419,20 +450,16 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss">
-/* 注意：不使用 scoped，因为子组件需要继承这些样式。
-   所有 class 均以 fr- 前缀命名，避免全局冲突。 */
+/* DataEntry Spreadsheet 风格的表格样式 */
 $bg: #FDFDFD; $surface: #FFFFFF; $border: #E8ECF1; $border-light: #EEF1F6;
-$h1-bg: #0F172A; $h2-bg: #1E3A5F; $h3-bg: #2D5A87; $h4-bg: #4A7FB7;
 $text-primary: #0F172A; $text-secondary: #475569; $text-muted: #94A3B8;
 $accent: #2563EB; $success: #059669; $danger: #DC2626; $warning: #D97706;
-$hover-bg: #EFF6FF;
-$summary-bg: #EFF6FF; $summary-border: #BFDBFE; $summary-text: #1E40AF;
-$anomaly-bg: #FEF2F2; $anomaly-border: #FECACA;
-$ROW_H: 32px;
+$hover-bg: #F1F5F9;
+$ROW_H: 40px;
 
 .fr-report {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
-  background: $bg; font-family: "SF Pro Display", -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: $bg; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 13px; color: $text-primary; outline: none;
 }
 .fr-loading, .fr-empty {
@@ -448,20 +475,20 @@ $ROW_H: 32px;
 
 .fr-control-bar {
   flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 12px; background: $surface; border-bottom: 1px solid $border;
-  gap: 12px; min-height: 38px; flex-wrap: wrap;
+  padding: 8px 16px; background: $surface; border-bottom: 1px solid $border;
+  gap: 12px; min-height: 44px; flex-wrap: wrap;
 }
 .fr-cb-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .fr-back-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border: 1px solid $border; border-radius: 6px;
+  width: 32px; height: 32px; border: 1px solid $border; border-radius: 6px;
   background: $surface; color: $text-secondary; cursor: pointer; transition: all .15s;
   &:hover { border-color: $accent; color: $accent; background: $hover-bg; }
 }
 .fr-cb-right { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .fr-view-switch { display: flex; background: $border-light; border-radius: 6px; padding: 2px; }
 .fr-vs-btn {
-  padding: 3px 12px; border: none; background: transparent; border-radius: 4px;
+  padding: 4px 12px; border: none; background: transparent; border-radius: 4px;
   font-size: 12px; color: $text-secondary; cursor: pointer; transition: all .15s;
   &:hover { color: $text-primary; }
   &.active { background: $surface; color: $accent; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
@@ -478,6 +505,13 @@ $ROW_H: 32px;
     color: #fff; padding: 1px 6px; border-radius: 4px;
     margin-left: 6px; vertical-align: middle; letter-spacing: .5px;
   }
+  .fr-ro-badge {
+    font-style: normal; font-size: 9px; font-weight: 700;
+    background: #f0f2f5;
+    color: #8c8c8c; padding: 1px 6px; border-radius: 4px;
+    margin-left: 6px; vertical-align: middle; letter-spacing: .5px;
+    border: 1px solid #d9d9d9;
+  }
 }
 .fr-save-status {
   font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 500;
@@ -489,14 +523,14 @@ $ROW_H: 32px;
 @keyframes fr-status-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
 .fr-action-btn {
-  padding: 3px 10px; border: 1px solid $border-light; background: $surface;
-  border-radius: 4px; font-size: 11px; color: $text-secondary; cursor: pointer;
+  padding: 4px 12px; border: 1px solid $border-light; background: $surface;
+  border-radius: 6px; font-size: 12px; color: $text-secondary; cursor: pointer;
   transition: all .15s; white-space: nowrap;
   &:hover { border-color: $accent; color: $accent; background: #EFF6FF; }
 }
 .fr-fold-btn {
-  padding: 3px 8px; border: 1px solid $border-light; background: $surface;
-  border-radius: 4px; font-size: 11px; color: $text-secondary; cursor: pointer;
+  padding: 4px 10px; border: 1px solid $border-light; background: $surface;
+  border-radius: 6px; font-size: 12px; color: $text-secondary; cursor: pointer;
   transition: all .15s; white-space: nowrap; display: inline-flex; align-items: center; gap: 2px;
   &:hover { border-color: $accent; color: $accent; }
   &.collapsed { opacity: .7; }
@@ -544,43 +578,40 @@ $ROW_H: 32px;
 .fr-validation-warning { border-bottom: 2px solid $warning !important; }
 
 .fr-body {
-  flex: 1; overflow: auto; position: relative;
+  flex: 1; overflow: auto; position: relative; background: $surface;
+  border-radius: 12px; margin: 0 16px 16px; border: 1px solid $border;
   &::-webkit-scrollbar { width: 8px; height: 8px; }
   &::-webkit-scrollbar-thumb { background: rgba(0,0,0,.20); border-radius: 4px; &:hover { background: rgba(0,0,0,.35); } }
   &::-webkit-scrollbar-track { background: transparent; }
 }
 .fr-header-section {
   position: sticky; top: 0; z-index: 10; background: $surface;
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
 }
 .fr-table {
   width: max-content; border-collapse: collapse; table-layout: fixed;
   th, td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 .fr-th {
-  padding: 5px 8px; text-align: center; font-size: 11px; font-weight: 600;
-  color: #fff; border: 1px solid rgba(255,255,255,.08); user-select: none; position: relative;
-  &.fr-th-l1 { background: $h1-bg; }
-  &.fr-th-l2 { background: $h2-bg; }
-  &.fr-th-l3 { background: $h3-bg; }
-  &.fr-th-l4 { background: $h4-bg; }
-  &.fr-th-corner { background: $h1-bg; width: 36px; min-width: 36px; }
-  &.fr-th-metric { background: $h1-bg; width: 180px; min-width: 180px; text-align: left; }
+  padding: 0 12px; height: $ROW_H; text-align: center; font-size: 13px; font-weight: 600;
+  color: $text-primary; border: 1px solid $border; user-select: none; position: relative;
+  background: $hover-bg;
+  &.fr-th-corner { width: 50px; min-width: 50px; vertical-align: middle; }
+  &.fr-th-metric { width: 180px; min-width: 180px; text-align: left; vertical-align: middle; }
   &.fr-th-placeholder { background: transparent; border-bottom: none; border-top: none; padding: 0; height: 0; }
   .fr-th-text { cursor: default; }
   .fr-th-hint { margin-left: 4px; font-size: 10px; cursor: help; opacity: .6; &:hover { opacity: 1; } }
 }
 .fr-td {
-  padding: 0 8px; height: $ROW_H; line-height: $ROW_H; font-size: 12px;
-  border-right: 1px solid $border-light; border-bottom: 1px solid $border-light;
+  padding: 0 12px; height: $ROW_H; line-height: $ROW_H; font-size: 13px;
+  border-right: 1px solid $border; border-bottom: 1px solid $border;
   vertical-align: middle; transition: background-color .1s;
 }
-.fr-td-index { width: 36px; min-width: 36px; text-align: center; color: $text-muted; background: #FAFBFC; font-size: 11px; font-weight: 500; }
-.fr-td-metric { width: 180px; min-width: 180px; text-align: left; background: #FAFBFC; font-weight: 500; cursor: default; }
+.fr-td-index { width: 50px; min-width: 50px; text-align: center; color: $text-muted; background: $hover-bg; font-size: 12px; font-weight: 500; }
+.fr-td-metric { width: 180px; min-width: 180px; text-align: left; background: $hover-bg; font-weight: 500; cursor: default; }
 .fr-td-val {
   text-align: right; font-family: "SF Mono", Menlo, Consolas, monospace;
-  font-variant-numeric: tabular-nums; cursor: default; position: relative;
-  &:hover:not(.fr-editing):not(.fr-ro) { background: #F0F7FF; }
+  font-variant-numeric: tabular-nums; cursor: cell; position: relative;
+  &:hover:not(.fr-editing):not(.fr-ro) { background: $hover-bg; }
 }
 
 .fr-metric-cell { display: flex; align-items: center; height: 100%; }
@@ -597,16 +628,16 @@ $ROW_H: 32px;
 .fr-tree-label { margin-left: 2px; overflow: hidden; text-overflow: ellipsis; &:hover { color: $accent; } }
 
 .fr-row-summary {
-  .fr-td-metric { background: $summary-bg; }
-  .fr-td-val { background: $summary-bg; font-weight: 700; color: $summary-text; }
+  .fr-td-metric { background: #EFF6FF; }
+  .fr-td-val { background: #EFF6FF; font-weight: 700; color: #1E40AF; }
 }
 .fr-summary-badge {
   display: inline-block; padding: 1px 6px; border-radius: 3px;
   background: $accent; color: #fff; font-size: 10px; font-weight: 600; margin-right: 6px;
 }
 .fr-summary-label { font-weight: 600; }
-.fr-row-child .fr-td-val { background: #F8FAFC; color: $text-secondary; font-size: 11px; }
-.fr-child-item { display: flex; align-items: center; font-size: 11px; color: $text-secondary; }
+.fr-row-child .fr-td-val { background: #F8FAFC; color: $text-secondary; font-size: 12px; }
+.fr-child-item { display: flex; align-items: center; font-size: 12px; color: $text-secondary; }
 .fr-child-dot { width: 6px; height: 6px; border-radius: 50%; background: $border; margin-right: 6px; flex-shrink: 0; }
 
 .fr-up { color: $success !important; font-weight: 600; }
@@ -614,16 +645,16 @@ $ROW_H: 32px;
 .fr-flat { color: $text-secondary; }
 .fr-ro { color: $text-muted; font-style: italic; }
 .fr-bold { font-weight: 700; }
-.fr-anomaly-val { background: $anomaly-bg !important; color: $danger !important; font-weight: 600; }
+.fr-anomaly-val { background: #FEF2F2 !important; color: $danger !important; font-weight: 600; }
 
 .fr-editing { padding: 0 !important; }
 .fr-edit-input {
-  width: 100%; height: 100%; border: 1.5px solid $accent; outline: none;
-  padding: 0 6px; font-family: inherit; font-size: inherit; text-align: right;
-  background: #fff; border-radius: 2px; box-sizing: border-box;
+  width: 100%; height: 100%; border: 2px solid $accent; outline: none;
+  padding: 0 8px; font-family: inherit; font-size: inherit; text-align: right;
+  background: #fff; border-radius: 0; box-sizing: border-box;
   &.fr-edit-error { border-color: $danger; background: #FEF2F2; }
 }
-.fr-row:hover .fr-td { background: #F8FAFC; }
+.fr-row:hover .fr-td { background: $hover-bg; }
 .fr-row-hover .fr-td-index { color: $accent; font-weight: 600; }
 
 .fr-tip {
@@ -662,7 +693,7 @@ $ROW_H: 32px;
   border-radius: 4px; color: #4F46E5; cursor: pointer; transition: all .15s;
   &:hover { background: #E0E7FF; border-color: #A5B4FC; }
 }
-.fr-ds-warn { background: $anomaly-bg; border: 1px solid $anomaly-border; border-radius: 8px; padding: 12px; }
+.fr-ds-warn { background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 12px; }
 .fr-ds-warn p { margin: 0; color: $danger; font-size: 12px; }
 .fr-history-list { display: flex; flex-direction: column; gap: 6px; }
 .fr-hist-item { display: flex; align-items: center; gap: 10px; font-size: 12px; padding: 6px 8px; background: #F8FAFC; border-radius: 4px; }
@@ -687,4 +718,13 @@ $ROW_H: 32px;
 
 .fr-col-hidden { display: none; }
 .fr-spacer-td { padding: 0; border: none !important; line-height: 0; font-size: 0; overflow: hidden; }
+
+/* Footer 状态栏 */
+.fr-footer {
+  flex-shrink: 0; display: flex; justify-content: flex-end; gap: 24px;
+  padding: 8px 16px; background: $hover-bg; border-top: 1px solid $border;
+  margin: 0 16px 16px; border-radius: 0 0 12px 12px;
+}
+.fr-footer-cell, .fr-footer-mode, .fr-footer-sum { font-size: 12px; color: $text-muted; }
+.fr-footer-sum { font-weight: 500; font-family: "SF Mono", Menlo, monospace; }
 </style>

@@ -1,8 +1,18 @@
 import { get, post, del, upload } from '@/utils/http'
 
+/**
+ * 查询我的填报任务
+ * @param {Object} params - { tab, page, size, keyword, status, ... }
+ * @param {string} params.tab - my/draft/pending/submitted/rejected/completed
+ */
 export function queryMyFillingTasks(params) {
-  const queryString = new URLSearchParams(params).toString()
+  const { tab = 'my', ...rest } = params || {}
+  const queryString = new URLSearchParams({ tab, ...rest }).toString()
   return get(`/filling/my?${queryString}`)
+}
+
+export function withdrawSubmit(submitId) {
+  return post(`/filling/withdraw/${submitId}`)
 }
 
 export function getFillingStats() {

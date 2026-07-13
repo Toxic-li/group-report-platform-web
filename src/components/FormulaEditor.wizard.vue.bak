@@ -1,0 +1,1163 @@
+<template>
+  <div class="fw-modal" @click.self="$emit('close')">
+    <div class="fw-dialog">
+      <!-- 头部 -->
+      <div class="fw-dialog-header">
+        <span class="fw-dialog-title">公式向导</span>
+        <span v-if="cellInfo" class="fw-dialog-sub">{{ cellInfo }}</span>
+        <button class="fw-dialog-close" @click="$emit('close')">&times;</button>
+      </div>
+
+      <!-- 步骤指示器 -->
+      <div class="fw-steps">
+        <div
+          v-for="(s, i) in stepLabels"
+          :key="i"
+          class="fw-step"
+          :class="{ active: currentStep === i, done: currentStep > i }"
+        >
+          <span class="fw-step-num">{{ currentStep > i ? '✓' : i + 1 }}</span>
+          <span class="fw-step-label">{{ s }}</span>
+          <span v-if="i < stepLabels.length - 1" class="fw-step-line"></span>
+        </div>
+      </div>
+
+      <!-- 内容区 -->
+      <div class="fw-dialog-body">
+        <!-- Step 1: 目标确认 -->
+        <div v-show="currentStep === 0" class="fw-step-content">
+          <div class="fw-target-card">
+            <div class="fw-target-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            </div>
+            <div class="fw-target-info">
+              <div class="fw-target-label">目标位置</div>
+              <div class="fw-target-value">{{ cellInfo || '未选择' }}</div>
+            </div>
+          </div>
+          <label class="fw-checkbox-row">
+            <input type="checkbox" v-model="applyToRow" />
+            <span>应用到整行（所有数据列）</span>
+          </label>
+          <div v-if="initialValue" class="fw-existing-formula">
+            <span class="fw-existing-label">当前公式：</span>
+            <code>{{ initialValue }}</code>
+          </div>
+        </div>
+
+        <!-- Step 2: 选择计算方式 -->
+        <div v-show="currentStep === 1" class="fw-step-content">
+          <div class="fw-calc-grid">
+            <div
+              v-for="opt in calcTypes"
+              :key="opt.value"
+              class="fw-calc-card"
+              :class="{ selected: calcType === opt.value }"
+              @click="selectCalcType(opt.value)"
+            >
+              <span class="fw-calc-icon" :style="{ color: opt.color }">{{ opt.icon }}</span>
+              <span class="fw-calc-name">{{ opt.label }}</span>
+              <span class="fw-calc-desc">{{ opt.desc }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: 配置参数 -->
+        <div v-show="currentStep === 2" class="fw-step-content">
+          <!-- 聚合类：多选行 -->
+          <template v-if="isAggregateType">
+            <div class="fw-param-hint">选择需要{{ calcTypeLabel }}的行（可多选）</div>
+            <div class="fw-field-search">
+              <input v-model="rowSearch" placeholder="搜索行..." class="fw-search-input" />
+            </div>
+            <div class="fw-field-list">
+              <label
+                v-for="f in filteredRowFields"
+                :key="f.id"
+                class="fw-field-check"
+                :class="{ checked: selectedRows.includes(f.id) }"
+              >
+                <input type="checkbox" :value="f.id" v-model="selectedRows" />
+                <span class="fw-field-name">{{ f.name }}</span>
+                <span v-if="f.type === 'aggregate'" class="fw-field-tag">汇总</span>
+              </label>
+              <div v-if="filteredRowFields.length === 0" class="fw-empty">无匹配行</div>
+            </div>
+          </template>
+
+          <!-- 比率类：选分子和分母 -->
+          <template v-else-if="calcType === 'ratio'">
+            <div class="fw-param-hint">选择分子和分母</div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">分子（A）</label>
+              <select v-model="ratioNumerator" class="fw-param-select">
+                <option value="">请选择...</option>
+                <option v-for="f in rowFields" :key="f.id" :value="f.id">{{ f.name }}</option>
+              </select>
+            </div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">分母（B）</label>
+              <select v-model="ratioDenominator" class="fw-param-select">
+                <option value="">请选择...</option>
+                <option v-for="f in rowFields" :key="f.id" :value="f.id">{{ f.name }}</option>
+              </select>
+            </div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">精度（小数位）</label>
+              <input type="number" v-model.number="decimalPlaces" min="0" max="6" class="fw-param-input" />
+            </div>
+            <label class="fw-checkbox-row">
+              <input type="checkbox" v-model="asPercent" />
+              <span>结果乘以100（百分比）</span>
+            </label>
+          </template>
+
+          <!-- 增长率：选本期和上期 -->
+          <template v-else-if="calcType === 'growth'">
+            <div class="fw-param-hint">选择本期和上期数据</div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">本期值</label>
+              <select v-model="growthCurrent" class="fw-param-select">
+                <option value="">请选择...</option>
+                <option v-for="f in rowFields" :key="f.id" :value="f.id">{{ f.name }}</option>
+              </select>
+            </div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">上期值</label>
+              <select v-model="growthPrevious" class="fw-param-select">
+                <option value="">请选择...</option>
+                <option v-for="f in rowFields" :key="f.id" :value="f.id">{{ f.name }}</option>
+              </select>
+            </div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">精度（小数位）</label>
+              <input type="number" v-model.number="decimalPlaces" min="0" max="6" class="fw-param-input" />
+            </div>
+          </template>
+
+          <!-- 差值：选A和B -->
+          <template v-else-if="calcType === 'difference'">
+            <div class="fw-param-hint">选择两个行进行计算</div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">值 A</label>
+              <select v-model="diffA" class="fw-param-select">
+                <option value="">请选择...</option>
+                <option v-for="f in rowFields" :key="f.id" :value="f.id">{{ f.name }}</option>
+              </select>
+            </div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">值 B</label>
+              <select v-model="diffB" class="fw-param-select">
+                <option value="">请选择...</option>
+                <option v-for="f in rowFields" :key="f.id" :value="f.id">{{ f.name }}</option>
+              </select>
+            </div>
+            <div class="fw-param-row">
+              <label class="fw-param-label">计算方式</label>
+              <div class="fw-radio-group">
+                <label><input type="radio" v-model="diffMode" value="subtract" /> A - B</label>
+                <label><input type="radio" v-model="diffMode" value="add" /> A + B</label>
+                <label><input type="radio" v-model="diffMode" value="multiply" /> A × B</label>
+                <label><input type="radio" v-model="diffMode" value="divide" /> A ÷ B</label>
+              </div>
+            </div>
+          </template>
+
+          <!-- 自定义公式 -->
+          <template v-else-if="calcType === 'custom'">
+            <div class="fw-custom-layout">
+              <div class="fw-custom-fields">
+                <div class="fw-field-search">
+                  <input v-model="rowSearch" placeholder="搜索行..." class="fw-search-input" />
+                </div>
+                <div class="fw-field-list fw-field-list-sm">
+                  <div
+                    v-for="f in filteredRowFields"
+                    :key="f.id"
+                    class="fw-field-click"
+                    @click="insertAtCursor(f.id)"
+                  >
+                    <span class="fw-field-icon">R</span>
+                    <span class="fw-field-name">{{ f.name }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="fw-custom-editor">
+                <div class="fw-custom-toolbar">
+                  <button v-for="fn in quickFunctions" :key="fn.name"
+                    class="fw-fn-btn" @click="insertAtCursor(fn.template)"
+                  >{{ fn.name }}</button>
+                </div>
+                <textarea
+                  ref="customExprRef"
+                  v-model="customExpression"
+                  class="fw-custom-textarea"
+                  placeholder="输入公式表达式，如：SUM([rowId1],[rowId2])"
+                  spellcheck="false"
+                ></textarea>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Step 4: 预览保存 -->
+        <div v-show="currentStep === 3" class="fw-step-content">
+          <div class="fw-preview-section">
+            <div class="fw-preview-label">生成的公式</div>
+            <div class="fw-preview-formula">
+              <span class="fw-preview-eq">=</span>
+              <span class="fw-preview-expr">{{ generatedExpression || '(未配置)' }}</span>
+            </div>
+          </div>
+
+          <div class="fw-meta-grid">
+            <div class="fw-meta-item">
+              <label>公式名称</label>
+              <input v-model="formulaName" class="fw-meta-input" placeholder="如: completionRate" />
+            </div>
+            <div class="fw-meta-item">
+              <label>显示标签</label>
+              <input v-model="formulaLabel" class="fw-meta-input" placeholder="如: 完成率" />
+            </div>
+            <div class="fw-meta-item">
+              <label>结果类型</label>
+              <select v-model="resultType" class="fw-meta-select">
+                <option value="number">数值</option>
+                <option value="percent">百分比</option>
+                <option value="string">文本</option>
+              </select>
+            </div>
+          </div>
+
+          <div v-if="validationError" class="fw-error-box">
+            <svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="#DC2626"/><text x="8" y="11.5" text-anchor="middle" fill="#fff" font-size="10" font-weight="bold">!</text></svg>
+            {{ validationError }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部按钮 -->
+      <div class="fw-dialog-footer">
+        <button v-if="currentStep > 0" class="fw-btn fw-btn-default" @click="currentStep--">上一步</button>
+        <button class="fw-btn fw-btn-link" @click="$emit('close')">取消</button>
+        <button v-if="currentStep < 3" class="fw-btn fw-btn-primary" :disabled="!canNext" @click="handleNext">
+          下一步
+        </button>
+        <button v-else class="fw-btn fw-btn-primary" :disabled="!canSave" @click="handleSave">
+          保存公式
+        </button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, nextTick, onMounted } from 'vue'
+
+const props = defineProps({
+  cellInfo: { type: String, default: '' },
+  initialValue: { type: String, default: '' },
+  fields: { type: Array, default: () => [] },
+  rowFields: { type: Array, default: () => [] },
+  validFieldIds: { type: Array, default: () => [] },
+  templateId: { type: [String, Number], default: null }
+})
+
+const emit = defineEmits(['apply', 'close', 'saved'])
+
+// ==================== 步骤控制 ====================
+const stepLabels = ['目标确认', '计算方式', '参数配置', '预览保存']
+const currentStep = ref(0)
+
+// ==================== Step 1 状态 ====================
+const applyToRow = ref(false)
+
+// ==================== Step 2 状态 ====================
+const calcTypes = [
+  { value: 'sum', label: '求和', desc: '多行数据相加', icon: 'Σ', color: '#2563EB' },
+  { value: 'avg', label: '平均值', desc: '多行数据求平均', icon: 'x̄', color: '#0891B2' },
+  { value: 'max', label: '最大值', desc: '多行数据取最大', icon: '▲', color: '#D97706' },
+  { value: 'min', label: '最小值', desc: '多行数据取最小', icon: '▼', color: '#7C3AED' },
+  { value: 'ratio', label: '比率', desc: 'A ÷ B，如完成率', icon: '÷', color: '#059669' },
+  { value: 'growth', label: '增长率', desc: '(本期-上期) ÷ 上期', icon: '↑', color: '#DC2626' },
+  { value: 'difference', label: '差值', desc: '两行加减乘除', icon: '±', color: '#EA580C' },
+  { value: 'custom', label: '自定义', desc: '手写公式表达式', icon: 'fx', color: '#6B7280' }
+]
+const calcType = ref('')
+
+const isAggregateType = computed(() => ['sum', 'avg', 'max', 'min'].includes(calcType.value))
+const calcTypeLabel = computed(() => {
+  const t = calcTypes.find(t => t.value === calcType.value)
+  return t ? t.label : ''
+})
+
+// ==================== Step 3 状态 ====================
+const rowSearch = ref('')
+const selectedRows = ref([])
+const ratioNumerator = ref('')
+const ratioDenominator = ref('')
+const growthCurrent = ref('')
+const growthPrevious = ref('')
+const diffA = ref('')
+const diffB = ref('')
+const diffMode = ref('subtract')
+const decimalPlaces = ref(2)
+const asPercent = ref(false)
+const customExpression = ref('')
+const customExprRef = ref(null)
+
+const quickFunctions = [
+  { name: 'SUM', template: 'SUM()' },
+  { name: 'AVG', template: 'AVG()' },
+  { name: 'MAX', template: 'MAX()' },
+  { name: 'MIN', template: 'MIN()' },
+  { name: 'IF', template: 'IF(, , )' },
+  { name: 'ROUND', template: 'ROUND(, 2)' },
+  { name: 'ABS', template: 'ABS()' }
+]
+
+const filteredRowFields = computed(() => {
+  const keyword = rowSearch.value.trim().toLowerCase()
+  if (!keyword) return props.rowFields
+  return props.rowFields.filter(f =>
+    (f.name || '').toLowerCase().includes(keyword) ||
+    String(f.id || '').toLowerCase().includes(keyword)
+  )
+})
+
+// ==================== Step 4 状态 ====================
+const formulaName = ref('')
+const formulaLabel = ref('')
+const resultType = ref('number')
+
+// ==================== 表达式生成 ====================
+const generatedExpression = computed(() => {
+  if (!calcType.value) return ''
+
+  if (isAggregateType.value && selectedRows.value.length > 0) {
+    const fn = calcType.value === 'avg' ? 'AVG' : calcType.value.toUpperCase()
+    const args = selectedRows.value.map(id => `[${id}]`).join(',')
+    return `${fn}(${args})`
+  }
+
+  if (calcType.value === 'ratio' && ratioNumerator.value && ratioDenominator.value) {
+    const n = `[${ratioNumerator.value}]`
+    const d = `[${ratioDenominator.value}]`
+    const pct = asPercent.value ? ' * 100' : ''
+    return `IF(${d} != 0, ROUND(${n} / ${d}${pct}, ${decimalPlaces.value}), 0)`
+  }
+
+  if (calcType.value === 'growth' && growthCurrent.value && growthPrevious.value) {
+    const c = `[${growthCurrent.value}]`
+    const p = `[${growthPrevious.value}]`
+    return `IF(${p} != 0, ROUND((${c} - ${p}) / ${p} * 100, ${decimalPlaces.value}), 0)`
+  }
+
+  if (calcType.value === 'difference' && diffA.value && diffB.value) {
+    const a = `[${diffA.value}]`
+    const b = `[${diffB.value}]`
+    const ops = { subtract: ' - ', add: ' + ', multiply: ' * ', divide: ' / ' }
+    if (diffMode.value === 'divide') {
+      return `IF(${b} != 0, ROUND(${a} / ${b}, ${decimalPlaces.value}), 0)`
+    }
+    return `${a}${ops[diffMode.value]}${b}`
+  }
+
+  if (calcType.value === 'custom') {
+    return customExpression.value.trim()
+  }
+
+  return ''
+})
+
+// ==================== 校验 ====================
+const validationError = computed(() => {
+  const expr = generatedExpression.value
+  if (!expr) return '请先完成参数配置'
+
+  // 括号匹配
+  let depth = 0
+  for (const ch of expr) {
+    if (ch === '(') depth++
+    else if (ch === ')') depth--
+    if (depth < 0) return '括号不匹配：多余的 )'
+  }
+  if (depth > 0) return `括号不匹配：缺少 ${depth} 个 )`
+
+  return ''
+})
+
+// ==================== 步骤流转 ====================
+const canNext = computed(() => {
+  if (currentStep.value === 0) return true
+  if (currentStep.value === 1) return !!calcType.value
+  if (currentStep.value === 2) {
+    if (isAggregateType.value) return selectedRows.value.length > 0
+    if (calcType.value === 'ratio') return !!ratioNumerator.value && !!ratioDenominator.value
+    if (calcType.value === 'growth') return !!growthCurrent.value && !!growthPrevious.value
+    if (calcType.value === 'difference') return !!diffA.value && !!diffB.value
+    if (calcType.value === 'custom') return !!customExpression.value.trim()
+  }
+  return false
+})
+
+const canSave = computed(() => !validationError.value && !!generatedExpression.value)
+
+function selectCalcType(type) {
+  calcType.value = type
+}
+
+function handleNext() {
+  if (canNext.value) currentStep.value++
+}
+
+// ==================== 保存 ====================
+function handleSave() {
+  if (!canSave.value) return
+
+  const expr = generatedExpression.value
+  const deps = extractDependencies(expr)
+
+  const formulaData = {
+    expression: '=' + expr,
+    rawExpression: expr,
+    fieldName: formulaName.value.trim() || `formula_${Date.now().toString(36)}`,
+    label: formulaLabel.value.trim(),
+    resultType: resultType.value,
+    dependencies: deps,
+    applyToRow: applyToRow.value,
+    createdAt: new Date().toISOString()
+  }
+
+  emit('apply', formulaData)
+
+  if (props.templateId) {
+    saveToBackend(formulaData)
+  }
+
+  emit('close')
+}
+
+function extractDependencies(expr) {
+  const refs = new Set()
+  const matches = expr.match(/\[([^\]]+)\]/g) || []
+  for (const m of matches) {
+    refs.add(m.slice(1, -1))
+  }
+  return [...refs]
+}
+
+async function saveToBackend(formulaData) {
+  try {
+    const { createFormula } = await import('@/api/reportDesigner.js')
+    const payload = {
+      templateId: props.templateId,
+      fieldName: formulaData.fieldName,
+      label: formulaData.label,
+      expression: formulaData.expression,
+      resultType: formulaData.resultType,
+      status: 'enabled'
+    }
+    const result = await createFormula(payload)
+    emit('saved', { ...formulaData, backendId: result?.id })
+  } catch (err) {
+    console.warn('[FormulaEditor] 后端保存失败:', err.message)
+  }
+}
+
+// ==================== 自定义公式编辑 ====================
+function insertAtCursor(text) {
+  const ta = customExprRef.value
+  if (!ta) {
+    customExpression.value += text
+    return
+  }
+  const start = ta.selectionStart
+  const end = ta.selectionEnd
+  customExpression.value =
+    customExpression.value.substring(0, start) +
+    text +
+    customExpression.value.substring(end)
+  nextTick(() => {
+    ta.focus()
+    const pos = start + text.length
+    ta.setSelectionRange(pos, pos)
+  })
+}
+
+// ==================== 编辑模式：从已有公式恢复 ====================
+onMounted(() => {
+  if (props.initialValue) {
+    const expr = props.initialValue.replace(/^=/, '').trim()
+    parseExistingFormula(expr)
+  }
+})
+
+function parseExistingFormula(expr) {
+  if (!expr) return
+
+  // 尝试匹配聚合函数
+  const aggMatch = expr.match(/^(SUM|AVG|MAX|MIN)\((.+)\)$/i)
+  if (aggMatch) {
+    const fn = aggMatch[1].toUpperCase()
+    const map = { SUM: 'sum', AVG: 'avg', MAX: 'max', MIN: 'min' }
+    calcType.value = map[fn] || ''
+    const args = aggMatch[2].split(',').map(s => s.trim().replace(/^\[|\]$/g, ''))
+    selectedRows.value = args.filter(Boolean)
+    return
+  }
+
+  // 尝试匹配比率
+  const ratioMatch = expr.match(/^IF\(\[(.+?)\]\s*!=\s*0,\s*ROUND\(\[(.+?)\]\s*\/\s*\[(.+?)\](\s*\*\s*100)?,\s*(\d+)\),\s*0\)$/i)
+  if (ratioMatch) {
+    calcType.value = 'ratio'
+    ratioNumerator.value = ratioMatch[2]
+    ratioDenominator.value = ratioMatch[3]
+    asPercent.value = !!ratioMatch[4]
+    decimalPlaces.value = parseInt(ratioMatch[5]) || 2
+    return
+  }
+
+  // 尝试匹配增长率
+  const growthMatch = expr.match(/^IF\(\[(.+?)\]\s*!=\s*0,\s*ROUND\(\(\[(.+?)\]\s*-\s*\[(.+?)\]\)\s*\/\s*\[(.+?)\]\s*\*\s*100,\s*(\d+)\),\s*0\)$/i)
+  if (growthMatch) {
+    calcType.value = 'growth'
+    growthCurrent.value = growthMatch[2]
+    growthPrevious.value = growthMatch[3]
+    decimalPlaces.value = parseInt(growthMatch[5]) || 2
+    return
+  }
+
+  // 尝试匹配差值
+  const diffMatch = expr.match(/^\[(.+?)\]\s*([+\-*/])\s*\[(.+?)\]$/)
+  if (diffMatch) {
+    calcType.value = 'difference'
+    diffA.value = diffMatch[1]
+    diffB.value = diffMatch[3]
+    const modeMap = { '+': 'add', '-': 'subtract', '*': 'multiply', '/': 'divide' }
+    diffMode.value = modeMap[diffMatch[2]] || 'subtract'
+    return
+  }
+
+  // 无法识别，作为自定义公式
+  calcType.value = 'custom'
+  customExpression.value = expr
+}
+</script>
+
+<style lang="scss" scoped>
+.fw-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fw-fade-in 0.2s ease;
+}
+
+@keyframes fw-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.fw-dialog {
+  width: min(680px, 92vw);
+  max-height: 88vh;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fw-slide-up 0.25s ease-out;
+}
+
+@keyframes fw-slide-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ====== 头部 ====== */
+.fw-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.fw-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1F2937;
+}
+
+.fw-dialog-sub {
+  font-size: 12px;
+  color: #6B7280;
+  background: #F3F4F6;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.fw-dialog-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #9CA3AF;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 6px;
+  &:hover { background: #E5E7EB; color: #374151; }
+}
+
+/* ====== 步骤指示器 ====== */
+.fw-steps {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #F3F4F6;
+  background: #FAFBFC;
+}
+
+.fw-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  position: relative;
+}
+
+.fw-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  background: #E5E7EB;
+  color: #6B7280;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.fw-step.active .fw-step-num {
+  background: #2563EB;
+  color: #fff;
+}
+
+.fw-step.done .fw-step-num {
+  background: #10B981;
+  color: #fff;
+}
+
+.fw-step-label {
+  font-size: 12px;
+  color: #6B7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fw-step.active .fw-step-label {
+  color: #1F2937;
+  font-weight: 600;
+}
+
+.fw-step-line {
+  flex: 1;
+  height: 1px;
+  background: #E5E7EB;
+  margin: 0 8px;
+}
+
+/* ====== 内容区 ====== */
+.fw-dialog-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  min-height: 280px;
+}
+
+.fw-step-content {
+  animation: fw-content-in 0.2s ease;
+}
+
+@keyframes fw-content-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ====== Step 1: 目标确认 ====== */
+.fw-target-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.fw-target-icon {
+  flex-shrink: 0;
+}
+
+.fw-target-label {
+  font-size: 11px;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fw-target-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1E40AF;
+  margin-top: 2px;
+}
+
+.fw-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  font-size: 13px;
+  color: #374151;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #2563EB;
+    cursor: pointer;
+  }
+}
+
+.fw-existing-formula {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  font-size: 12px;
+
+  .fw-existing-label {
+    color: #6B7280;
+    margin-right: 6px;
+  }
+
+  code {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    color: #7C3AED;
+    font-size: 12px;
+  }
+}
+
+/* ====== Step 2: 计算方式 ====== */
+.fw-calc-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.fw-calc-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 8px;
+  border: 2px solid #E5E7EB;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+
+  &:hover {
+    border-color: #93C5FD;
+    background: #F0F7FF;
+  }
+
+  &.selected {
+    border-color: #2563EB;
+    background: #EFF6FF;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+}
+
+.fw-calc-icon {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.fw-calc-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1F2937;
+}
+
+.fw-calc-desc {
+  font-size: 11px;
+  color: #9CA3AF;
+  line-height: 1.4;
+}
+
+/* ====== Step 3: 参数配置 ====== */
+.fw-param-hint {
+  font-size: 13px;
+  color: #6B7280;
+  margin-bottom: 12px;
+}
+
+.fw-field-search {
+  margin-bottom: 8px;
+}
+
+.fw-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: #2563EB;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+  }
+}
+
+.fw-field-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.fw-field-list-sm {
+  max-height: 200px;
+}
+
+.fw-field-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 13px;
+
+  &:hover { background: #F3F4F6; }
+  &.checked { background: #EFF6FF; }
+
+  input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #2563EB;
+    cursor: pointer;
+  }
+}
+
+.fw-field-name {
+  color: #374151;
+  flex: 1;
+}
+
+.fw-field-tag {
+  font-size: 10px;
+  color: #D97706;
+  background: #FEF3C7;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.fw-field-click {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 12px;
+
+  &:hover { background: #EFF6FF; }
+}
+
+.fw-field-icon {
+  font-size: 10px;
+  font-weight: 700;
+  color: #2563EB;
+  width: 16px;
+  text-align: center;
+}
+
+.fw-empty {
+  text-align: center;
+  color: #9CA3AF;
+  font-size: 13px;
+  padding: 20px 0;
+}
+
+.fw-param-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.fw-param-label {
+  width: 100px;
+  font-size: 13px;
+  color: #4B5563;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.fw-param-select {
+  flex: 1;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1F2937;
+  background: #fff;
+  outline: none;
+  cursor: pointer;
+
+  &:focus { border-color: #2563EB; }
+}
+
+.fw-param-input {
+  width: 80px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+
+  &:focus { border-color: #2563EB; }
+}
+
+.fw-radio-group {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: #374151;
+    cursor: pointer;
+
+    input { accent-color: #2563EB; cursor: pointer; }
+  }
+}
+
+/* ====== 自定义公式编辑器 ====== */
+.fw-custom-layout {
+  display: flex;
+  gap: 12px;
+  height: 280px;
+}
+
+.fw-custom-fields {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.fw-custom-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.fw-custom-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  border-bottom: 1px solid #E5E7EB;
+  background: #F9FAFB;
+}
+
+.fw-fn-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'SF Mono', monospace;
+  color: #7C3AED;
+  background: #F5F3FF;
+  border: 1px solid #DDD6FE;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover { background: #EDE9FE; }
+}
+
+.fw-custom-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 12px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1F2937;
+
+  &::placeholder { color: #9CA3AF; }
+}
+
+/* ====== Step 4: 预览保存 ====== */
+.fw-preview-section {
+  margin-bottom: 16px;
+}
+
+.fw-preview-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.fw-preview-formula {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  background: #F0FDF4;
+  border: 1px solid #BBF7D0;
+  border-radius: 10px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.fw-preview-eq {
+  color: #059669;
+  font-weight: 700;
+}
+
+.fw-preview-expr {
+  color: #15803D;
+  font-weight: 500;
+}
+
+.fw-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.fw-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+}
+
+.fw-meta-input,
+.fw-meta-select {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #1F2937;
+  background: #fff;
+  outline: none;
+
+  &:focus { border-color: #2563EB; box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1); }
+}
+
+.fw-error-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #DC2626;
+}
+
+/* ====== 底部按钮 ====== */
+.fw-dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #E5E7EB;
+  background: #FAFBFC;
+}
+
+.fw-btn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid #D1D5DB;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover:not(:disabled) { background: #F3F4F6; }
+  &:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  &-primary {
+    background: #2563EB;
+    border-color: #2563EB;
+    color: #fff;
+    margin-left: auto;
+
+    &:hover:not(:disabled) { background: #1D4ED8; }
+  }
+
+  &-default {
+    // 保持默认样式
+  }
+
+  &-link {
+    border: none;
+    background: none;
+    color: #6B7280;
+
+    &:hover { color: #374151; background: transparent; }
+  }
+}
+</style>

@@ -8,7 +8,7 @@ import { ref, reactive, nextTick } from 'vue'
 
 export function useCellEdit({ config, visibleRows, store, validationEngine,
   permissionEngine, colIndexMap, isColHidden, triggerAutoSave, recalcFormulas,
-  showToast, containerRef, scrollToIndex }) {
+  showToast, containerRef, scrollToIndex, isReadOnly }) {
 
   const editingCell = reactive({ rowId: null, colIdx: null })
   const editValue = ref('')
@@ -33,6 +33,10 @@ export function useCellEdit({ config, visibleRows, store, validationEngine,
     selectedCell.val = val
     selectedCell.row = row
     selectedCell.colIdx = colIdx
+
+    if (isReadOnly?.value) {
+      return 'openDetail'
+    }
 
     if (val.readOnly || val.formula || val.f) {
       return 'openDetail'

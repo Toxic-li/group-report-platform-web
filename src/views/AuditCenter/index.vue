@@ -1,6 +1,18 @@
 <template>
   <div class="audit-center">
     <div class="app-page-inner">
+    <!-- 页面标题 -->
+    <div class="ac-page-header">
+      <h2 class="ac-page-title">{{ currentPageTitle }}</h2>
+      <p class="ac-page-desc">
+        <template v-if="currentView === 'pending'">需要您处理的所有审核任务</template>
+        <template v-else-if="currentView === 'approved'">历史已通过审核的提交</template>
+        <template v-else-if="currentView === 'rejected'">已驳回待修改的提交</template>
+        <template v-else-if="currentView === 'initiated'">您发起过的所有填报记录</template>
+        <template v-else-if="currentView === 'history'">所有历史审核轨迹</template>
+      </p>
+    </div>
+
     <!-- 统计卡片 -->
     <div class="ac-stats">
       <div class="ac-stat-card ac-stat-pending">
@@ -24,27 +36,26 @@
     <!-- 筛选栏 -->
     <div class="ac-toolbar">
       <div class="ac-filters">
-        <select v-model="filters.status" class="ac-select" @change="loadSubmissions">
-          <option value="">全部状态</option>
-          <option value="pending">待审核</option>
-          <option value="approved">已通过</option>
-          <option value="rejected">已驳回</option>
-          <option value="withdrawn">已撤回</option>
-        </select>
-        
-        <input 
-          type="text" 
-          v-model="filters.keyword" 
-          placeholder="搜索模板名称/提交人..." 
+        <input
+          type="text"
+          v-model="filters.keyword"
+          placeholder="搜索模板名称/提交人..."
           class="ac-input"
           @keyup.enter="loadSubmissions"
         />
-        
+        <select v-model="filters.dateRange" class="ac-select" @change="loadSubmissions">
+          <option value="">全部时间</option>
+          <option value="today">今天</option>
+          <option value="week">近一周</option>
+          <option value="month">近一个月</option>
+          <option value="quarter">近一季度</option>
+        </select>
+
         <button class="ac-btn ac-btn-primary" @click="loadSubmissions" :disabled="loading">
           查询
         </button>
       </div>
-      
+
       <button class="ac-btn ac-btn-secondary" @click="refreshData" :disabled="loading">
         {{ loading ? '加载中...' : '刷新' }}
       </button>
@@ -429,17 +440,12 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { showToast } from '@/utils/toast.js'
-import { 
-  getSubmitList, 
-  getSubmitDetail, 
-  getPendingAudits, 
-  approveAudit, 
-  rejectAudit,
-  batchAudit,
-  getAuditLogs,
-  getWorkflowTasks
-} from '@/api/reportSubmit.js'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  queryAuditTasks, getAuditStats, approveAudit, rejectAudit,
+  batchApproveAudits, getAuditDetail, getAuditHistory,
+} from '@/api/audit.js'
+import { getSubmitDetail } from '@/api/reportSubmit.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -448,20 +454,43 @@ const route = useRoute()
 // 响应式数据
 // ========================================
 
+/** 当前视图 (与路由同步) */
+const ROUTE_VIEW_MAP = {
+  '/audit': 'pending',
+  '/audit/pending': 'pending',
+  '/audit/approved': 'approved',
+  '/audit/rejected': 'rejected',
+  '/audit/initiated': 'initiated',
+  '/audit/history': 'history',
+}
+const currentView = computed(() => {
+  const path = route.path.replace(/\/$/, '')
+  return ROUTE_VIEW_MAP[path] || 'pending'
+})
+
+const currentPageTitle = computed(() => {
+  const map = {
+    pending: '待审核任务', approved: '已通过',
+    rejected: '已驳回', initiated: '我发起的', history: '审核历史'
+  }
+  return map[currentView.value] || '审核中心'
+})
+
 /** 统计数据 */
 const stats = reactive({
   pending: 0,
   approved: 0,
   rejected: 0,
-  total: 0,
+  initiated: 0,
+  history: 0,
   todayCompleted: 0,
   avgAuditTime: null
 })
 
 /** 筛选条件 */
 const filters = reactive({
-  status: '',
-  keyword: ''
+  keyword: '',
+  dateRange: ''
 })
 
 /** 提交列表 */
@@ -541,80 +570,67 @@ const isAllSelected = computed(() => {
 // ========================================
 
 /**
- * ✅ 加载提交列表
+ * ✅ 加载提交列表（按当前视图）
  */
 async function loadSubmissions() {
-  currentPage.value = 1
   loading.value = true
-  
   try {
     const params = {
       page: currentPage.value,
-      size: pageSize.value
+      size: pageSize.value,
     }
-    
-    if (filters.status) params.status = filters.status
     if (filters.keyword) params.keyword = filters.keyword
-    
-    let res
-    
-    if (filters.status === 'pending') {
-      res = await getPendingAudits(params)
-    } else {
-      res = await getSubmitList(params)
-    }
-    
-    if (Array.isArray(res)) {
+    if (filters.dateRange) params.dateRange = filters.dateRange
+
+    const res = await queryAuditTasks(currentView.value, params)
+
+    if (res?.records) {
+      submissions.value = res.records.map(s => ({ ...s, status: normalizeStatus(s.status) }))
+      total.value = res.total || 0
+    } else if (Array.isArray(res)) {
       submissions.value = res.map(s => ({ ...s, status: normalizeStatus(s.status) }))
       total.value = res.length
-    } else if (res?.records || res?.list || res?.data) {
-      const raw = res.records || res.list || res.data
-      submissions.value = raw.map(s => ({ ...s, status: normalizeStatus(s.status) }))
-      total.value = res.total || res.count || raw.length
+    } else {
+      submissions.value = []
+      total.value = 0
     }
-    
-    // 清空选择
+
     selectedIds.value = []
-    updateStats()
-    
+    updateLocalStats()
   } catch (err) {
     console.error('[AuditCenter] 加载失败:', err)
-    showToast('加载数据失败', 'error')
+    submissions.value = []
+    total.value = 0
+    ElMessage.error('加载审核数据失败：' + (err?.message || '请稍后重试'))
   } finally {
     loading.value = false
   }
 }
 
 /**
- * ✅ 加载统计数据（从 API 获取全局统计，非当前页数据）
+ * ✅ 加载统计数据
  */
 async function loadStats() {
   try {
-    const [pendingRes, approvedRes, rejectedRes, totalRes] = await Promise.all([
-      getPendingAudits({ page: 1, size: 1 }),
-      getSubmitList({ status: 'approved', page: 1, size: 1 }),
-      getSubmitList({ status: 'rejected', page: 1, size: 1 }),
-      getSubmitList({ page: 1, size: 1 })
-    ])
-    stats.pending = pendingRes?.total || 0
-    stats.approved = approvedRes?.total || 0
-    stats.rejected = rejectedRes?.total || 0
-    stats.total = totalRes?.total || 0
+    const res = await getAuditStats()
+    if (res) {
+      stats.pending = res.pending || 0
+      stats.approved = res.approved || 0
+      stats.rejected = res.rejected || 0
+      stats.initiated = res.initiated || 0
+      stats.history = res.history || 0
+    }
   } catch (err) {
     console.warn('[AuditCenter] 加载统计失败:', err)
   }
 }
 
 /**
- * ✅ 更新统计数据（本地列表统计，备用）
+ * ✅ 更新本地列表统计（用于今日完成/平均审核时间）
  */
-function updateStats() {
+function updateLocalStats() {
   const normalized = submissions.value.map(s => normalizeStatus(s.status))
-  stats.pending = normalized.filter(s => s === 'pending').length
-  stats.approved = normalized.filter(s => s === 'approved').length
-  stats.rejected = normalized.filter(s => s === 'rejected').length
-  stats.total = total.value
-  
+
   // 今日完成数
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -625,7 +641,7 @@ function updateStats() {
     const d = new Date(t)
     return !isNaN(d.getTime()) && d >= today
   }).length
-  
+
   // 平均审核时间（分钟）
   const approvedItems = submissions.value.filter(s => {
     if (normalizeStatus(s.status) !== 'approved') return false
@@ -674,16 +690,18 @@ function handleApprove(item) {
 async function confirmApprove() {
   if (batchSubmitting.value) return
   batchSubmitting.value = true
-  
   try {
-    await approveAudit(approveDialog.targetItem.id, approveDialog.remark)
-    
-    showToast('审核通过', 'success')
+    await approveAudit({
+      submitId: approveDialog.targetItem.id,
+      action: 'APPROVE',
+      opinion: approveDialog.remark,
+    })
+    ElMessage.success('审核通过')
     approveDialog.visible = false
     loadStats()
     loadSubmissions()
   } catch (err) {
-    showToast(err.message || '操作失败', 'error')
+    ElMessage.error(err.message || '操作失败')
   } finally {
     batchSubmitting.value = false
   }
@@ -704,22 +722,23 @@ function showRejectDialog(item) {
 async function handleReject() {
   if (batchSubmitting.value) return
   batchSubmitting.value = true
-  
   if (!rejectDialog.reason.trim()) {
-    showToast('请输入驳回原因', 'warning')
+    ElMessage.warning('请输入驳回原因')
     batchSubmitting.value = false
     return
   }
-  
   try {
-    await rejectAudit(rejectDialog.targetItem.id, rejectDialog.reason)
-    
-    showToast('已驳回', 'success')
+    await rejectAudit({
+      submitId: rejectDialog.targetItem.id,
+      action: 'REJECT',
+      opinion: rejectDialog.reason,
+    })
+    ElMessage.success('已驳回')
     rejectDialog.visible = false
     loadStats()
     loadSubmissions()
   } catch (err) {
-    showToast(err.message || '操作失败', 'error')
+    ElMessage.error(err.message || '操作失败')
   } finally {
     batchSubmitting.value = false
   }
@@ -748,22 +767,26 @@ function clearSelection() {
  */
 async function batchApprove() {
   if (selectedIds.value.length === 0) {
-    showToast('请选择要审核的项', 'warning')
+    ElMessage.warning('请选择要审核的项')
     return
   }
   if (batchSubmitting.value) return
-  
-  if (!confirm(`确认批量通过 ${selectedIds.value.length} 项审核？`)) return
-  
+  try {
+    await ElMessageBox.confirm(`确认批量通过 ${selectedIds.value.length} 项审核？`, '提示', { type: 'warning' })
+  } catch { return }
+
   batchSubmitting.value = true
   try {
-    await batchAudit(selectedIds.value, 1, null)
-    showToast(`已通过 ${selectedIds.value.length} 项`, 'success')
+    await batchApproveAudits({
+      submitIds: [...selectedIds.value],
+      opinion: '批量通过',
+    })
+    ElMessage.success(`已通过 ${selectedIds.value.length} 项`)
     selectedIds.value = []
     loadStats()
     loadSubmissions()
   } catch (err) {
-    showToast(err.message || '批量操作失败', 'error')
+    ElMessage.error(err.message || '批量操作失败')
   } finally {
     batchSubmitting.value = false
   }
@@ -774,27 +797,28 @@ async function batchApprove() {
  */
 async function batchReject() {
   if (selectedIds.value.length === 0) {
-    showToast('请选择要审核的项', 'warning')
+    ElMessage.warning('请选择要审核的项')
     return
   }
   if (batchSubmitting.value) return
-  
-  const reason = prompt(`请输入批量驳回原因（共 ${selectedIds.value.length} 项）：`)
-  if (reason === null) return
-  if (!reason.trim()) {
-    showToast('请输入驳回原因', 'warning')
-    return
-  }
-  
+  let reason
+  try {
+    const { value } = await ElMessageBox.prompt(`请输入批量驳回原因（共 ${selectedIds.value.length} 项）：`, '批量驳回', { inputPlaceholder: '请输入驳回原因', inputValidator: (v) => !!v?.trim() || '驳回原因不能为空' })
+    reason = value
+  } catch { return }
+
   batchSubmitting.value = true
   try {
-    await batchAudit(selectedIds.value, 0, reason)
-    showToast(`已驳回 ${selectedIds.value.length} 项`, 'success')
+    // 后端 batch-approve 仅支持通过；批量驳回改为逐条调用
+    for (const id of selectedIds.value) {
+      try { await rejectAudit({ submitId: id, action: 'REJECT', opinion: reason }) } catch (e) { console.warn('驳回失败', id, e) }
+    }
+    ElMessage.success(`已驳回 ${selectedIds.value.length} 项`)
     selectedIds.value = []
     loadStats()
     loadSubmissions()
   } catch (err) {
-    showToast(err.message || '批量操作失败', 'error')
+    ElMessage.error(err.message || '批量操作失败')
   } finally {
     batchSubmitting.value = false
   }
@@ -808,10 +832,9 @@ async function viewAuditHistory(item) {
   historyDialog.visible = true
   historyDialog.loading = true
   historyDialog.logs = []
-  
   try {
-    const logs = await getAuditLogs(item.id)
-    historyDialog.logs = Array.isArray(logs) ? logs : (logs?.records || logs?.list || [])
+    const logs = await getAuditHistory(item.id)
+    historyDialog.logs = Array.isArray(logs) ? logs : []
   } catch (err) {
     console.warn('[AuditCenter] 加载审核历史失败:', err)
     historyDialog.logs = []
@@ -825,9 +848,8 @@ async function viewAuditHistory(item) {
  */
 async function viewDetail(item) {
   try {
-    const data = await getSubmitDetail(item.id)
-    
-    detailDialog.data = { ...item, ...data }
+    const data = await getAuditDetail(item.id)
+    detailDialog.data = { ...item, ...(data || {}) }
     detailDialog.visible = true
   } catch (err) {
     detailDialog.data = item
@@ -855,7 +877,7 @@ function resubmit(item) {
 function normalizeStatus(status) {
   if (status === null || status === undefined) return 'pending'
   if (typeof status === 'string') return status
-  const map = { 0: 'pending', 1: 'submitted', 2: 'approved', 3: 'rejected', 4: 'withdrawn' }
+  const map = { 0: 'draft', 1: 'pending', 2: 'approved', 3: 'rejected', 4: 'withdrawn' }
   return map[status] || 'pending'
 }
 
@@ -865,8 +887,8 @@ function normalizeStatus(status) {
 function statusText(status) {
   const normalized = normalizeStatus(status)
   const map = {
+    draft: '草稿',
     pending: '待审核',
-    submitted: '已提交',
     approved: '已通过',
     rejected: '已驳回',
     withdrawn: '已撤回'
@@ -899,23 +921,14 @@ function formatTime(time) {
 // ========================================
 // 生命周期
 // ========================================
-function updateFilterFromRoute() {
-  const path = route.path
-  if (path.includes('/audit/approved')) filters.status = 'approved'
-  else if (path.includes('/audit/rejected')) filters.status = 'rejected'
-  else if (path.includes('/audit/initiated')) filters.status = ''
-  else if (path.includes('/audit/history')) filters.status = ''
-  else filters.status = 'pending'
-  currentPage.value = 1
-  loadSubmissions()
-}
-
 onMounted(() => {
-  updateFilterFromRoute()
+  loadStats()
+  loadSubmissions()
 })
 
 watch(() => route.path, () => {
-  updateFilterFromRoute()
+  currentPage.value = 1
+  loadSubmissions()
 })
 </script>
 
@@ -930,6 +943,22 @@ watch(() => route.path, () => {
 .app-page-inner {
   max-width: 1200px;
   margin: 0 auto;
+}
+
+/* 页面标题 */
+.ac-page-header {
+  margin-bottom: var(--app-space-6, 24px);
+}
+.ac-page-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--app-text-primary, #1f2937);
+  margin: 0 0 8px 0;
+}
+.ac-page-desc {
+  font-size: 13px;
+  color: var(--app-text-muted, #6b7280);
+  margin: 0;
 }
 
 /* 统计卡片 */

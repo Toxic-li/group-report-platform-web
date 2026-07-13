@@ -516,7 +516,7 @@ export default {
         style.border = '3px solid #00B578' // 绿色边框（目标单元格）
         style.background = 'linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%)'
       } else if (isSelectedCalc(cell)) {
-        style.border = '3px solid #1677FF' // 蓝色边框（计算单元格）
+        style.border = '3px solid #2563EB' // 蓝色边框（计算单元格）
         style.background = 'linear-gradient(135deg, #EFF6FF 0%, #F0F9FF 100%)'
       }
       
@@ -920,8 +920,8 @@ export default {
 }
 
 .data-cell:hover {
-  background: rgba(22, 119, 255, 0.05);
-  border-color: #1677FF;
+  background: rgba(37, 99, 235, 0.05);
+  border-color: #2563EB;
 }
 
 .data-cell.selected-target {
@@ -934,7 +934,7 @@ export default {
 }
 
 .data-cell.selected-calc {
-  border: 3px solid #1677FF;
+  border: 3px solid #2563EB;
   background: linear-gradient(135deg, #EFF6FF 0%, #F0F9FF 100%);
 }
 
@@ -944,8 +944,8 @@ export default {
 
 /* ✅ 新增：框选范围内的单元格样式 */
 .data-cell.in-range {
-  background: rgba(22, 119, 255, 0.1);
-  border: 1px dashed #1677FF;
+  background: rgba(37, 99, 235, 0.1);
+  border: 1px dashed #2563EB;
 }
 
 .data-cell.merged {
@@ -990,7 +990,7 @@ export default {
 }
 
 .selected-badge.calc {
-  background: #1677FF;
+  background: #2563EB;
   color: white;
 }
 
@@ -1000,7 +1000,7 @@ export default {
   bottom: -18px;
   left: 50%;
   transform: translateX(-50%);
-  background: #1677FF;
+  background: #2563EB;
   color: white;
   padding: 2px 8px;
   border-radius: 4px;
@@ -1129,7 +1129,7 @@ export default {
 }
 
 .calc-count {
-  color: #1677FF;
+  color: #2563EB;
 }
 
 .footer-actions {
@@ -1158,8 +1158,8 @@ export default {
 }
 
 .footer-btn.primary {
-  background: #1677FF;
-  border-color: #1677FF;
+  background: #2563EB;
+  border-color: #2563EB;
   color: white;
 }
 
@@ -1181,7 +1181,7 @@ export default {
 
 /* ✅ 新增：引用预览样式 */
 .ref-preview {
-  color: #1677FF;
+  color: #2563EB;
   font-weight: 600;
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;

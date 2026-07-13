@@ -30,8 +30,10 @@ export function publishTemplate(templateId) {
 }
 
 /** 复制模板 */
-export function copyTemplate(templateId, data) {
-  return post(`${BASE}/template/${encodeURIComponent(templateId)}/copy`, data)
+export function copyTemplate(templateId, newName) {
+  const params = new URLSearchParams()
+  if (newName) params.append('newName', newName)
+  return post(`${BASE}/template/${encodeURIComponent(templateId)}/copy?${params}`)
 }
 
 /** 导出模板 */
@@ -52,6 +54,11 @@ export function previewTemplate(templateId, data) {
 /** 删除模板 */
 export function deleteTemplate(templateId) {
   return del(`${BASE}/template/${encodeURIComponent(templateId)}`)
+}
+
+/** 批量删除模板 */
+export function batchDeleteTemplates(templateIds) {
+  return post(`${BASE}/template/batch-delete`, templateIds)
 }
 
 /** 根据ID获取模板详情（兼容旧代码） */

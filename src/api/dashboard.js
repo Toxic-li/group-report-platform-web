@@ -11,3 +11,13 @@ const BASE = '/dashboard'
 export function getDashboardData() {
   return get(`${BASE}`)
 }
+
+/** 获取填报趋势（默认7天） */
+export function getFillTrend(days = 7) {
+  return get(`${BASE}/trend/fill?days=${days}`)
+}
+
+/** 获取业务线分布 */
+export function getBizDistribution() {
+  return get(`${BASE}/biz/distribution`)
+}

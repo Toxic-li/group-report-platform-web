@@ -58,7 +58,7 @@ const props = defineProps({
   validationErrorCount: { type: Number, default: 0 },
   reviewOpinion: { type: String, default: '' },
   reviewItems: { type: Array, default: () => [] },
-  status: { type: String, default: 'filling' },
+  status: { type: String, default: 'draft' },
 })
 
 defineEmits(['save', 'submit', 'dismissReview'])

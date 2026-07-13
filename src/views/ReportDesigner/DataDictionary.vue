@@ -25,10 +25,11 @@
       <div class="dict-tree">
         <el-tree
           :data="dictTree"
-          :props="{ label: 'name', children: 'items' }"
+          :props="{ label: 'name', children: 'children' }"
           node-key="id"
           default-expand-all
           :expand-on-click-node="false"
+          @node-click="handleNodeClick"
         >
           <template #default="{ node, data }">
             <span class="tree-node">
@@ -73,6 +74,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const filterKeyword = ref('')
 const selectedDict = ref(null)
@@ -116,8 +118,29 @@ const dictGroups = ref([
   }
 ])
 
+// 点击树节点时选中字典分组
+function handleNodeClick(data) {
+  if (data.type === 'group') {
+    selectedDict.value = dictGroups.value.find(g => g.id === data.id) || null
+  }
+}
+
+// 过滤搜索
+const filteredGroups = computed(() => {
+  const kw = filterKeyword.value.trim().toLowerCase()
+  if (!kw) return dictGroups.value
+  return dictGroups.value.filter(group =>
+    group.name.toLowerCase().includes(kw) ||
+    group.code.toLowerCase().includes(kw) ||
+    group.items.some(item =>
+      item.label.toLowerCase().includes(kw) ||
+      item.value.toLowerCase().includes(kw)
+    )
+  )
+})
+
 const dictTree = computed(() => {
-  return dictGroups.value.map(group => ({
+  return filteredGroups.value.map(group => ({
     id: group.id,
     name: group.name,
     code: group.code,
@@ -133,27 +156,74 @@ const dictTree = computed(() => {
 })
 
 function handleCreate() {
-  alert('新建字典')
+  ElMessageBox.prompt('输入新字典名称', '新建字典').then(({ value }) => {
+    if (value) {
+      const newGroup = {
+        id: 'g' + Date.now(),
+        name: value,
+        code: value.toUpperCase().replace(/\s/g, '_'),
+        type: 'group',
+        items: []
+      }
+      dictGroups.value.push(newGroup)
+      ElMessage.success('字典已创建')
+    }
+  }).catch(() => {})
 }
 
 function handleAddItem() {
-  alert('添加字典项')
+  if (!selectedDict.value) return
+  ElMessageBox.prompt('输入字典项值', '添加字典项').then(({ value }) => {
+    if (value) {
+      selectedDict.value.items.push({
+        id: 'i' + Date.now(),
+        value: value.toLowerCase().replace(/\s/g, '_'),
+        label: value,
+        description: '',
+        sortOrder: selectedDict.value.items.length + 1
+      })
+      ElMessage.success('字典项已添加')
+    }
+  }).catch(() => {})
 }
 
 function handleEditDict() {
-  console.log('编辑字典:', selectedDict.value)
+  if (!selectedDict.value) return
+  ElMessageBox.prompt('编辑字典名称', '编辑字典', { inputValue: selectedDict.value.name })
+    .then(({ value }) => {
+      if (value) selectedDict.value.name = value
+      ElMessage.success('已更新')
+    }).catch(() => {})
 }
 
 function handleDeleteDict() {
-  console.log('删除字典:', selectedDict.value)
+  if (!selectedDict.value) return
+  ElMessageBox.confirm(`确定删除字典"${selectedDict.value.name}"吗？`, '确认删除', { type: 'warning' })
+    .then(() => {
+      const idx = dictGroups.value.findIndex(g => g.id === selectedDict.value.id)
+      if (idx >= 0) dictGroups.value.splice(idx, 1)
+      selectedDict.value = null
+      ElMessage.success('已删除')
+    }).catch(() => {})
 }
 
 function handleEditItem(row) {
-  console.log('编辑字典项:', row)
+  ElMessageBox.prompt('编辑标签', '编辑字典项', { inputValue: row.label })
+    .then(({ value }) => {
+      if (value) row.label = value
+      ElMessage.success('已更新')
+    }).catch(() => {})
 }
 
 function handleDeleteItem(row) {
-  console.log('删除字典项:', row)
+  ElMessageBox.confirm(`确定删除"${row.label}"吗？`, '确认删除', { type: 'warning' })
+    .then(() => {
+      if (selectedDict.value) {
+        const idx = selectedDict.value.items.findIndex(i => i.id === row.id)
+        if (idx >= 0) selectedDict.value.items.splice(idx, 1)
+      }
+      ElMessage.success('已删除')
+    }).catch(() => {})
 }
 </script>
 

@@ -86,12 +86,12 @@ function goLogin() {
   border: 1px solid transparent;
 }
 .fb-btn-primary {
-  background: #1677FF;
+  background: #2563EB;
   color: #fff;
 }
 .fb-btn-primary:hover {
-  background: #1A51DB;
-  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.3);
+  background: #1D4ED4;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 .fb-btn-ghost {
   background: transparent;

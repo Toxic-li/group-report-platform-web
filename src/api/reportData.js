@@ -20,7 +20,9 @@ export function saveReportData(data) {
 
 /** 获取单元格值 */
 export function getCellValue(templateId, orgId, period, cellKey) {
-  const params = new URLSearchParams({ templateId, orgId, period, cellKey }).toString()
+  // cellKey 格式: "rowCode-columnCode" → 后端需要分开传 rowCode + columnCode
+  const [rowCode, columnCode] = cellKey ? cellKey.split('-') : ['', '']
+  const params = new URLSearchParams({ templateId, orgId, period, rowCode, columnCode }).toString()
   return get(`${BASE}/cell${params ? `?${params}` : ''}`)
 }
 

@@ -52,7 +52,7 @@ function goHome() {
 .nf-code {
   font-size: 64px;
   font-weight: 800;
-  color: #1677FF;
+  color: #2563EB;
   line-height: 1;
   letter-spacing: -2px;
 }
@@ -67,7 +67,7 @@ function goHome() {
   padding: 10px 24px;
   border-radius: 8px;
   border: none;
-  background: #1677FF;
+  background: #2563EB;
   color: #fff;
   font-size: 14px;
   font-weight: 500;
@@ -75,7 +75,7 @@ function goHome() {
   transition: all 0.2s;
 }
 .nf-btn:hover {
-  background: #1A51DB;
-  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.3);
+  background: #1D4ED4;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 </style>

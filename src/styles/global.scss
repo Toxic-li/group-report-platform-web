@@ -131,14 +131,14 @@ html.dark {
     background: var(--app-success);
     color: #fff;
     border-color: var(--app-success);
-    &:hover { background: color.adjust(#00B578, $lightness: -8%); color: #fff; }
+    &:hover { background: var(--app-success-hover); color: #fff; }
   }
 
   &--danger {
     background: var(--app-danger);
     color: #fff;
     border-color: var(--app-danger);
-    &:hover { background: color.adjust(#F04438, $lightness: -8%); color: #fff; }
+    &:hover { background: var(--app-danger-hover); color: #fff; }
   }
 
   &--ghost {
@@ -190,7 +190,7 @@ html.dark {
   }
 
   &--reviewing {
-    background: rgba(22, 119, 255, 0.08);
+    background: rgba(37, 99, 235, 0.08);
     color: var(--app-primary);
     &::before { background: var(--app-primary); animation: app-pulse 1.5s infinite; }
   }
@@ -408,14 +408,14 @@ html.dark {
       background: var(--app-success);
       color: #fff;
       border-color: var(--app-success);
-      &:hover { background: color.adjust(#00B578, $lightness: -8%); }
+      &:hover { background: var(--app-success-hover); }
     }
 
     &--danger {
       background: var(--app-danger);
       color: #fff;
       border-color: var(--app-danger);
-      &:hover { background: color.adjust(#F04438, $lightness: -8%); }
+      &:hover { background: var(--app-danger-hover); }
     }
 
     &--ghost {

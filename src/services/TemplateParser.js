@@ -228,10 +228,9 @@ export class ReportTemplateParser {
   getMetricByTarget(rowId, colId) {
     return this.template.metrics.find(m => {
       if (!m.targetCell) return false
-      // 支持 "rowId-colId" 格式
-      return m.targetCell === `${rowId}-${colId}` ||
-             m.targetCell.includes(rowId) ||
-             m.targetCell.includes(colId)
+      // 精确匹配 "rowId:colId" 或 "rowId-colId" 格式
+      return m.targetCell === `${rowId}:${colId}` ||
+             m.targetCell === `${rowId}-${colId}`
     }) || null
   }
 
