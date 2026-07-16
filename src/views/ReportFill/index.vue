@@ -409,20 +409,27 @@ onMounted(async () => {
   if (sid && sid !== 'undefined' && sid !== 'null') {
     try {
       const result = await getEntryDetail(sid)
+      console.log('[ReportFill] getEntryDetail result:', result)
       const detail = result?.data || result
-      if (detail?.reportId) {
+      if (detail?.reportId || detail?.templateId) {
+        const templateId = detail.reportId || detail.templateId
         preselectedOrgId = detail.orgId || ''
         preselectedPeriod = detail.period || ''
-        await loadReport(String(detail.reportId))
+        await loadReport(String(templateId))
         // 填充提交的单元格数据
         if (detail.cellData && Object.keys(detail.cellData).length > 0) {
+          console.log('[ReportFill] 填充单元格数据:', Object.keys(detail.cellData).length, '个单元格')
           populateCellDataFromApi(detail.cellData)
+        } else {
+          console.warn('[ReportFill] 无单元格数据:', detail)
         }
-        recordRecentView(detail.reportId).catch(() => {})
+        recordRecentView(String(templateId)).catch(() => {})
       } else {
+        console.error('[ReportFill] 无法获取模板ID:', detail)
         error.value = '无法获取提交记录对应的模板'
       }
-    } catch {
+    } catch (e) {
+      console.error('[ReportFill] 加载提交记录失败:', e)
       error.value = '加载提交记录失败'
     }
   } else if (tid) {

@@ -94,6 +94,7 @@
 
           <div class="card-tags">
             <span :class="['tag', `tag-${report.status}`]">{{ report.statusText }}</span>
+            <span v-if="report.planFlag === 1" class="tag tag-plan">📋 计划</span>
             <span :class="['tag', 'tag-type', `tag-type-${report.type}`]">{{ report.typeLabel }}</span>
             <span class="tag tag-category">{{ report.categoryText }}</span>
           </div>
@@ -214,9 +215,10 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="typeLabel" label="类型" width="90">
+          <el-table-column prop="typeLabel" label="类型" width="120">
             <template #default="{ row }">
               <span :class="['tag', 'tag-type-sm', `tag-type-${row.type}`]">{{ row.typeLabel }}</span>
+              <span v-if="row.planFlag === 1" class="tag tag-plan-sm">📋 计划</span>
             </template>
           </el-table-column>
           <el-table-column prop="category" label="分类" width="80">
@@ -739,6 +741,8 @@ function handleShareReport(report) {
 .tag-type-entry { background: var(--app-success-bg); color: var(--app-success); }
 .tag-type-summary { background: var(--app-warning-bg); color: var(--app-warning); }
 .tag-type-sm { font-size: 10px; padding: 2px 6px; }
+.tag-plan { background: #fff2f0; color: #e63946; border: 1px solid #ffdcd9; font-weight: 600; }
+.tag-plan-sm { background: #fff2f0; color: #e63946; border: 1px solid #ffdcd9; font-size: 10px; padding: 2px 6px; font-weight: 600; margin-left: 4px; }
 
 .card-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .meta-item { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--app-text-muted); }

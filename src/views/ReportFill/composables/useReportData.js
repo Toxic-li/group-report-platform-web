@@ -491,21 +491,31 @@ export function useReportData(props, { config, currentTemplate, useV2, v2Parser,
     const rows = config.value.rows || []
     const columns = config.value.columnData || []
 
-    const rowIdToIndex = {}
-    rows.forEach((row, idx) => { if (row && row.id) rowIdToIndex[row.id] = idx })
-    const colIdToIndex = {}
-    columns.forEach((col, idx) => { if (col && col.id) colIdToIndex[col.id] = idx })
+    // 后端返回的 cellData key 格式是 rowCode:columnCode，需要按 code/id 映射
+    const rowCodeToIndex = {}
+    rows.forEach((row, idx) => {
+      if (row && row.id) rowCodeToIndex[row.id] = idx  // row.id 实际是 row_code
+      if (row && row.code) rowCodeToIndex[row.code] = idx
+    })
+    const colCodeToIndex = {}
+    columns.forEach((col, idx) => {
+      if (col && col.id) colCodeToIndex[col.id] = idx  // col.id 实际是 column_code
+      if (col && col.code) colCodeToIndex[col.code] = idx
+    })
 
     for (const key of Object.keys(apiCellData)) {
       const rawValue = apiCellData[key]
       if (rawValue === undefined || rawValue === null) continue
       const colonIdx = key.indexOf(':')
       if (colonIdx === -1) continue
-      const rowId = key.substring(0, colonIdx)
-      const colId = key.substring(colonIdx + 1)
-      const rowIdx = rowIdToIndex[rowId]
-      const colIdx = colIdToIndex[colId]
-      if (rowIdx === undefined || colIdx === undefined) continue
+      const rowCode = key.substring(0, colonIdx)
+      const colCode = key.substring(colonIdx + 1)
+      const rowIdx = rowCodeToIndex[rowCode]
+      const colIdx = colCodeToIndex[colCode]
+      if (rowIdx === undefined || colIdx === undefined) {
+        console.warn(`[populateCellDataFromApi] 无法映射: ${key}, rowCode=${rowCode}, colCode=${colCode}`)
+        continue
+      }
 
       const actualRow = frozenRows + rowIdx
       const actualCol = colIdx

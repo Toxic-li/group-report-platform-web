@@ -971,6 +971,18 @@ async function loadReport() {
       period: period.value || undefined
     })
     reportData.value = res
+    console.log('[Analytics] reportData loaded:', {
+      contributorCount: res?.contributorCount,
+      cellDataKeys: Object.keys(res?.cellData || {}),
+      rowTreeIds: res?.rowTree?.map(r => r.id),
+      colTreeLeafIds: res?.columnTree?.flatMap(c => c.children?.map(ch => ch.id) || []),
+      fullCellData: res?.cellData
+    })
+    console.log('[Analytics] Testing getCellValue:', {
+      r1_c_q1_plan: getCellValue('r1', 'c_q1_plan'),
+      r1_1_c_q1_plan: getCellValue('r1_1', 'c_q1_plan'),
+      r_total_c_q1_plan: getCellValue('r_total', 'c_q1_plan')
+    })
   } catch (e) {
     reportData.value = null
   } finally {

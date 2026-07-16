@@ -91,12 +91,13 @@
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <div class="action-btns">
-              <el-tooltip content="编辑" placement="top">
+              <el-tooltip :content="row.status === 1 ? '查看' : '编辑'" placement="top">
                 <el-button class="btn-icon" text @click="handleEdit(row)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                  <svg v-if="row.status === 1" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </el-button>
               </el-tooltip>
-              <el-tooltip content="预览" placement="top">
+              <el-tooltip content="预览" placement="top" v-if="row.status !== 1">
                 <el-button class="btn-icon" text @click="handlePreview(row)">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </el-button>
@@ -490,7 +491,8 @@ async function handleCreateSubmit() {
 }
 
 function handlePreview(row) {
-  router.push(`/designer/templates/${row.id}/preview`)
+  // 草稿和已停用模板可以预览，跳转到设计器并标记预览模式
+  router.push({ path: '/designer', query: { templateId: row.id, preview: '1' } })
 }
 
 function handleEdit(row) {

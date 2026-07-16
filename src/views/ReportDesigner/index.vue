@@ -434,6 +434,7 @@ onMounted(() => {
   recordPath(route.fullPath)
 
   const tid = route.query.templateId || route.params.code
+  const isPreview = route.query.preview === '1'
   // 从新建弹窗跳转时，query 带了 name/templateType，先预填避免默认值闪烁
   if (route.query.name) {
     template.value.name = route.query.name
@@ -442,7 +443,7 @@ onMounted(() => {
     template.value.templateType = Number(route.query.templateType)
   }
   if (tid) {
-    loadTemplateData(tid)
+    loadTemplateData(tid, isPreview)
   } else {
     const d = getDesigner()
     if (d) {
@@ -451,11 +452,13 @@ onMounted(() => {
   }
 })
 
-async function loadTemplateData(idOrCode) {
+async function loadTemplateData(idOrCode, isPreview = false) {
   loading.value = true
   try {
     const data = await loadTemplate(idOrCode)
     if (data) {
+      // 设计器模式下清空 cellData，避免显示填报数据干扰模板设计
+      data.cellData = {}
       template.value = { ...template.value, ...data }
       // 确保关键字段明确赋值，防止后端数据缺失时使用默认值
       if (data.name !== undefined) template.value.name = data.name
