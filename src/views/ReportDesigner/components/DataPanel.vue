@@ -52,6 +52,9 @@
               <span class="ds-name">{{ ds.name || ds.sourceName || '数据源' }}</span>
               <span class="ds-count">{{ getFieldCount(ds) }}</span>
             </div>
+            <button class="ds-preview-btn" @click.stop="handlePreviewDs(ds)" title="预览数据">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            </button>
             <div class="ds-fields" v-show="ds.expanded">
               <div v-if="ds.dimensions?.length" class="field-subgroup">
                 <div class="field-subgroup-title">维度</div>
@@ -129,6 +132,43 @@
       </div>
     </div>
   </aside>
+
+  <!-- 数据预览弹窗 -->
+  <el-dialog
+    v-model="previewVisible"
+    :title="`数据预览 - ${previewDataSource?.name || previewDataSource?.sourceName || '数据源'}`"
+    width="700px"
+    :close-on-click-modal="false"
+    destroy-on-close
+  >
+    <div v-loading="previewLoading" class="preview-content">
+      <div v-if="previewData.length > 0" class="preview-table">
+        <table>
+          <thead>
+            <tr>
+              <th v-for="col in previewColumns" :key="col">{{ col }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, idx) in previewData" :key="idx">
+              <td v-for="col in previewColumns" :key="col">
+                {{ formatCellValue(row[col]) }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="preview-footer">
+          共 {{ previewData.length }} 条数据
+        </div>
+      </div>
+      <div v-else class="preview-empty">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="empty-icon">
+          <path d="M20 13V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7m16 0v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5m16 0h-2.586a1 1 0 0 0-.707.293l-2.414 2.414a1 1 0 0 1-.707.293h-3.172a1 1 0 0 1-.707-.293l-2.414-2.414A1 1 0 0 0 6.586 13H4"/>
+        </svg>
+        <p>暂无数据</p>
+      </div>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -150,6 +190,13 @@ const isCollapsed = ref(false)
 const activeTab = ref('data')
 const searchKeyword = ref('')
 const loading = ref(false)
+
+// ========== 数据预览弹窗 ==========
+const previewVisible = ref(false)
+const previewDataSource = ref(null)
+const previewLoading = ref(false)
+const previewData = ref([])
+const previewColumns = ref([])
 
 // ========== 加载数据源 ==========
 onMounted(async () => {
@@ -250,9 +297,44 @@ function handleAddCol() {
 }
 
 function handleAddMetric() {
-  const m = addMetric()
+  const m = addMetric({ type: 'formula' })
   if (m) {
     ElMessage.success('已添加指标，请在右侧面板编辑')
+  }
+}
+
+// ========== 数据预览 ==========
+async function handlePreviewDs(ds) {
+  previewDataSource.value = ds
+  previewVisible.value = true
+  await loadPreviewData()
+}
+
+async function loadPreviewData() {
+  if (!previewDataSource.value) return
+  previewLoading.value = true
+  try {
+    const { executeDataSourceQuery } = await import('@/api/reportEngine')
+    const res = await executeDataSourceQuery(previewDataSource.value.id, { limit: 20 })
+    const result = res?.data || res
+    if (result && result.status === 'success') {
+      previewData.value = Array.isArray(result.data) ? result.data : []
+      if (previewData.value.length > 0) {
+        previewColumns.value = Object.keys(previewData.value[0])
+      } else {
+        previewColumns.value = []
+      }
+    } else {
+      previewData.value = []
+      previewColumns.value = []
+      ElMessage.warning('数据源查询失败: ' + (result?.message || '未知错误'))
+    }
+  } catch (e) {
+    previewData.value = []
+    previewColumns.value = []
+    ElMessage.error('预览失败: ' + (e.message || e))
+  } finally {
+    previewLoading.value = false
   }
 }
 </script>

@@ -12,7 +12,7 @@ const ROLE_PERMISSIONS = {
   SUPER_ADMIN: ['*:*:*'],
 
   ADMIN: [
-    'menu:reportCenter', 'menu:reportFill', 'menu:auditCenter', 'menu:wordToExcel',
+    'menu:dashboard', 'menu:reportCenter', 'menu:reportFill', 'menu:auditCenter', 'menu:wordToExcel',
     'menu:admin', 'menu:userManage', 'menu:deptManage', 'menu:positionManage',
     'menu:roleManage', 'menu:permManage', 'menu:datasource', 'menu:paramConfig',
     'menu:workflow', 'menu:logCenter',
@@ -20,15 +20,15 @@ const ROLE_PERMISSIONS = {
   ],
 
   AUDITOR: [
-    'menu:reportCenter', 'menu:reportFill', 'menu:auditCenter'
+    'menu:dashboard', 'menu:reportCenter', 'menu:reportFill', 'menu:auditCenter'
   ],
 
   REPORTER: [
-    'menu:reportCenter', 'menu:reportFill'
+    'menu:dashboard', 'menu:reportCenter', 'menu:reportFill'
   ],
 
   VIEWER: [
-    'menu:reportCenter'
+    'menu:dashboard', 'menu:reportCenter'
   ]
 }
 

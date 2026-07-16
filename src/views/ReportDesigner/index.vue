@@ -19,6 +19,7 @@
         @toggleHelp="showHelp"
         @openAI="handleOpenAI"
         @importExcel="handleImportExcel"
+        @showTemplateProps="openTemplateProps"
       />
 
       <!-- Ribbon 工具栏 -->
@@ -84,23 +85,45 @@
             <el-input v-model="template.code" placeholder="如：RPT-COAL-001" />
           </div>
           <div class="tp-row">
-            <div class="tp-field">
-              <label>模板类型</label>
-              <el-select v-model="template.templateType" style="width:100%">
-                <el-option :value="1" label="统计报表" />
-                <el-option :value="2" label="填报报表" />
-                <el-option :value="3" label="汇总报表" />
-              </el-select>
+              <div class="tp-field">
+                <label>模板类型</label>
+                <el-select v-model="template.templateType" style="width:100%">
+                  <el-option :value="1" label="统计报表" />
+                  <el-option :value="2" label="填报报表" />
+                  <el-option :value="3" label="汇总报表" />
+                </el-select>
+              </div>
+              <div class="tp-field">
+                <label>报表分类</label>
+                <el-select v-model="template.categoryId" style="width:100%">
+                  <el-option :value="1" label="生产类" />
+                  <el-option :value="2" label="财务类" />
+                  <el-option :value="3" label="安全类" />
+                  <el-option :value="4" label="能源类" />
+                  <el-option :value="5" label="成本类" />
+                  <el-option :value="6" label="计划类" />
+                  <el-option :value="7" label="综合类" />
+                  <el-option :value="8" label="投资类" />
+                </el-select>
+              </div>
             </div>
-            <div class="tp-field">
-              <label>状态</label>
-              <el-select v-model="template.status" style="width:100%">
-                <el-option :value="0" label="草稿" />
-                <el-option :value="1" label="已发布" />
-                <el-option :value="2" label="已停用" />
-              </el-select>
+            <div class="tp-row">
+              <div class="tp-field">
+                <label>状态</label>
+                <el-select v-model="template.status" style="width:100%">
+                  <el-option value="draft" label="草稿" />
+                  <el-option value="published" label="已发布" />
+                  <el-option value="disabled" label="已停用" />
+                </el-select>
+              </div>
+              <div class="tp-field">
+                <label>是否计划模板</label>
+                <el-select v-model="template.planFlag" style="width:100%">
+                  <el-option :value="false" label="普通模板" />
+                  <el-option :value="true" label="计划模板" />
+                </el-select>
+              </div>
             </div>
-          </div>
           <div class="tp-field">
             <label>描述</label>
             <el-input v-model="template.description" type="textarea" rows="3" placeholder="报表用途说明" />
@@ -162,6 +185,7 @@ import { ref, onMounted, watch, provide, nextTick, unref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { loadTemplate, saveTemplate, updateTemplate, publishTemplate } from '@/api/reportDesigner.js'
+import { useNavigation } from '@/composables/useNavigation.js'
 
 import DesignerProvider from './DesignerProvider.vue'
 import AppHeader from './components/AppHeader.vue'
@@ -178,6 +202,7 @@ import { designerRef } from './composables/useDesigner.js'
 
 const router = useRouter()
 const route = useRoute()
+const { recordPath } = useNavigation()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -199,6 +224,7 @@ const template = ref({
   name: '未命名报表',
   version: 1,
   status: 'draft',
+  templateType: 2,
   description: '',
   periodType: 'month',
   auditRequired: false,
@@ -367,7 +393,7 @@ function onFormulaWizardApply(formulaData) {
       colRawExpr = rawExpr.replace(re, col.id)
     }
 
-    // 将公式注册到 metrics（后端通过 metrics 保存到 rpt_formula 表）
+    // 所有公式都添加到 metrics，通过 category 区分类型
     const existing = unref(d.metrics)?.find(m => m.targetCell === colTargetCell)
     if (existing) {
       d.updateMetric(existing.field, {
@@ -376,6 +402,9 @@ function onFormulaWizardApply(formulaData) {
         targetCell: colTargetCell,
         dependencies: formulaData.dependencies || [],
         label: formulaData.label || '',
+        status: existing.status ?? 1,
+        type: 'formula',
+        category: formulaData.formulaType === 'cell' ? 'cell' : 'metric',
       })
     } else {
       d.addMetric({
@@ -386,6 +415,9 @@ function onFormulaWizardApply(formulaData) {
         targetCell: colTargetCell,
         dependencies: formulaData.dependencies || [],
         calcTrigger: 'save',
+        status: 1,
+        type: 'formula',
+        category: formulaData.formulaType === 'cell' ? 'cell' : 'metric',
       })
     }
     d.setCellValue(rowNodeId, col.id, colExpr)
@@ -398,7 +430,17 @@ function onFormulaWizardApply(formulaData) {
 
 // ==================== 模板加载 ====================
 onMounted(() => {
+  // 记录导航历史，确保返回按钮正常工作
+  recordPath(route.fullPath)
+
   const tid = route.query.templateId || route.params.code
+  // 从新建弹窗跳转时，query 带了 name/templateType，先预填避免默认值闪烁
+  if (route.query.name) {
+    template.value.name = route.query.name
+  }
+  if (route.query.templateType) {
+    template.value.templateType = Number(route.query.templateType)
+  }
   if (tid) {
     loadTemplateData(tid)
   } else {
@@ -415,6 +457,9 @@ async function loadTemplateData(idOrCode) {
     const data = await loadTemplate(idOrCode)
     if (data) {
       template.value = { ...template.value, ...data }
+      // 确保关键字段明确赋值，防止后端数据缺失时使用默认值
+      if (data.name !== undefined) template.value.name = data.name
+      if (data.templateType !== undefined) template.value.templateType = data.templateType
       const d = getDesigner()
       if (d) {
         d.loadFromTemplate(data)
@@ -436,14 +481,14 @@ function buildTemplatePayload() {
   const d = getDesigner()
   if (!d) return null
   const vo = d.serializeToVO()
-  return {
-    ...vo,
-    name: template.value.name,
-    code: template.value.code,
-    description: template.value.description,
-    periodType: template.value.periodType,
-    auditRequired: template.value.auditRequired,
-  }
+  // 同步 index.vue template 与 designer 内部 template（AppHeader 内联编辑会修改后者）
+  template.value.name = vo.name
+  template.value.code = vo.code
+  template.value.templateType = vo.templateType ?? template.value.templateType
+  template.value.description = vo.description
+  template.value.periodType = vo.periodType
+  template.value.auditRequired = vo.auditRequired
+  return vo
 }
 
 async function handleSaveTemplate() {
@@ -465,9 +510,16 @@ async function handleSaveTemplate() {
     } else {
       // 新建
       const res = await saveTemplate(payload)
-      if (res?.id) template.value.id = res.id
+      // http 工具已解包 Result.data，res 通常就是新模板ID（数字）；兼容对象返回
+      const newId = res?.id ?? res?.data ?? res
+      if (newId) template.value.id = newId
     }
+
+    // 保存数据源关联
+    await saveDataSourceAssociation()
+
     autoSaveStatus.value = 'saved'
+    showTemplateProps.value = false
     ElMessage.success('保存成功')
   } catch (e) {
     autoSaveStatus.value = 'unsaved'
@@ -476,6 +528,36 @@ async function handleSaveTemplate() {
   } finally {
     saving.value = false
   }
+}
+
+async function saveDataSourceAssociation() {
+  const d = getDesigner()
+  if (!d || !d.dataSource || !template.value.id) return
+
+  const { sourceId } = d.dataSource
+  if (!sourceId) return
+
+  try {
+    const { setTemplateDataSource } = await import('@/api/reportEngine')
+    await setTemplateDataSource(template.value.id, d.dataSource)
+    console.log('数据源关联保存成功')
+  } catch (e) {
+    console.warn('数据源关联保存失败:', e)
+  }
+}
+
+function openTemplateProps() {
+  // 打开模板属性弹窗前，从 designer 内部 template 同步最新值到 index.vue template
+  const d = getDesigner()
+  if (d?.template) {
+    template.value.name = d.template.name
+    template.value.code = d.template.code
+    template.value.templateType = d.template.templateType ?? 2
+    template.value.description = d.template.description || ''
+    template.value.periodType = d.template.periodType || 'month'
+    template.value.auditRequired = d.template.auditRequired ?? false
+  }
+  showTemplateProps.value = true
 }
 
 function handleSaveAs() {
@@ -500,8 +582,9 @@ async function confirmSaveAs() {
       status: 'draft',
     }
     const res = await saveTemplate(newTpl)
-    if (res?.id) {
-      template.value.id = res.id
+    const newId = res?.id ?? res?.data ?? res
+    if (newId) {
+      template.value.id = newId
       template.value.name = name
       template.value.code = code
     }

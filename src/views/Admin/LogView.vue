@@ -47,6 +47,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { isMockEnabled } from '@/utils/mockConfig.js'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -69,10 +70,16 @@ async function loadData() {
     const res = await (await fetch('/api/auth/login-log?current=' + page.current + '&size=' + page.size)).json()
     tableData.value = res.data?.records || res.records || []
     page.total = res.data?.total || res.total || tableData.value.length
-    if (!tableData.value.length) throw new Error('mock')
+    if (!tableData.value.length && isMockEnabled()) throw new Error('mock')
   } catch (e) {
-    tableData.value = mockLogs
-    page.total = mockLogs.length
+    if (isMockEnabled()) {
+      tableData.value = mockLogs
+      page.total = mockLogs.length
+    } else {
+      tableData.value = []
+      page.total = 0
+      ElMessage.error('加载日志数据失败')
+    }
   } finally {
     loading.value = false
   }

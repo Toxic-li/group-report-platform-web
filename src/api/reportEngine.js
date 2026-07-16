@@ -2,7 +2,7 @@
  * 数据源 + 公式 + 条件格式 + 校验规则 API
  * 后端: DataSourceController / ReportFormulaController / ReportConditionalFormatController / ReportValidatorController
  */
-import { get, post, put, del } from '@/utils/http'
+import { get, post, put, del, patch } from '@/utils/http'
 
 // ==================== 数据源 ====================
 
@@ -12,7 +12,14 @@ export function createDataSource(data) { return post('/report-designer/data-sour
 export function updateDataSource(id, data) { return put(`/report-designer/data-sources/${id}`, data) }
 export function deleteDataSource(id) { return del(`/report-designer/data-sources/${id}`) }
 export function testDataSourceConnection(id) { return post(`/report-designer/data-sources/${id}/test-connection`) }
-export function executeDataSourceQuery(id, query) { return post(`/report-designer/data-sources/${id}/query`, { query }) }
+export function executeDataSourceQuery(id, query) { return post(`/report-designer/data-sources/${id}/query`, query || {}) }
+
+// ==================== 模板数据源关联 ====================
+
+export function getTemplateDataSource(templateId) { return get(`/report-designer/template/${templateId}/data-source`) }
+export function setTemplateDataSource(templateId, dataSource) { return post(`/report-designer/template/${templateId}/data-source`, dataSource) }
+export function clearTemplateDataSource(templateId) { return del(`/report-designer/template/${templateId}/data-source`) }
+export function syncTemplateDataFromSource(templateId, params) { return post(`/report-designer/template/${templateId}/data-source/sync`, params || {}) }
 
 // ==================== 公式 ====================
 
@@ -23,6 +30,7 @@ export function updateFormula(id, data) { return put(`/report-designer/formulas/
 export function deleteFormula(id) { return del(`/report-designer/formulas/${id}`) }
 export function batchCalcFormulas(data) { return post('/report-designer/formulas/calc/batch', data) }
 export function calcSingleFormula(formulaId, cellData) { return post(`/report-designer/formulas/calc/${formulaId}`, { cellData }) }
+export function updateFormulaStatus(formulaId, status) { return patch(`/report-designer/formulas/${formulaId}/status?status=${status}`) }
 
 // ==================== 条件格式 ====================
 

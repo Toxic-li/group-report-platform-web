@@ -476,80 +476,84 @@ export const useReportStore = defineStore('report', () => {
     console.log('[buildCellDataDTO] 输入数据:', data)
 
     const cells = []
-    const rows = toRaw(data?.rows || [])
+    const cellData = toRaw(data?.cellData || {})
     const columns = toRaw(data?.columns || [])
+    const rows = toRaw(data?.rows || [])
 
-    // ✅ 验证数据完整性
-    if (rows.length === 0) {
-      return cells
-    }
-
-    // ✅ 检查 columns 是否为空
     if (columns.length === 0) {
+      console.warn('[buildCellDataDTO] columns 为空')
       return cells
     }
 
-    // ✅ 遍历行数据
-    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-      const row = rows[rowIndex]
-      
-      // ✅ 验证行配置
-      if (!row || !row.id || !row.code) {
-        continue
-      }
+    const frozenRowCount = data?.frozenRowCount || 4
 
-      // ✅ 遍历列数据（跳过前2列：# 和 指标列）
-      if (!row.values || !Array.isArray(row.values)) {
-        continue
-      }
-
-      for (let colIndex = 0; colIndex < row.values.length; colIndex++) {
-        const cell = row.values[colIndex]
-        
-        // ✅ 跳过空值单元格
-        if (!cell || cell.v === undefined || cell.v === null || String(cell.v).trim() === '') {
-          continue
-        }
-
-        // ✅ 根据 colIdx 从 columns 配置中查找真实的列ID和编码
-        // 注意：colIdx 是在 row.values 数组中的索引，对应 columns 数组中的位置（需要跳过前2列）
-        const actualColIndex = colIndex + 2  // 跳过 # 和 指标列
-        
-        const colConfig = columns[actualColIndex]
-        
-        console.log(`  - colConfig:`, colConfig)
-
-        // ✅ 如果找不到列配置，生成临时ID（实际应从数据库获取）
-        const columnCode = colConfig?.id || (2000 + colIndex + 1)  // ✅ 存储接口返回的id字段
-
-        console.log(`  - columnCode: ${columnCode} (${colConfig?.id ? '来自columns配置的id' : '临时生成'})`)
-        console.log(`  - value: ${cell.v}`)
-
-        // ✅ 创建 CellDataDTO 对象（使用真实业务ID）
-        const cellDTO = new CellDataDTO({
-          rowCode: row.id,              // ✅ 存储接口返回的id字段
-          columnCode: columnCode,       // ✅ 存储接口返回的id字段
-          value: String(cell.v),        // 单元格值
-          rawValue: cell.raw || String(cell.v),  // 原始值
-          formula: cell.f || cell.formula || null,  // 公式（如有）
-          dataType: cell.dataType || null,
-          source: cell.source || 1,     // 数据来源：1-手动录入
-          remark: cell.remark || ''
-        })
-
-        // ✅ 验证数据完整性
-        const validation = cellDTO.validate()
-        if (!validation.valid) {
-          console.warn(`[buildCellDataDTO] ⚠️ 单元格 (${rowIndex}, ${colIndex}) 验证失败:`, validation.errors)
-          console.warn(`[buildCellDataDTO] ⚠️ cellDTO 数据:`, cellDTO)
-          continue
-        }
-
-        cells.push(cellDTO)
-      }
+    // 如果有 flat rows 数组，直接用它（更可靠，与 cellData 构建时一致）
+    // 否则回退到从 rowTree 构建
+    let rowMap = {}
+    if (rows.length > 0) {
+      rows.forEach((row, idx) => {
+        rowMap[frozenRowCount + idx] = row
+      })
+    } else {
+      const rowTree = toRaw(data?.rowTree || [])
+      rowMap = buildRowIndexMap(rowTree, frozenRowCount)
     }
 
+    for (const [cellKey, cell] of Object.entries(cellData)) {
+      if (!cell || cell.v === undefined || cell.v === null || String(cell.v).trim() === '') {
+        continue
+      }
+
+      const [rowIdxStr, colIdxStr] = cellKey.split('-')
+      const rowIdx = parseInt(rowIdxStr, 10)
+      const colIdx = parseInt(colIdxStr, 10)
+
+      if (isNaN(rowIdx) || isNaN(colIdx)) continue
+
+      const rowConfig = rowMap[rowIdx]
+      // 优先使用 id（数据库 row_code），因为 code 是前端生成的业务编码，可能不匹配数据库
+      const rowCode = rowConfig?.id || rowConfig?.code || `r_${rowIdx}`
+
+      const colConfig = columns[colIdx]
+      // 同理，优先使用 id（数据库 column_code）
+      const columnCode = colConfig?.id || colConfig?.code || `c_${colIdx}`
+
+      const cellDTO = new CellDataDTO({
+        rowCode: rowCode,
+        columnCode: columnCode,
+        value: String(cell.v),
+        rawValue: cell.raw || String(cell.v),
+        formula: cell.f || cell.formula || null,
+        dataType: cell.dataType || null,
+        source: cell.source || 1,
+        remark: cell.remark || ''
+      })
+
+      const validation = cellDTO.validate()
+      if (!validation.valid) {
+        console.warn(`[buildCellDataDTO] ⚠️ 单元格 ${cellKey} 验证失败:`, validation.errors)
+        continue
+      }
+
+      cells.push(cellDTO)
+    }
+
+    console.log(`[buildCellDataDTO] 共生成 ${cells.length} 个单元格, rowCode 样例:`, cells.slice(0, 3).map(c => ({ rowCode: c.rowCode, columnCode: c.columnCode })))
     return cells
+  }
+
+  function buildRowIndexMap(rowTree, frozenRowCount = 4) {
+    const map = {}
+    let index = frozenRowCount
+    function traverse(nodes) {
+      if (!nodes || !Array.isArray(nodes)) return
+      for (const node of nodes) {
+        map[index++] = node
+        traverse(node.children)
+      }
+    }
+    traverse(rowTree)
+    return map
   }
 
   /**

@@ -8,6 +8,7 @@
         <template v-if="currentView === 'pending'">需要您处理的所有审核任务</template>
         <template v-else-if="currentView === 'approved'">历史已通过审核的提交</template>
         <template v-else-if="currentView === 'rejected'">已驳回待修改的提交</template>
+        <template v-else-if="currentView === 'reported'">下级单位上报的填报数据，待您审核</template>
         <template v-else-if="currentView === 'initiated'">您发起过的所有填报记录</template>
         <template v-else-if="currentView === 'history'">所有历史审核轨迹</template>
       </p>
@@ -106,9 +107,9 @@
             <tr v-for="(item, index) in submissions" :key="item.id" :class="'ac-row-' + normalizeStatus(item.status)">
             <td class="ac-col-check">
               <input 
-                v-if="normalizeStatus(item.status) === 'pending'"
+                v-if="normalizeStatus(item.status) === 'pending' || normalizeStatus(item.status) === 'reported'"
                 type="checkbox" 
-                :value="item.id"
+                :value="item.submitId || item.id"
                 v-model="selectedIds"
               />
             </td>
@@ -136,29 +137,50 @@
               </span>
             </td>
             <td class="ac-actions">
-              <!-- 待审核：显示通过/驳回按钮 -->
-              <template v-if="normalizeStatus(item.status) === 'pending'">
+              <!-- 待审核/已上报：显示通过/驳回按钮 -->
+              <template v-if="normalizeStatus(item.status) === 'pending' || normalizeStatus(item.status) === 'reported'">
                 <button class="ac-action-btn ac-approve" @click="handleApprove(item)" title="审核通过">
                   ✓ 通过
                 </button>
                 <button class="ac-action-btn ac-reject" @click="showRejectDialog(item)" title="审核驳回">
                   ✕ 驳回
                 </button>
+                <button class="ac-action-btn ac-view-report" @click="viewReport(item)" title="查看报表">
+                  📋 报表
+                </button>
                 <button class="ac-action-btn ac-detail" @click="viewDetail(item)" title="查看详情">
                   详情
                 </button>
                 <button class="ac-action-btn ac-history" @click="viewAuditHistory(item)" title="审核轨迹">
                   轨迹
+                </button>
+                <button class="ac-action-btn ac-version" @click="showVersionHistory(item)" title="版本历史">
+                  版本
                 </button>
               </template>
               
-              <!-- 已通过/驳回：只显示详情 -->
+              <!-- 已通过/驳回：显示详情和报表 -->
               <template v-else>
+                <button class="ac-action-btn ac-view-report" @click="viewReport(item)" title="查看报表">
+                  📋 报表
+                </button>
                 <button class="ac-action-btn ac-detail" @click="viewDetail(item)" title="查看详情">
                   详情
                 </button>
                 <button class="ac-action-btn ac-history" @click="viewAuditHistory(item)" title="审核轨迹">
                   轨迹
+                </button>
+                <button class="ac-action-btn ac-version" @click="showVersionHistory(item)" title="版本历史">
+                  版本
+                </button>
+                <!-- 已通过：可撤销审批 -->
+                <button 
+                  v-if="normalizeStatus(item.status) === 'approved'" 
+                  class="ac-action-btn ac-cancel-approval" 
+                  @click="handleCancelApproval(item)"
+                  title="撤销审批"
+                >
+                  撤销审批
                 </button>
                 <!-- 已撤回：可重新提交 -->
                 <button 
@@ -185,8 +207,8 @@
           <circle cx="64" cy="56" r="16" fill="var(--app-surface)" stroke="var(--app-primary)" stroke-width="2"/>
           <path d="M58 56l4 4 8-8" stroke="var(--app-primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <p class="ac-empty-title">暂无提交记录</p>
-        <p class="ac-empty-desc">所有审核任务将在这里显示</p>
+        <p class="ac-empty-title">{{ emptyStateTitle }}</p>
+        <p class="ac-empty-desc">{{ emptyStateDesc }}</p>
       </div>
       
       <!-- 骨架屏加载 -->
@@ -367,6 +389,45 @@
       </div>
     </Teleport>
 
+    <!-- 版本历史弹窗 -->
+    <Teleport to="body">
+      <div v-if="versionDialogVisible" class="ac-modal-overlay" @click.self="versionDialogVisible = false">
+        <div class="ac-modal" style="width: 600px">
+          <div class="ac-modal-header">
+            <h3>版本历史</h3>
+            <button class="ac-modal-close" @click="versionDialogVisible = false">&times;</button>
+          </div>
+          <div class="ac-modal-body">
+            <div v-if="versionHistory.length > 0" class="ac-timeline">
+              <div
+                v-for="(v, idx) in versionHistory" :key="idx"
+                class="ac-timeline-item"
+                :class="'ac-timeline-' + (v.auditType === 3 ? 'rejected' : v.auditType === 2 ? 'approved' : 'pending')"
+              >
+                <div class="ac-timeline-dot"></div>
+                <div class="ac-timeline-content">
+                  <div class="ac-timeline-header">
+                    <span class="ac-timeline-action">{{ v.auditTypeName || statusText(v.auditType) }}</span>
+                    <span class="ac-timeline-time">{{ formatTime(v.auditTime) }}</span>
+                  </div>
+                  <div class="ac-timeline-body">
+                    <p v-if="v.auditorName" class="ac-timeline-operator">操作人：{{ v.auditorName }}</p>
+                    <p v-if="v.opinion" class="ac-timeline-remark">意见：{{ v.opinion }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="ac-empty">
+              <p>暂无版本历史</p>
+            </div>
+          </div>
+          <div class="ac-modal-footer">
+            <button class="ac-btn ac-btn-primary" @click="versionDialogVisible = false">关闭</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- 详情弹窗 -->
     <Teleport to="body">
       <div v-if="detailDialog.visible" class="ac-modal-overlay" @click.self="detailDialog.visible = false">
@@ -443,9 +504,11 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   queryAuditTasks, getAuditStats, approveAudit, rejectAudit,
-  batchApproveAudits, getAuditDetail, getAuditHistory,
+  batchApproveAudits, getAuditDetail, getAuditHistory, cancelApproval,
 } from '@/api/audit.js'
 import { getSubmitDetail } from '@/api/reportSubmit.js'
+import { queryReportedToMe } from '@/api/filling.js'
+import { get } from '@/utils/http'
 
 const router = useRouter()
 const route = useRoute()
@@ -460,6 +523,7 @@ const ROUTE_VIEW_MAP = {
   '/audit/pending': 'pending',
   '/audit/approved': 'approved',
   '/audit/rejected': 'rejected',
+  '/audit/reported': 'reported',
   '/audit/initiated': 'initiated',
   '/audit/history': 'history',
 }
@@ -471,9 +535,33 @@ const currentView = computed(() => {
 const currentPageTitle = computed(() => {
   const map = {
     pending: '待审核任务', approved: '已通过',
-    rejected: '已驳回', initiated: '我发起的', history: '审核历史'
+    rejected: '已驳回', reported: '下级上报', initiated: '我发起的', history: '审核历史'
   }
   return map[currentView.value] || '审核中心'
+})
+
+/** 空状态文案 */
+const emptyStateTitle = computed(() => {
+  const map = {
+    pending: '暂无待审核任务',
+    approved: '暂无已通过记录',
+    rejected: '暂无已驳回记录',
+    reported: '暂无下级上报',
+    initiated: '暂无发起的审核',
+    history: '暂无审核历史'
+  }
+  return map[currentView.value] || '暂无数据'
+})
+const emptyStateDesc = computed(() => {
+  const map = {
+    pending: '所有待处理的审核任务将在这里显示',
+    approved: '已通过的审核记录将在这里显示',
+    rejected: '已驳回的审核记录将在这里显示',
+    reported: '下级单位上报的填报数据将在这里显示',
+    initiated: '您发起的审核申请将在这里显示',
+    history: '审核历史记录将在这里显示'
+  }
+  return map[currentView.value] || ''
 })
 
 /** 统计数据 */
@@ -532,6 +620,10 @@ const historyDialog = reactive({
   loading: false
 })
 
+/** 版本历史弹窗 */
+const versionDialogVisible = ref(false)
+const versionHistory = ref([])
+
 /** 批量选择 */
 const selectedIds = ref([])
 const batchSubmitting = ref(false)
@@ -554,9 +646,12 @@ function isDeadlineUrgent(deadline) {
 // 计算属性
 const totalPages = computed(() => Math.ceil(total.value / pageSize.value))
 
-/** 待审核项 */
+/** 待审核项（包含 pending 和 reported） */
 const pendingItems = computed(() => 
-  submissions.value.filter(item => normalizeStatus(item.status) === 'pending')
+  submissions.value.filter(item => {
+    const s = normalizeStatus(item.status)
+    return s === 'pending' || s === 'reported'
+  })
 )
 
 /** 是否全选 */
@@ -582,7 +677,12 @@ async function loadSubmissions() {
     if (filters.keyword) params.keyword = filters.keyword
     if (filters.dateRange) params.dateRange = filters.dateRange
 
-    const res = await queryAuditTasks(currentView.value, params)
+    let res
+    if (currentView.value === 'reported') {
+      res = await queryReportedToMe(params)
+    } else {
+      res = await queryAuditTasks(currentView.value, params)
+    }
 
     if (res?.records) {
       submissions.value = res.records.map(s => ({ ...s, status: normalizeStatus(s.status) }))
@@ -692,7 +792,7 @@ async function confirmApprove() {
   batchSubmitting.value = true
   try {
     await approveAudit({
-      submitId: approveDialog.targetItem.id,
+      submitId: approveDialog.targetItem.submitId || approveDialog.targetItem.id,
       action: 'APPROVE',
       opinion: approveDialog.remark,
     })
@@ -729,7 +829,7 @@ async function handleReject() {
   }
   try {
     await rejectAudit({
-      submitId: rejectDialog.targetItem.id,
+      submitId: rejectDialog.targetItem.submitId || rejectDialog.targetItem.id,
       action: 'REJECT',
       opinion: rejectDialog.reason,
     })
@@ -751,7 +851,7 @@ function toggleSelectAll() {
   if (isAllSelected.value) {
     selectedIds.value = []
   } else {
-    selectedIds.value = pendingItems.value.map(item => item.id)
+    selectedIds.value = pendingItems.value.map(item => item.submitId || item.id)
   }
 }
 
@@ -844,6 +944,20 @@ async function viewAuditHistory(item) {
 }
 
 /**
+ * ✅ 版本历史
+ */
+async function showVersionHistory(row) {
+  try {
+    const res = await get(`/audit/version-history?templateId=${row.templateId}&orgId=${row.orgId || row.submitterId}&period=${row.period || ''}`)
+    versionHistory.value = res?.data || res || []
+    versionDialogVisible.value = true
+  } catch {
+    versionHistory.value = []
+    versionDialogVisible.value = true
+  }
+}
+
+/**
  * ✅ 查看详情
  */
 async function viewDetail(item) {
@@ -865,8 +979,50 @@ function resubmit(item) {
     path: `/report/${item.templateId}`,
     query: {
       orgId: item.orgId,
-      period: item.period
+      period: item.period,
+      backUrl: route.fullPath
     }
+  })
+}
+
+/**
+ * 撤销审批：将已通过的报表退回待审核状态
+ */
+async function handleCancelApproval(item) {
+  const submitId = item.submitId || item.id
+  if (!submitId) {
+    ElMessage.error('无法获取提交记录ID')
+    return
+  }
+  try {
+    const { value: opinion } = await ElMessageBox.prompt('请输入撤销审批的原因', '撤销审批', {
+      confirmButtonText: '确认撤销',
+      cancelButtonText: '取消',
+      inputPlaceholder: '撤销原因（可选）',
+      inputType: 'textarea',
+    })
+    await cancelApproval({ submitId, opinion: opinion || '' })
+    ElMessage.success('审批已撤销，该报表已退回待审核状态')
+    await loadSubmissions()
+  } catch (err) {
+    if (err !== 'cancel' && err !== 'close') {
+      ElMessage.error(err?.message || '撤销审批失败')
+    }
+  }
+}
+
+/**
+ * ✅ 查看报表（跳转到报表只读页面）
+ */
+function viewReport(item) {
+  const submitId = item.submitId || item.id
+  if (!submitId) {
+    ElMessage.warning('无法获取提交记录ID')
+    return
+  }
+  router.push({
+    path: `/entry/detail/${submitId}`,
+    query: { mode: 'view', backUrl: route.fullPath }
   })
 }
 
@@ -877,7 +1033,7 @@ function resubmit(item) {
 function normalizeStatus(status) {
   if (status === null || status === undefined) return 'pending'
   if (typeof status === 'string') return status
-  const map = { 0: 'draft', 1: 'pending', 2: 'approved', 3: 'rejected', 4: 'withdrawn' }
+  const map = { 0: 'draft', 1: 'pending', 2: 'approved', 3: 'rejected', 4: 'withdrawn', 5: 'reported' }
   return map[status] || 'pending'
 }
 
@@ -891,7 +1047,8 @@ function statusText(status) {
     pending: '待审核',
     approved: '已通过',
     rejected: '已驳回',
-    withdrawn: '已撤回'
+    withdrawn: '已撤回',
+    reported: '已上报'
   }
   return map[normalized] || normalized || '-'
 }
@@ -1097,6 +1254,7 @@ watch(() => route.path, () => {
 }
 .ac-status-pending { background: var(--app-primary-bg); color: var(--app-primary); }
 .ac-status-submitted { background: var(--app-primary-bg); color: var(--app-primary); }
+.ac-status-reported { background: rgba(245, 158, 11, 0.1); color: var(--app-warning); }
 .ac-status-approved { background: var(--app-success-bg); color: var(--app-success); }
 .ac-status-rejected { background: var(--app-danger-bg); color: var(--app-danger); }
 .ac-status-withdrawn { background: var(--app-surface-active); color: var(--app-text-muted); }
@@ -1119,7 +1277,10 @@ watch(() => route.path, () => {
 .ac-reject { background: var(--app-danger-bg); color: var(--app-danger); &:hover { background: var(--app-danger-bg-hover); } }
 .ac-detail { background: var(--app-info-bg); color: var(--app-info); &:hover { background: var(--app-info-bg-hover); } }
 .ac-resubmit { background: var(--app-warning-bg); color: var(--app-warning); &:hover { background: var(--app-warning-bg-hover); } }
+.ac-cancel-approval { background: var(--app-warning-bg); color: var(--app-warning); &:hover { background: var(--app-warning-bg-hover); } }
 .ac-history { background: var(--app-info-bg); color: var(--app-info); &:hover { background: var(--app-info-bg-hover); } }
+.ac-version { background: var(--app-warning-bg); color: var(--app-warning); &:hover { background: var(--app-warning-bg-hover); } }
+.ac-view-report { background: var(--app-success-bg); color: var(--app-success); &:hover { background: var(--app-success-bg-hover); } }
 
 /* 空状态 */
 .ac-empty {
@@ -1401,6 +1562,7 @@ watch(() => route.path, () => {
   border: 2px solid var(--app-surface);
 }
 .ac-timeline-pending .ac-timeline-dot { background: var(--app-primary); }
+.ac-timeline-reported .ac-timeline-dot { background: var(--app-warning); }
 .ac-timeline-approved .ac-timeline-dot { background: var(--app-success); }
 .ac-timeline-rejected .ac-timeline-dot { background: var(--app-danger); }
 .ac-timeline-submitted .ac-timeline-dot { background: var(--app-primary); }

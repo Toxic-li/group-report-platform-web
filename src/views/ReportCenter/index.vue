@@ -34,12 +34,10 @@
           <el-option label="生产" value="production"/>
           <el-option label="其他" value="other"/>
         </el-select>
-        <el-select v-model="filterStatus" placeholder="状态" style="width: 110px" size="default" clearable>
+        <el-select v-model="filterStatus" placeholder="模板状态" style="width: 110px" size="default" clearable>
           <el-option label="草稿" value="draft"/>
-          <el-option label="已提交" value="submitted"/>
-          <el-option label="已通过" value="approved"/>
-          <el-option label="已退回" value="rejected"/>
-          <el-option label="已撤回" value="withdrawn"/>
+          <el-option label="已发布" value="published"/>
+          <el-option label="已停用" value="disabled"/>
         </el-select>
         <el-select v-model="filterCreator" placeholder="创建人" style="width: 110px" size="default" clearable>
           <el-option label="我创建的" value="me"/>
@@ -95,8 +93,9 @@
           <p class="card-desc">{{ report.description }}</p>
 
           <div class="card-tags">
-            <span :class="['tag', `tag-${report.status}`]">{{ getStatusText(report.status) }}</span>
-            <span class="tag tag-category">{{ getCategoryText(report.category) }}</span>
+            <span :class="['tag', `tag-${report.status}`]">{{ report.statusText }}</span>
+            <span :class="['tag', 'tag-type', `tag-type-${report.type}`]">{{ report.typeLabel }}</span>
+            <span class="tag tag-category">{{ report.categoryText }}</span>
           </div>
 
           <div class="card-meta">
@@ -104,16 +103,26 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               {{ report.creatorName }}
             </span>
-            <span class="meta-item">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              {{ report.updatedAt }}
+            <span v-if="report.creatorOrgName" class="meta-item meta-item--org" :title="report.creatorOrgName">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              {{ report.creatorOrgName }}
             </span>
+            <span v-if="report.deadline" class="meta-item meta-item--deadline" :class="{ 'meta-item--urgent': report.isUrgent }" :title="'截止时间：' + report.deadline">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              {{ report.deadline }}
+            </span>
+          </div>
+
+          <!-- 已有草稿提示 -->
+          <div v-if="report.submitId" class="card-draft-hint" @click.stop="handleFillReport(report)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            已有草稿，点击继续编辑
           </div>
 
           <!-- Hover Actions: 打开/填报/查看/更多 -->
           <div class="card-actions">
-            <button v-if="report.type === 'entry' || report.status === 'draft' || report.status === 'rejected'" class="action-btn" @click.stop="handleFillReport(report)">
-              填报
+            <button v-if="report.canFill && !report.isOverdue" class="action-btn" @click.stop="handleFillReport(report)">
+              {{ report.submitId ? '继续填报' : '填报' }}
             </button>
             <button v-else class="action-btn" @click.stop="handleViewReport(report)">
               查看
@@ -205,23 +214,42 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="category" label="分类" width="100">
+          <el-table-column prop="typeLabel" label="类型" width="90">
             <template #default="{ row }">
-              <span class="tag tag-category">{{ getCategoryText(row.category) }}</span>
+              <span :class="['tag', 'tag-type-sm', `tag-type-${row.type}`]">{{ row.typeLabel }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="状态" width="100">
+          <el-table-column prop="category" label="分类" width="80">
             <template #default="{ row }">
-              <span :class="['tag', `tag-${row.status}`]">{{ getStatusText(row.status) }}</span>
+              <span class="tag tag-category">{{ row.categoryText }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="creatorName" label="创建人" width="100" />
-          <el-table-column prop="updatedAt" label="最后更新" width="160" />
+          <el-table-column prop="status" label="状态" width="80">
+            <template #default="{ row }">
+              <span :class="['tag', `tag-${row.status}`]">{{ row.statusText }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="creatorName" label="创建人" width="90" />
+          <el-table-column prop="creatorOrgName" label="创建组织" width="140">
+            <template #default="{ row }">
+              <span class="table-org-cell" :title="row.creatorOrgName">{{ row.creatorOrgName || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="updatedAt" label="最后更新" width="150" />
+          <el-table-column label="截止时间" width="220">
+            <template #default="{ row }">
+              <span v-if="row.deadline" :class="{ 'rc-deadline-urgent': row.isUrgent }">{{ row.deadline }}</span>
+              <span v-else class="rc-deadline-none">-</span>
+            </template>
+          </el-table-column>
           <el-table-column prop="useCount" label="使用次数" width="100" align="center" />
-          <el-table-column label="操作" width="220" fixed="right">
+          <el-table-column label="操作" width="260" fixed="right">
             <template #default="{ row }">
               <el-button text size="small" type="primary" @click.stop="handleViewReport(row)">查看</el-button>
-              <el-button text size="small" @click.stop="handleEditReport(row)">编辑</el-button>
+              <el-button v-if="row.canFill && !row.isOverdue" text size="small" @click.stop="handleFillReport(row)">
+                {{ row.submitId ? '继续填报' : '填报' }}
+              </el-button>
+              <el-button text size="small" @click.stop="openCompareDialog(row)">数据对比</el-button>
               <el-button text size="small" @click.stop="toggleFavoriteReport(row)">
                 {{ row.isFavorite ? '取消收藏' : '收藏' }}
               </el-button>
@@ -234,7 +262,6 @@
                     <el-dropdown-item command="share">分享</el-dropdown-item>
                     <el-dropdown-item command="versions">查看版本</el-dropdown-item>
                     <el-dropdown-item command="export">导出</el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
               </el-dropdown>
@@ -258,7 +285,7 @@
           <el-table-column label="创建人" width="100"><template #default><div class="skeleton-line skeleton-line--sm"></div></template></el-table-column>
           <el-table-column label="最后更新" width="160"><template #default><div class="skeleton-line skeleton-line--sm"></div></template></el-table-column>
           <el-table-column label="使用次数" width="100"><template #default><div class="skeleton-line skeleton-line--sm"></div></template></el-table-column>
-          <el-table-column label="操作" width="220"><template #default><div class="skeleton-line skeleton-line--sm"></div></template></el-table-column>
+          <el-table-column label="操作" width="260"><template #default><div class="skeleton-line skeleton-line--sm"></div></template></el-table-column>
         </el-table>
       </div>
 
@@ -272,6 +299,51 @@
         @current-change="handlePageChange"
       />
     </div>
+
+    <!-- 数据对比弹窗 -->
+    <el-dialog v-model="compareDialogVisible" title="数据对比分析" width="700px">
+      <div class="compare-form">
+        <el-form inline>
+          <el-form-item label="当前周期">
+            <el-input v-model="compareForm.currentPeriod" placeholder="如: 2026-07" />
+          </el-form-item>
+          <el-form-item label="对比周期">
+            <el-input v-model="compareForm.comparePeriod" placeholder="如: 2026-06" />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="loadCompareData">查询</el-button>
+          </el-form-item>
+        </el-form>
+      </div>
+      <div v-if="compareData && Object.keys(compareData).length > 0" class="compare-result">
+        <div class="compare-periods">
+          <span class="compare-period-tag current">{{ compareForm.currentPeriod }}</span>
+          <span class="compare-period-vs">VS</span>
+          <span class="compare-period-tag compare">{{ compareForm.comparePeriod }}</span>
+        </div>
+        <el-table :data="compareTableData" border style="width: 100%; margin-top: 16px" max-height="400">
+          <el-table-column prop="key" label="单元格" width="150" />
+          <el-table-column prop="currentValue" label="当前值" width="130" />
+          <el-table-column prop="compareValue" label="对比值" width="130" />
+          <el-table-column prop="diff" label="差值" width="130">
+            <template #default="{ row }">
+              <span :style="{ color: row.diff > 0 ? '#14B8A6' : row.diff < 0 ? '#EF4444' : '#94A3B8' }">
+                {{ row.diff != null ? (row.diff > 0 ? '+' : '') + row.diff : '-' }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="changeRate" label="变化率" min-width="120">
+            <template #default="{ row }">
+              <span v-if="row.changeRate != null" :style="{ color: row.changeRate > 0 ? '#14B8A6' : '#EF4444' }">
+                {{ (row.changeRate > 0 ? '+' : '') + (row.changeRate * 100).toFixed(2) }}%
+              </span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+      <el-empty v-else-if="compareLoaded" description="无对比数据" />
+    </el-dialog>
   </div>
 </template>
 
@@ -280,6 +352,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { queryReports, queryMyReports, queryFavoriteReports, queryRecentReports, toggleFavorite, countFavorites, countRecentViews, countMyReports, countReports, recordRecentView } from '@/api/reportCenter'
+import { get } from '@/utils/http'
 
 const route = useRoute()
 const router = useRouter()
@@ -291,10 +364,16 @@ const filterCategory = ref('')
 const filterStatus = ref('')
 const filterCreator = ref('')
 const filterDate = ref('')
-const viewMode = ref('card')
+const viewMode = ref('table')
 const currentPage = ref(1)
 const pageSize = ref(12)
 const searchInputRef = ref(null)
+
+/** 数据对比 */
+const compareDialogVisible = ref(false)
+const compareLoaded = ref(false)
+const compareData = ref({})
+const compareForm = ref({ currentPeriod: '', comparePeriod: '', templateId: null, orgId: null })
 
 const reports = ref([])
 const totalCount = ref(0)
@@ -365,14 +444,14 @@ onMounted(async () => {
 onUnmounted(() => { document.removeEventListener('keydown', onKeydown) })
 
 const mockReports = [
-  { id: 1, name: '月度销售报表', code: 'SALES-202607', description: '用于统计月度销售数据和趋势分析', type: 'statistics', status: 'approved', creatorName: '张三', updatedAt: '2026-07-15', useCount: 128, isFavorite: true, category: 'sales' },
-  { id: 2, name: '财务费用报表', code: 'FIN-202607', description: '用于统计财务费用支出情况', type: 'statistics', status: 'approved', creatorName: '李四', updatedAt: '2026-07-14', useCount: 86, isFavorite: false, category: 'finance' },
-  { id: 3, name: '人事考勤报表', code: 'HR-202607', description: '用于统计员工月度考勤情况', type: 'entry', status: 'submitted', creatorName: '王五', updatedAt: '2026-07-13', useCount: 256, isFavorite: true, category: 'hr' },
-  { id: 4, name: '生产产量报表', code: 'PROD-202607', description: '用于统计生产车间产量数据', type: 'statistics', status: 'draft', creatorName: '赵六', updatedAt: '2026-07-12', useCount: 45, isFavorite: false, category: 'production' },
-  { id: 5, name: '采购成本报表', code: 'PUR-202607', description: '用于统计采购成本明细', type: 'statistics', status: 'submitted', creatorName: '张三', updatedAt: '2026-07-11', useCount: 67, isFavorite: false, category: 'finance' },
-  { id: 6, name: '库存盘点报表', code: 'INV-202607', description: '用于库存盘点和管理', type: 'entry', status: 'approved', creatorName: '李四', updatedAt: '2026-07-10', useCount: 134, isFavorite: false, category: 'other' },
-  { id: 7, name: '员工薪资报表', code: 'HR-SAL-202607', description: '员工薪资发放统计', type: 'statistics', status: 'approved', creatorName: '王五', updatedAt: '2026-07-09', useCount: 98, isFavorite: false, category: 'hr' },
-  { id: 8, name: '客户回款报表', code: 'SALES-RCV-202607', description: '客户回款情况统计', type: 'statistics', status: 'draft', creatorName: '赵六', updatedAt: '2026-07-08', useCount: 34, isFavorite: false, category: 'sales' },
+  { id: 1, name: '月度销售报表', code: 'SALES-202607', description: '用于统计月度销售数据和趋势分析', type: 'statistics', typeLabel: '统计报表', status: 'approved', creatorName: '张三', creatorOrgName: '上海子公司', updatedAt: '2026-07-15', useCount: 128, isFavorite: true, category: 'sales' },
+  { id: 2, name: '财务费用报表', code: 'FIN-202607', description: '用于统计财务费用支出情况', type: 'statistics', typeLabel: '统计报表', status: 'approved', creatorName: '李四', creatorOrgName: '某某集团有限公司', updatedAt: '2026-07-14', useCount: 86, isFavorite: false, category: 'finance' },
+  { id: 3, name: '人事考勤报表', code: 'HR-202607', description: '用于统计员工月度考勤情况', type: 'entry', typeLabel: '填报报表', status: 'submitted', creatorName: '王五', creatorOrgName: '北京子公司', updatedAt: '2026-07-13', useCount: 256, isFavorite: true, category: 'hr' },
+  { id: 4, name: '生产产量报表', code: 'PROD-202607', description: '用于统计生产车间产量数据', type: 'statistics', typeLabel: '统计报表', status: 'draft', creatorName: '赵六', creatorOrgName: '上海子公司', updatedAt: '2026-07-12', useCount: 45, isFavorite: false, category: 'production' },
+  { id: 5, name: '采购成本报表', code: 'PUR-202607', description: '用于统计采购成本明细', type: 'statistics', typeLabel: '统计报表', status: 'submitted', creatorName: '张三', creatorOrgName: '上海子公司', updatedAt: '2026-07-11', useCount: 67, isFavorite: false, category: 'finance' },
+  { id: 6, name: '库存盘点报表', code: 'INV-202607', description: '用于库存盘点和管理', type: 'entry', typeLabel: '填报报表', status: 'approved', creatorName: '李四', creatorOrgName: '某某集团有限公司', updatedAt: '2026-07-10', useCount: 134, isFavorite: false, category: 'other' },
+  { id: 7, name: '员工薪资报表', code: 'HR-SAL-202607', description: '员工薪资发放统计', type: 'statistics', typeLabel: '统计报表', status: 'approved', creatorName: '王五', creatorOrgName: '北京子公司', updatedAt: '2026-07-09', useCount: 98, isFavorite: false, category: 'hr' },
+  { id: 8, name: '客户回款报表', code: 'SALES-RCV-202607', description: '客户回款情况统计', type: 'statistics', typeLabel: '统计报表', status: 'draft', creatorName: '赵六', creatorOrgName: '上海子公司', updatedAt: '2026-07-08', useCount: 34, isFavorite: false, category: 'sales' },
 ]
 
 async function loadReports() {
@@ -400,16 +479,8 @@ async function loadReports() {
   finally { loading.value = false; updateTabCounts(); refreshAllTabCounts() }
 }
 
-function getStatusText(status) {
-  return { draft: '草稿', submitted: '已提交', approved: '已通过', rejected: '已退回', withdrawn: '已撤回' }[status] || status
-}
-
 function getCategoryIcon(category) {
   return CATEGORY_ICONS[category] || CATEGORY_ICONS.other
-}
-
-function getCategoryText(category) {
-  return { finance: '财务', hr: '人事', sales: '销售', production: '生产', other: '其他' }[category] || category
 }
 
 function handleSearch() { currentPage.value = 1; loadReports() }
@@ -487,8 +558,22 @@ async function refreshAllTabCounts() {
   }
 }
 
-function handleViewReport(report) { router.push({ path: '/report/' + report.id, query: { mode: 'view' } }) }
-function handleFillReport(report) { router.push({ path: '/report/' + report.id, query: { mode: 'edit' } }) }
+function handleViewReport(report) {
+  if (report.submitId) {
+    router.push({ path: '/entry/detail/' + report.submitId, query: { mode: 'view', backUrl: route.fullPath } })
+  } else {
+    router.push({ path: '/report/' + report.id, query: { mode: 'view', backUrl: route.fullPath } })
+  }
+}
+function handleFillReport(report) {
+  if (report.submitId) {
+    // 已有草稿，跳转到填报中心继续编辑
+    router.push({ path: '/entry/detail/' + report.submitId, query: { mode: 'edit', backUrl: route.fullPath } })
+  } else {
+    // 新建填报
+    router.push({ path: '/report/' + report.id, query: { mode: 'edit' } })
+  }
+}
 function handleOpenReport(report) { router.push({ path: '/report/' + report.id, query: { mode: 'view' } }) }
 function handleEditReport(report) { router.push('/designer/' + report.code) }
 function handleTabClick(tabId) {
@@ -537,6 +622,39 @@ function handleCardAction(command, report) {
   }
 }
 
+/** 数据对比 */
+function openCompareDialog(row) {
+  compareForm.value.templateId = row.templateId || row.id
+  compareForm.value.orgId = row.orgId
+  compareForm.value.currentPeriod = row.period || ''
+  compareForm.value.comparePeriod = ''
+  compareData.value = {}
+  compareLoaded.value = false
+  compareDialogVisible.value = true
+}
+
+async function loadCompareData() {
+  try {
+    const res = await get(`/report-designer/data/compare?templateId=${compareForm.value.templateId}&orgId=${compareForm.value.orgId}&currentPeriod=${compareForm.value.currentPeriod}&comparePeriod=${compareForm.value.comparePeriod}`)
+    compareData.value = res?.data?.data || res?.data || {}
+    compareLoaded.value = true
+  } catch {
+    compareData.value = {}
+    compareLoaded.value = true
+  }
+}
+
+const compareTableData = computed(() => {
+  if (!compareData.value || Object.keys(compareData.value).length === 0) return []
+  return Object.entries(compareData.value).map(([key, val]) => ({
+    key,
+    currentValue: val.currentValue,
+    compareValue: val.compareValue,
+    diff: val.diff,
+    changeRate: val.changeRate
+  }))
+})
+
 function handleShareReport(report) {
   ElMessage.info('分享功能开发中')
 }
@@ -583,24 +701,28 @@ function handleShareReport(report) {
 
 /* ===== Report Container ===== */
 .report-container { background: var(--app-surface); border-radius: var(--app-card-radius); box-shadow: var(--app-shadow-sm); min-height: 300px; overflow: hidden; }
-.report-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 320px)); gap: var(--app-card-gap); padding: var(--app-space-6); justify-content: center; }
+.report-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 16px; }
 
-/* ===== Report Card (320×220, radius 16, padding 20 per doc §12) ===== */
-.report-card { width: 320px; height: 220px; padding: 20px; border: 1px solid var(--app-border); border-radius: 16px; cursor: pointer; transition: all var(--app-transition); position: relative; background: var(--app-surface); display: flex; flex-direction: column; box-sizing: border-box; }
-.report-card:hover { border-color: var(--app-primary); box-shadow: var(--app-shadow-md); transform: translateY(-2px); }
+/* ===== Report Card (compact, auto-height) ===== */
+.report-card { padding: 14px 16px; border: 1px solid var(--app-border); border-radius: 12px; cursor: pointer; transition: all 0.2s ease; position: relative; background: var(--app-surface); display: flex; flex-direction: column; box-sizing: border-box; min-height: 0; }
+.report-card:hover { border-color: var(--app-primary); box-shadow: 0 4px 16px rgba(15,23,42,0.08), 0 0 0 1px var(--app-primary-bg); transform: translateY(-1px); }
 
-.card-icon { width: 44px; height: 44px; border-radius: var(--app-radius-md); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.card-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.card-icon svg { width: 18px; height: 18px; }
+
+.card-header-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.card-header-text { flex: 1; min-width: 0; }
 .card-icon.finance { background: var(--app-primary-bg); color: var(--app-primary); }
 .card-icon.hr { background: var(--app-info-bg); color: var(--app-info); }
 .card-icon.sales { background: var(--app-success-bg); color: var(--app-success); }
 .card-icon.production { background: var(--app-warning-bg); color: var(--app-warning); }
 .card-icon.other { background: var(--app-surface-hover); color: var(--color-gray-600); }
 
-.card-title { font-size: 14px; font-weight: 600; color: var(--app-text-primary); margin: 0 0 4px;text-overflow: ellipsis; white-space: nowrap; padding-right: 30px; max-width: 100%; box-sizing: border-box; line-height: 1.4; }
-.card-code { font-size: 12px; color: var(--app-text-muted); font-family: var(--app-font-family-code); margin: 0 0 8px; }
-.card-desc { font-size: 14px; color: var(--color-gray-600); margin: 0 0 12px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-title { font-size: 14px; font-weight: 600; color: var(--app-text-primary); margin: 0 0 2px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; padding-right: 28px; max-width: 100%; box-sizing: border-box; }
+.card-code { font-size: 11px; color: var(--app-text-muted); font-family: var(--app-font-family-code); margin: 0 0 6px; }
+.card-desc { font-size: 12px; color: var(--color-gray-600); margin: 0 0 8px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
-.card-tags { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.card-tags { display: flex; gap: 5px; margin-bottom: 6px; flex-wrap: wrap; }
 
 /* Status Tags (CSS variables per doc §13) */
 .tag { font-size: 11px; padding: 3px 8px; border-radius: var(--app-radius-xs); font-weight: 500; }
@@ -611,10 +733,46 @@ function handleShareReport(report) {
 .tag-withdrawn { background: var(--app-surface-hover); color: var(--app-text-disabled); }
 .tag-category { background: var(--app-surface-hover); color: var(--app-text-secondary); }
 
-.card-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.meta-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--app-text-muted); }
+/* 模板类型标签 */
+.tag-type { font-weight: 500; }
+.tag-type-statistics { background: var(--app-info-bg); color: var(--app-info); }
+.tag-type-entry { background: var(--app-success-bg); color: var(--app-success); }
+.tag-type-summary { background: var(--app-warning-bg); color: var(--app-warning); }
+.tag-type-sm { font-size: 10px; padding: 2px 6px; }
+
+.card-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.meta-item { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--app-text-muted); }
+.meta-item--org { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta-item--deadline { font-weight: 500; color: var(--app-text-secondary); }
+.meta-item--urgent { color: var(--app-danger); font-weight: 600; }
+.rc-deadline-urgent { color: var(--app-danger); font-weight: 500; }
+.rc-deadline-none { color: var(--app-text-muted); }
+
+.table-org-cell { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 
 /* Card Actions (hover per doc §14) */
+.card-draft-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #2563EB;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.card-draft-hint:hover {
+  background: #DBEAFE;
+  border-color: #93C5FD;
+}
+.card-draft-hint svg {
+  flex-shrink: 0;
+}
+
 .card-actions { margin-top: auto; display: flex; gap: 8px; }
 .action-btn { flex: 1; height: 32px; border-radius: var(--app-radius-sm); border: none; font-size: 13px; font-weight: 500; cursor: pointer; transition: all var(--app-transition); background: var(--app-primary); color: #fff; }
 .action-btn:hover { background: var(--app-primary-hover); }
@@ -679,4 +837,11 @@ function handleShareReport(report) {
   .report-grid { grid-template-columns: 1fr; }
   .report-card { width: 100%; height: auto; }
 }
+
+.compare-form { padding: 0 0 16px; border-bottom: 1px solid var(--app-border-light); }
+.compare-periods { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; }
+.compare-period-tag { padding: 6px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+.compare-period-tag.current { background: var(--app-primary-bg); color: var(--app-primary); }
+.compare-period-tag.compare { background: var(--app-warning-bg); color: var(--app-warning); }
+.compare-period-vs { font-size: 13px; font-weight: 700; color: var(--app-text-muted); }
 </style>

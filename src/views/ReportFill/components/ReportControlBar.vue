@@ -98,8 +98,9 @@
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 const router = useRouter()
+const route = useRoute()
 
 defineProps({
   currentTemplate: { type: Object, default: null },
@@ -126,6 +127,11 @@ defineEmits([
 ])
 
 function goBack() {
-  router.push('/')
+  const backUrl = route.query.backUrl
+  if (backUrl && backUrl !== 'undefined') {
+    router.push(backUrl)
+  } else {
+    router.back()
+  }
 }
 </script>

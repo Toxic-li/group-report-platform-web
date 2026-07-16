@@ -106,6 +106,7 @@
       :calc-time="ctx.calcTime"
       :errors="ctx.errors"
       :dependencies="ctx.dependencies"
+      :template-id="ctx.reportId"
       @navigate-to="navigateToCell"
       @navigate-cell="navigateToCell"
       @insert-formula="insertFormulaFromAI"
@@ -157,13 +158,16 @@ const emit = defineEmits(['exit'])
 
 const router = useRouter()
 const route = useRoute()
+const { navigateBack, recordPath } = useNavigation()
 
 const wizardVisible = ref(false)
 const workspaceRef = ref(null)
 
 // 独立页面模式：从 URL 初始化
 onMounted(() => {
+  // 记录导航历史，确保返回按钮正常工作
   if (!props.embedded) {
+    recordPath(route.fullPath)
     initFormulaContextFromURL(route)
   }
 })
@@ -189,7 +193,7 @@ function onExit() {
   if (props.embedded) {
     emit('exit')
   } else {
-    router.back()
+    navigateBack('/designer')
   }
 }
 
@@ -203,7 +207,7 @@ function onSaveAndExit() {
   if (props.embedded) {
     emit('exit')
   } else {
-    router.back()
+    navigateBack('/designer')
   }
 }
 

@@ -136,15 +136,25 @@
           <div class="fcns-perf-header">
             <span>公式</span>
             <span>单元格</span>
+            <span>状态</span>
             <span>耗时</span>
             <span>复杂度</span>
+            <span>操作</span>
           </div>
-          <div class="fcns-perf-row" v-for="(item, i) in perfRanking" :key="i" @click="$emit('navigate-cell', item.ref)">
+          <div class="fcns-perf-row" v-for="(item, i) in perfRanking" :key="i">
             <code class="fcns-perf-formula">{{ item.formula }}</code>
             <span class="fcns-perf-ref">{{ item.ref }}</span>
+            <span :class="['fcns-perf-status', item.status === 'enabled' ? 'enabled' : 'disabled']">
+              {{ item.status === 'enabled' ? '启用' : '停用' }}
+            </span>
             <span class="fcns-perf-time" :class="{ slow: item.ms > 10 }">{{ item.ms }}</span>
             <div class="fcns-perf-bar-wrap">
               <div class="fcns-perf-bar" :style="{ width: item.complexity + '%', background: item.complexity > 60 ? '#EF4444' : item.complexity > 30 ? '#F59E0B' : '#52C41A' }"></div>
+            </div>
+            <div class="fcns-perf-actions">
+              <button class="fcns-perf-btn" :class="{ disabled: item.status === 'disabled' }" @click="toggleFormulaStatus(item)">
+                {{ item.status === 'enabled' ? '停用' : '启用' }}
+              </button>
             </div>
           </div>
         </div>
@@ -243,12 +253,14 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   formulaCount: { type: Number, default: 0 },
   calcTime: { type: String, default: '0ms' },
   errors: { type: Array, default: () => [] },
-  dependencies: { type: Array, default: () => [] }
+  dependencies: { type: Array, default: () => [] },
+  templateId: { type: [String, Number], default: '' }
 })
 
 const emit = defineEmits(['navigate-to', 'navigate-cell', 'insert-formula', 'replace-formula', 'test-run', 'test-current', 'clear-console'])
@@ -289,11 +301,47 @@ const avgCalcTime = computed(() => {
   return Math.round(ms / count) + 'ms'
 })
 const perfRanking = ref([
-  { formula: '=SUMIFS(D:D, A:A, ">=2026")', ref: 'F20', ms: '18ms', complexity: 72 },
-  { formula: '=VLOOKUP(A6, P:Q, 2, FALSE)', ref: 'B6', ms: '12ms', complexity: 45 },
-  { formula: '=IF(G6>30, "优秀", "一般")', ref: 'H6', ms: '8ms', complexity: 30 },
-  { formula: '=SUM(D6:D18)', ref: 'D20', ms: '4ms', complexity: 15 },
+  { formula: '=SUMIFS(D:D, A:A, ">=2026")', ref: 'F20', ms: '18ms', complexity: 72, status: 'enabled', id: 1 },
+  { formula: '=VLOOKUP(A6, P:Q, 2, FALSE)', ref: 'B6', ms: '12ms', complexity: 45, status: 'enabled', id: 2 },
+  { formula: '=IF(G6>30, "优秀", "一般")', ref: 'H6', ms: '8ms', complexity: 30, status: 'disabled', id: 3 },
+  { formula: '=SUM(D6:D18)', ref: 'D20', ms: '4ms', complexity: 15, status: 'enabled', id: 4 },
 ])
+
+async function loadFormulasFromBackend() {
+  if (!props.templateId) return
+  try {
+    const { getFormulasByTemplate } = await import('@/api/reportEngine.js')
+    const formulas = await getFormulasByTemplate(props.templateId)
+    if (formulas && Array.isArray(formulas)) {
+      perfRanking.value = formulas.map(f => ({
+        id: f.id,
+        formula: f.expression || '',
+        ref: f.targetCell || f.fieldName || '',
+        ms: '--',
+        complexity: f.priority ? Math.min(f.priority * 20, 100) : 30,
+        status: f.status === 1 ? 'enabled' : 'disabled'
+      }))
+    }
+  } catch (e) {
+    console.warn('加载公式列表失败:', e)
+  }
+}
+
+watch(() => props.templateId, () => {
+  loadFormulasFromBackend()
+}, { immediate: true })
+
+async function toggleFormulaStatus(item) {
+  const newStatus = item.status === 'enabled' ? 'disabled' : 'enabled'
+  try {
+    const { updateFormulaStatus } = await import('@/api/reportEngine.js')
+    await updateFormulaStatus(item.id, newStatus === 'enabled' ? 1 : 0)
+    item.status = newStatus
+    ElMessage.success(`公式已${newStatus === 'enabled' ? '启用' : '停用'}`)
+  } catch (e) {
+    ElMessage.error('操作失败：' + (e.message || e))
+  }
+}
 
 // AI
 const aiMessages = ref([
@@ -595,7 +643,7 @@ function handleClear() {
 }
 .fcns-perf-header {
   display: grid;
-  grid-template-columns: 2fr 0.8fr 0.6fr 1.2fr;
+  grid-template-columns: 2fr 0.8fr 0.5fr 0.5fr 1fr 0.8fr;
   padding: 6px 10px;
   background: #F8FAFC;
   font-size: 10px;
@@ -604,7 +652,7 @@ function handleClear() {
 }
 .fcns-perf-row {
   display: grid;
-  grid-template-columns: 2fr 0.8fr 0.6fr 1.2fr;
+  grid-template-columns: 2fr 0.8fr 0.5fr 0.5fr 1fr 0.8fr;
   padding: 6px 10px;
   font-size: 11px;
   cursor: pointer;
@@ -635,6 +683,39 @@ function handleClear() {
   border-radius: 3px;
   transition: width 0.5s;
   min-width: 4px;
+}
+.fcns-perf-status {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+.fcns-perf-status.enabled {
+  background: #ECFDF5;
+  color: #059669;
+}
+.fcns-perf-status.disabled {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+.fcns-perf-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.fcns-perf-btn {
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid #E5E7EB;
+  border-radius: 4px;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.fcns-perf-btn:hover {
+  background: #2563EB;
+  color: #fff;
+  border-color: #2563EB;
 }
 
 /* AI */

@@ -23,11 +23,22 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 
+function clearAuth() {
+  sessionStorage.removeItem('rpt_token')
+  sessionStorage.removeItem('rpt_user')
+  sessionStorage.removeItem('rpt_roles')
+  sessionStorage.removeItem('rpt_permissions')
+  localStorage.removeItem('rpt_token')
+}
+
 function goHome() {
-  router.push('/')
+  // 无权限时返回首页会循环跳回 forbidden，强制刷页面重新加载用户信息
+  window.location.href = '/'
 }
 
 function goLogin() {
+  // 清除认证状态，跳转登录页重新获取角色权限
+  clearAuth()
   router.push('/login')
 }
 </script>

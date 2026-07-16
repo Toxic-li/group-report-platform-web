@@ -8,8 +8,8 @@
         </div>
       </template>
 
-      <el-table :data="flatOrgs" v-loading="loading" row-key="orgId" border stripe>
-        <el-table-column prop="orgId" label="ID" width="70" />
+      <el-table :data="flatOrgs" v-loading="loading" row-key="id" border stripe>
+        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="orgName" label="组织名称" min-width="200">
           <template #default="{ row }">
             <span :style="{ paddingLeft: row._level * 20 + 'px' }">
@@ -73,6 +73,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getOrgTree, createOrg, updateOrg, deleteOrg } from '@/api/org.js'
+import { isMockEnabled } from '@/utils/mockConfig.js'
 
 const loading = ref(false)
 const orgTree = ref([])
@@ -87,15 +88,15 @@ const orgTypeMap = { 1: '集团', 2: '公司', 3: '部门', 4: '岗位' }
 onMounted(() => loadData())
 
 const mockOrgTree = [
-  { orgId: 1, orgCode: 'GROUP', orgName: '集团公司', orgType: 1, sort: 0, children: [
-    { orgId: 2, orgCode: 'MINE_A', orgName: 'A煤矿', orgType: 2, sort: 0, children: [
-      { orgId: 5, orgCode: 'MINE_A_PROD', orgName: '生产部', orgType: 3, sort: 0 },
-      { orgId: 6, orgCode: 'MINE_A_SAFE', orgName: '安环部', orgType: 3, sort: 1 }
+  { id: 1, orgCode: 'GROUP', orgName: '集团公司', orgType: 1, sort: 0, children: [
+    { id: 2, orgCode: 'MINE_A', orgName: 'A煤矿', orgType: 2, sort: 0, children: [
+      { id: 5, orgCode: 'MINE_A_PROD', orgName: '生产部', orgType: 3, sort: 0 },
+      { id: 6, orgCode: 'MINE_A_SAFE', orgName: '安环部', orgType: 3, sort: 1 }
     ]},
-    { orgId: 3, orgCode: 'MINE_B', orgName: 'B煤矿', orgType: 2, sort: 1, children: [
-      { orgId: 7, orgCode: 'MINE_B_PROD', orgName: '生产部', orgType: 3, sort: 0 }
+    { id: 3, orgCode: 'MINE_B', orgName: 'B煤矿', orgType: 2, sort: 1, children: [
+      { id: 7, orgCode: 'MINE_B_PROD', orgName: '生产部', orgType: 3, sort: 0 }
     ]},
-    { orgId: 4, orgCode: 'COAL_TRADE', orgName: '煤炭贸易公司', orgType: 2, sort: 2 }
+    { id: 4, orgCode: 'COAL_TRADE', orgName: '煤炭贸易公司', orgType: 2, sort: 2 }
   ]}
 ]
 
@@ -104,10 +105,15 @@ async function loadData() {
   try {
     const res = await getOrgTree()
     orgTree.value = res.data || res || (Array.isArray(res) ? res : [])
-    if (!orgTree.value.length) throw new Error('mock')
+    if (!orgTree.value.length && isMockEnabled()) throw new Error('mock')
   } catch (e) {
-    orgTree.value = mockOrgTree
-    if (e.message !== 'mock') console.warn('[OrgManage] API不可用，使用mock数据')
+    if (isMockEnabled()) {
+      orgTree.value = mockOrgTree
+      if (e.message !== 'mock') console.warn('[OrgManage] API不可用，使用mock数据')
+    } else {
+      orgTree.value = []
+      ElMessage.error('加载组织架构失败')
+    }
   }
   flatOrgs.value = flattenTree(orgTree.value)
   loading.value = false
@@ -124,7 +130,7 @@ function flattenTree(nodes, level = 0) {
 
 function openCreate(parent) {
   editingOrg.value = null; parentOrg.value = parent
-  form.parentId = parent?.orgId || 0
+  form.parentId = parent?.id || 0
   Object.assign(form, { orgName: '', orgCode: '', orgType: 1, sort: 0 })
   formVisible.value = true
 }
@@ -133,13 +139,13 @@ function openEdit(row) { editingOrg.value = row; parentOrg.value = null; Object.
 
 async function handleSave() {
   try {
-    if (editingOrg.value) { await updateOrg(editingOrg.value.orgId, form) } else { await createOrg(form) }
+    if (editingOrg.value) { await updateOrg(editingOrg.value.id, form) } else { await createOrg(form) }
     ElMessage.success('保存成功'); formVisible.value = false; loadData()
   } catch (e) { ElMessage.error('保存失败') }
 }
 
 async function handleDelete(row) {
-  await deleteOrg(row.orgId); ElMessage.success('已删除'); loadData()
+  await deleteOrg(row.id); ElMessage.success('已删除'); loadData()
 }
 </script>
 

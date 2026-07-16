@@ -30,16 +30,14 @@ export function deleteRole(roleId) {
   return del(`/role/${roleId}`)
 }
 
-// ==================== 权限树（暂用静态数据，后端暂无独立权限接口） ====================
+// ==================== 权限树 ====================
 
-/** 权限树 — 后端暂无此接口，使用 mock */
+/** 权限树 */
 export function getPermissionTree() {
-  // 后续对接: GET /permission/tree
-  return Promise.resolve({ data: [] })
+  return get('/permission/list')
 }
 
-/** 绑定角色权限 — 后端暂无此接口 */
+/** 绑定角色权限 */
 export function bindRolePermissions(roleId, permIds) {
-  // 后续对接: PUT /role/{roleId}/permissions
-  return Promise.resolve({})
+  return put(`/permission/role/${roleId}`, { permIds })
 }

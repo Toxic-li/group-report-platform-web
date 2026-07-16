@@ -531,11 +531,15 @@ export function useReportData(props, { config, currentTemplate, useV2, v2Parser,
   // ==================== 保存系统 ====================
   function updateSaveData() {
     if (!config.value) return
+    const templateId = currentTemplate.value?.id || props.templateId
     store.setSaveData({
-      templateId: props.templateId, orgId: selectedOrgId.value,
+      templateId, orgId: selectedOrgId.value,
       period: selectedPeriod.value, templateCode: v2TemplateCode.value,
       templateName: currentTemplate.value?.name || '',
-      rows: config.value.rows || [], columns: config.value.columnData || [],
+      rowTree: currentTemplate.value?.rowTree || [],
+      columnTree: currentTemplate.value?.columnTree || [],
+      rows: config.value.rows || [],
+      columns: config.value.columnData || [],
       cellData: config.value.cellData || {},
       formulas: formulaComposable.savedFormulas,
       frozenRowCount: config.value.frozenRowCount || 4, remark: ''
@@ -635,10 +639,9 @@ export function useReportData(props, { config, currentTemplate, useV2, v2Parser,
   async function loadExistingData() {
     if (!props.templateId || !selectedOrgId.value || !selectedPeriod.value) return
     try {
-      const data = await getReportData({
-        templateId: props.templateId, orgId: selectedOrgId.value,
-        period: selectedPeriod.value
-      })
+      const data = await getReportData(
+        props.templateId, selectedOrgId.value, selectedPeriod.value
+      )
       if (data && data.cells?.length > 0) {
         backfillCellsToTable(data.cells)
         showToast(`已加载 ${data.cells.length} 个已填单元格`, 'success')

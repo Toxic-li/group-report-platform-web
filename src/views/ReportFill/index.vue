@@ -154,7 +154,7 @@
  */
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
-import { getEntryDetail } from '@/api/filling.js'
+import { getEntryDetail, getEntryDetailByReportId } from '@/api/filling.js'
 import { recordRecentView } from '@/api/reportCenter.js'
 import { ConditionalFormatEngine } from '@/services/engines/ConditionalFormatEngine.js'
 import { ValidationEngine } from '@/services/engines/ValidationEngine.js'
@@ -403,12 +403,21 @@ onMounted(async () => {
   const tid = props.templateId || route.params.templateId
   const sid = props.submitId || route.params.submitId
 
-  if (sid) {
+  let preselectedOrgId = ''
+  let preselectedPeriod = ''
+
+  if (sid && sid !== 'undefined' && sid !== 'null') {
     try {
       const result = await getEntryDetail(sid)
       const detail = result?.data || result
       if (detail?.reportId) {
-        loadReport(String(detail.reportId))
+        preselectedOrgId = detail.orgId || ''
+        preselectedPeriod = detail.period || ''
+        await loadReport(String(detail.reportId))
+        // 填充提交的单元格数据
+        if (detail.cellData && Object.keys(detail.cellData).length > 0) {
+          populateCellDataFromApi(detail.cellData)
+        }
         recordRecentView(detail.reportId).catch(() => {})
       } else {
         error.value = '无法获取提交记录对应的模板'
@@ -417,14 +426,34 @@ onMounted(async () => {
       error.value = '加载提交记录失败'
     }
   } else if (tid) {
-    loadReport(tid)
+    await loadReport(tid)
     recordRecentView(tid).catch(() => {})
+    // 尝试加载已有提交数据（草稿/已退回/已提交等）
+    try {
+      const result = await getEntryDetailByReportId(tid)
+      const detail = result?.data || result
+      if (detail?.cellData && Object.keys(detail.cellData).length > 0) {
+        populateCellDataFromApi(detail.cellData)
+      }
+      preselectedOrgId = detail?.orgId || ''
+      preselectedPeriod = detail?.period || ''
+    } catch {
+      // 没有提交记录是正常的，静默处理
+    }
   }
 
   try { const s = localStorage.getItem('fr_col_folds'); if (s) collapsedGroups.value = new Set(JSON.parse(s)) } catch {}
   window.addEventListener('beforeunload', onBeforeUnload)
   window.addEventListener('resize', measureVP)
-  loadOrgList()
+  await loadOrgList()
+
+  // 从填报记录恢复组织和周期选择（覆盖 loadOrgList 的默认值）
+  if (preselectedOrgId) {
+    selectedOrgId.value = String(preselectedOrgId)
+  }
+  if (preselectedPeriod) {
+    selectedPeriod.value = preselectedPeriod
+  }
 })
 
 watch(() => route.params.templateId, (newId) => {

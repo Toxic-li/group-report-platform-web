@@ -2,7 +2,7 @@
   <header class="app-header">
     <!-- 左侧：品牌区 -->
     <div class="header-brand">
-      <button class="brand-back" @click="$router.back()" title="返回">
+      <button class="brand-back" @click="handleBack" title="返回">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
           <polyline points="15 18 9 12 15 6"/>
@@ -141,6 +141,14 @@
 
     <!-- 右侧：工具 + 用户 -->
     <div class="header-tools">
+      <button class="tool-btn" @click="emit('showTemplateProps')" title="模板属性">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span>属性</span>
+      </button>
       <button class="tool-btn tool-btn--ai" @click="emit('openAI')" title="AI 设计助手">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
           stroke-linecap="round" stroke-linejoin="round">
@@ -175,13 +183,20 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useNavigation } from '@/composables/useNavigation.js'
 import { useDesigner } from '../composables/useDesigner.js'
 
+const { navigateBack } = useNavigation()
 const emit = defineEmits([
   'save', 'saveAs', 'history', 'preview', 'publish', 'share',
   'exportExcel', 'exportPDF', 'print', 'templateLibrary',
-  'toggleFullscreen', 'toggleHelp', 'openAI', 'importExcel'
+  'toggleFullscreen', 'toggleHelp', 'openAI', 'importExcel',
+  'showTemplateProps'
 ])
+
+function handleBack() {
+  navigateBack('/designer/templates')
+}
 
 const { template, autoSaveStatus } = useDesigner()
 
@@ -200,8 +215,8 @@ const statusText = computed(() => {
 })
 
 function onNameBlur() {
-  const name = (template.value?.name || '').trim() || '未命名报表'
-  if (template.value) template.value.name = name
+  const name = (template.name || '').trim() || '未命名报表'
+  template.name = name
 }
 </script>
 

@@ -66,8 +66,11 @@
             {{ formatTime(row.createdAt) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
+            <el-button text size="small" @click="handlePreview(row)" :loading="previewingId === row.id">
+              预览数据
+            </el-button>
             <el-button text size="small" @click="handleTest(row)" :loading="testingId === row.id">
               测试连接
             </el-button>
@@ -247,6 +250,55 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 数据预览对话框 -->
+    <el-dialog
+      v-model="previewVisible"
+      title="数据预览"
+      width="800px"
+      :close-on-click-modal="false"
+      destroy-on-close
+    >
+      <div class="preview-header">
+        <div class="preview-info">
+          <span class="preview-name">{{ previewDataSource?.sourceName }}</span>
+          <span class="preview-type">{{ getTypeText(previewDataSource?.sourceType) }}</span>
+        </div>
+        <div class="preview-actions">
+          <el-input-number v-model="previewLimit" :min="1" :max="500" :step="10" controls-position="right" style="width: 120px" />
+          <el-button type="primary" size="small" @click="loadPreviewData" :loading="previewingId === previewDataSource?.id">
+            刷新预览
+          </el-button>
+        </div>
+      </div>
+
+      <div v-if="previewData.length > 0" class="preview-table-wrap">
+        <el-table :data="previewData" v-loading="previewLoading" border style="width: 100%">
+          <el-table-column
+            v-for="col in previewColumns"
+            :key="col"
+            :prop="col"
+            :label="col"
+            min-width="100"
+          >
+            <template #default="{ row }">
+              <span>{{ row[col] != null ? (typeof row[col] === 'object' ? JSON.stringify(row[col]) : row[col]) : '-' }}</span>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div v-else class="preview-empty">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="empty-icon">
+          <path d="M20 13V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7m16 0v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5m16 0h-2.586a1 1 0 0 0-.707.293l-2.414 2.414a1 1 0 0 1-.707.293h-3.172a1 1 0 0 1-.707-.293l-2.414-2.414A1 1 0 0 0 6.586 13H4"/>
+        </svg>
+        <p>{{ previewLoading ? '加载中...' : (previewError || '暂无数据') }}</p>
+      </div>
+
+      <template #footer>
+        <el-button @click="previewVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -258,7 +310,8 @@ import {
   createDataSource,
   updateDataSource,
   deleteDataSource,
-  testDataSourceConnection
+  testDataSourceConnection,
+  executeDataSourceQuery
 } from '@/api/reportEngine'
 
 // ==================== 数据源类型 ====================
@@ -309,6 +362,16 @@ const isEdit = ref(false)
 const submitting = ref(false)
 const testingId = ref(null)
 const formRef = ref(null)
+
+// 数据预览
+const previewVisible = ref(false)
+const previewingId = ref(null)
+const previewLoading = ref(false)
+const previewDataSource = ref(null)
+const previewData = ref([])
+const previewColumns = ref([])
+const previewLimit = ref(20)
+const previewError = ref('')
 
 const form = reactive({
   id: null,
@@ -586,6 +649,47 @@ async function handleDelete(row) {
   }
 }
 
+// ==================== 数据预览 ====================
+function handlePreview(row) {
+  previewDataSource.value = row
+  previewVisible.value = true
+  loadPreviewData()
+}
+
+async function loadPreviewData() {
+  if (!previewDataSource.value) return
+
+  previewLoading.value = true
+  previewingId.value = previewDataSource.value.id
+  previewError.value = ''
+
+  try {
+    const res = await executeDataSourceQuery(previewDataSource.value.id, { limit: previewLimit.value })
+    const result = res?.data || res
+
+    if (result && result.status === 'success') {
+      previewData.value = Array.isArray(result.data) ? result.data : []
+      if (previewData.value.length > 0) {
+        previewColumns.value = Object.keys(previewData.value[0])
+      } else {
+        previewColumns.value = []
+      }
+      previewError.value = ''
+    } else {
+      previewData.value = []
+      previewColumns.value = []
+      previewError.value = result?.message || '查询失败'
+    }
+  } catch (e) {
+    previewData.value = []
+    previewColumns.value = []
+    previewError.value = '查询异常: ' + (e.message || e)
+  } finally {
+    previewLoading.value = false
+    previewingId.value = null
+  }
+}
+
 // ==================== 工具函数 ====================
 function getTypeText(type) {
   const item = sourceTypes.find(t => t.value === type)
@@ -725,5 +829,59 @@ function formatTime(t) {
 :deep(.el-dialog__body) {
   max-height: 60vh;
   overflow-y: auto;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--app-space-4);
+  padding-bottom: var(--app-space-3);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.preview-info {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+}
+
+.preview-name {
+  font-weight: 600;
+  font-size: var(--app-font-body);
+  color: var(--app-text-primary);
+}
+
+.preview-type {
+  font-size: 12px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: var(--app-space-2);
+  align-items: center;
+}
+
+.preview-table-wrap {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: var(--app-text-secondary);
+}
+
+.empty-icon {
+  margin-bottom: var(--app-space-3);
+  opacity: 0.5;
 }
 </style>

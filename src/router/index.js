@@ -89,6 +89,13 @@ const routes = [
         meta: { perm: 'template:manage' }
       },
       {
+        // 计划下发：选择计划模板 → 选择组织和期间 → 下发到下级组织
+        path: 'designer/plan-assign',
+        name: 'PlanAssign',
+        component: () => import('@/views/TemplateCenter/PlanAssign.vue'),
+        meta: { perm: 'menu:planAssign' }
+      },
+      {
         path: 'designer/excel',
         name: 'ExcelDesigner',
         component: () => import('@/views/ReportDesigner/ExcelDesigner.vue'),
@@ -123,6 +130,12 @@ const routes = [
         name: 'TemplateVersions',
         component: () => import('@/views/ReportDesigner/TemplateVersions.vue'),
         meta: { perm: 'template:versions' }
+      },
+      {
+        path: 'designer/validation-rules',
+        name: 'ValidationRules',
+        component: () => import('@/views/ReportDesigner/ValidationRules.vue'),
+        meta: { perm: 'template:manage' }
       },
       // ==================== 填报中心 ====================
       {
@@ -162,11 +175,44 @@ const routes = [
         meta: { perm: 'menu:completed' }
       },
       {
+        path: 'entry/reported',
+        name: 'EntryReported',
+        component: () => import('@/views/EntryCenter/index.vue'),
+        meta: { perm: 'menu:reported' }
+      },
+      // ==================== 计划上报（计划类模板填报入口） ====================
+      {
+        path: 'entry/plan-report',
+        name: 'EntryPlanReport',
+        component: () => import('@/views/EntryCenter/PlanReport.vue'),
+        meta: { perm: 'menu:planReport' }
+      },
+      {
+        path: 'entry/plan-detail/:submitId',
+        name: 'EntryPlanDetail',
+        component: () => import('@/views/ReportFill/index.vue'),
+        props: true,
+        meta: { perm: 'menu:planReport' }
+      },
+      {
         path: 'entry/detail/:submitId',
         name: 'EntryDetail',
         component: () => import('@/views/ReportFill/index.vue'),
         props: true,
         meta: { perm: 'menu:entryDetail' }
+      },
+      // ==================== 填报监控 ====================
+      {
+        path: 'monitor',
+        name: 'MonitorProgress',
+        component: () => import('@/views/Monitor/index.vue'),
+        meta: { perm: 'menu:monitor' }
+      },
+      {
+        path: 'report-status',
+        name: 'ReportStatus',
+        component: () => import('@/views/ReportStatus/index.vue'),
+        meta: { perm: 'menu:reportStatus' }
       },
       // ==================== 审核中心 ====================
       {
@@ -183,9 +229,15 @@ const routes = [
       },
       {
         path: 'audit/rejected',
-        name: 'AuditRejected',
+        name: 'AuditCenterRejected',
         component: () => import('@/views/AuditCenter/index.vue'),
-        meta: { perm: 'menu:auditRejected' }
+        meta: { perm: 'menu:auditCenter' }
+      },
+      {
+        path: 'audit/reported',
+        name: 'AuditCenterReported',
+        component: () => import('@/views/AuditCenter/index.vue'),
+        meta: { perm: 'menu:auditCenter' }
       },
       {
         path: 'audit/initiated',
@@ -199,7 +251,7 @@ const routes = [
         component: () => import('@/views/AuditCenter/index.vue'),
         meta: { perm: 'menu:auditHistory' }
       },
-      // ==================== 数据分析 ====================
+      // ==================== 数据汇总 ====================
       {
         path: 'analytics',
         name: 'Analytics',
@@ -207,22 +259,85 @@ const routes = [
         meta: { perm: 'menu:analytics' }
       },
       {
-        path: 'analytics/trend',
-        name: 'TrendAnalysis',
+        path: 'analytics/production',
+        name: 'ProductionAgg',
         component: () => import('@/views/Analytics/index.vue'),
-        meta: { perm: 'menu:trend' }
+        meta: { perm: 'menu:production' }
       },
       {
-        path: 'analytics/chart',
-        name: 'ChartAnalysis',
+        path: 'analytics/finance',
+        name: 'FinanceAgg',
         component: () => import('@/views/Analytics/index.vue'),
-        meta: { perm: 'menu:chart' }
+        meta: { perm: 'menu:finance' }
       },
       {
-        path: 'analytics/export',
-        name: 'DataExport',
+        path: 'analytics/safety',
+        name: 'SafetyAgg',
         component: () => import('@/views/Analytics/index.vue'),
-        meta: { perm: 'menu:export' }
+        meta: { perm: 'menu:safety' }
+      },
+      {
+        path: 'analytics/energy',
+        name: 'EnergyAgg',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:energy' }
+      },
+      {
+        path: 'analytics/cost',
+        name: 'CostAgg',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:cost' }
+      },
+      {
+        path: 'analytics/comprehensive',
+        name: 'ComprehensiveAgg',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:comprehensive' }
+      },
+      {
+        path: 'analytics/investment',
+        name: 'InvestmentAgg',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:investment' }
+      },
+      // ==================== 计划汇总 ====================
+      {
+        path: 'plan/annual',
+        name: 'AnnualPlan',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:annualPlan' }
+      },
+      {
+        path: 'plan/batch',
+        name: 'BatchPlan',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:batchPlan' }
+      },
+      {
+        path: 'plan/ledger',
+        name: 'PlanLedger',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:planLedger' }
+      },
+      {
+        path: 'plan/completion',
+        name: 'PlanCompletion',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:planCompletion' }
+      },
+      // ==================== 数据分析 ====================
+      {
+        path: 'data-analysis',
+        name: 'DataAnalysis',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:dataAnalysis' }
+      },
+      // ==================== 数据大屏 ====================
+      {
+        path: 'dashboard',
+        name: 'BigScreen',
+        component: () => import('@/views/Analytics/index.vue'),
+        meta: { perm: 'menu:dashboard' }
       },
       // ==================== 个人中心 ====================
       {
@@ -276,21 +391,21 @@ const routes = [
         meta: { perm: 'menu:deptManage' }
       },
       {
-        path: 'admin/positions',
-        name: 'PositionManage',
-        component: () => import('@/views/Admin/UserManage.vue'),
-        meta: { perm: 'menu:positionManage' }
-      },
-      {
         path: 'admin/roles',
         name: 'RoleManage',
         component: () => import('@/views/Admin/RoleManage.vue'),
         meta: { perm: 'menu:roleManage' }
       },
       {
+        path: 'admin/positions',
+        name: 'PositionManage',
+        component: () => import('@/views/Admin/PositionManage.vue'),
+        meta: { perm: 'menu:positionManage' }
+      },
+      {
         path: 'admin/perms',
         name: 'PermManage',
-        component: () => import('@/views/Admin/RoleManage.vue'),
+        component: () => import('@/views/Admin/PermManage.vue'),
         meta: { perm: 'menu:permManage' }
       },
       {

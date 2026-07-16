@@ -169,18 +169,33 @@
       <!-- ========== 指标 Tab ========== -->
       <div v-if="activeTab === 'metric'" class="tab-content">
         <div class="prop-section">
-          <div class="prop-section-title">指标列表</div>
+          <div class="prop-section-title">公式列表</div>
           <div class="metric-list" @dragover.prevent @drop="onMetricAreaDrop($event)">
-            <div v-for="m in metrics" :key="m.field"
-              class="metric-item">
-              <span class="metric-label">{{ m.label }}</span>
-              <span class="metric-expr">{{ m.expression || '未设置' }}</span>
-              <button class="metric-del" @click.stop="deleteMetric(m.field)">×</button>
+            <div v-for="m in formulaMetrics" :key="m.field"
+              class="metric-item"
+              :class="{ disabled: m.status === 0 || m.status === '0' }"
+              @click="selectMetric(m)">
+              <div class="metric-info">
+                <span class="metric-label">{{ m.label }}</span>
+                <span class="metric-expr">{{ m.expression || '未设置' }}</span>
+                <span class="metric-type-tag" :class="m.category || m.type">
+                  {{ m.type === 'summary' ? '合计' : (m.category === 'cell' ? '单元格' : '指标') }}
+                </span>
+              </div>
+              <div class="metric-actions">
+                <span class="metric-status" :class="m.status === 0 || m.status === '0' ? 'status-off' : 'status-on'">
+                  {{ m.status === 0 || m.status === '0' ? '停用' : '启用' }}
+                </span>
+                <button class="metric-toggle" @click.stop="toggleMetricStatus(m.field)" :title="m.status === 0 || m.status === '0' ? '启用' : '停用'">
+                  {{ m.status === 0 || m.status === '0' ? '▶' : '⏸' }}
+                </button>
+                <button class="metric-del" @click.stop="deleteMetric(m.field)">×</button>
+              </div>
             </div>
-            <div v-if="metrics.length === 0" class="empty-tip">暂无指标</div>
+            <div v-if="formulaMetrics.length === 0" class="empty-tip">暂无公式</div>
           </div>
           <button class="add-btn" @click="handleAddMetric">
-            <span>+</span> 添加指标
+            <span>+</span> 添加公式
           </button>
         </div>
 
@@ -271,6 +286,81 @@
         </div>
       </div>
 
+      <!-- ========== 数据源 Tab ========== -->
+      <div v-if="activeTab === 'dataSource'" class="tab-content">
+        <div class="prop-section">
+          <div class="prop-section-title">数据源绑定</div>
+          <div class="data-source-select">
+            <label>选择数据源</label>
+            <el-select v-model="selectedDataSourceId" placeholder="请选择数据源" style="width: 100%" @change="onDataSourceSelect">
+              <el-option label="无（手动录入）" value=""/>
+              <el-option v-for="ds in dataSourceList" :key="ds.id" :label="ds.sourceName" :value="String(ds.id)"/>
+            </el-select>
+          </div>
+          <div v-if="selectedDataSource" class="data-source-info">
+            <div class="info-row">
+              <span class="info-label">数据源类型</span>
+              <span class="info-value">{{ getDataSourceTypeText(selectedDataSource.sourceType) }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">数据源名称</span>
+              <span class="info-value">{{ selectedDataSource.sourceName }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">连接信息</span>
+              <span class="info-value">{{ formatConnectionInfo(selectedDataSource) }}</span>
+            </div>
+          </div>
+          <div v-if="selectedDataSourceId" class="data-source-actions">
+            <el-button type="primary" size="small" @click="handleSyncData" :loading="syncing">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              从数据源同步数据
+            </el-button>
+            <el-button size="small" @click="handlePreviewSource" :loading="previewing">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+              预览数据
+            </el-button>
+          </div>
+          <div v-if="!selectedDataSourceId" class="data-source-tip">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="tip-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span>未绑定数据源，数据需手动录入</span>
+          </div>
+        </div>
+
+        <div v-if="selectedDataSource" class="prop-section">
+          <div class="prop-section-title">字段映射</div>
+          <div class="field-mapping-list">
+            <div class="field-mapping-header">
+              <span>列名称</span>
+              <span>绑定字段</span>
+              <span>操作</span>
+            </div>
+            <div v-for="col in leafCols" :key="col.id" class="field-mapping-row">
+              <span class="col-name">{{ col.name || col.title }}</span>
+              <select class="prop-select" v-model="col.dataField" @change="onFieldMappingChange">
+                <option value="">未绑定</option>
+                <option v-for="field in dataSourceFields" :key="field.name" :value="field.name">
+                  {{ field.label || field.name }}
+                </option>
+              </select>
+              <button class="unbind-btn" v-if="col.dataField" @click="unbindField(col)">×</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="syncResult" class="prop-section">
+          <div class="prop-section-title">同步结果</div>
+          <div class="sync-result" :class="{ success: syncResult.success, error: !syncResult.success }">
+            <svg v-if="syncResult.success" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            <span>{{ syncResult.message }}</span>
+          </div>
+          <div v-if="syncResult.success && syncResult.count" class="sync-count">
+            共同步 {{ syncResult.count }} 个单元格数据
+          </div>
+        </div>
+      </div>
+
       <!-- ========== 高级 Tab ========== -->
       <div v-if="activeTab === 'advanced'" class="tab-content">
         <div class="prop-section">
@@ -330,18 +420,23 @@ const emit = defineEmits(['openConditionalFormat', 'openPermission', 'openExtens
 const {
   selectedRegion, rowTree, columnTree,
   flatRowTree: flatRowTreeRef, flatColumnTree: flatColumnTreeRef,
-  metrics, cellData,
+  metrics, cellData, dataSource,
   addRowNode, addColNode, deleteRowNode, deleteColNode,
   updateRowNode, updateColNode,
-  addMetric, updateMetric: saveMetric, deleteMetric,
+  addMetric, updateMetric: saveMetric, deleteMetric, toggleMetricStatus,
   selectRegion,
   bindFieldToColumn, bindFieldToMetric,
+  loadDataSourceList, dataSourceTree,
 } = useDesigner()
 
 const flatRowTree = computed(() => flatRowTreeRef.value || [])
 const flatColumnTree = computed(() => flatColumnTreeRef.value || [])
 const dataRows = computed(() => flatRowTree.value.filter(r => !r.isSummary))
 const leafCols = computed(() => flatColumnTree.value.filter(c => !c.children || c.children.length === 0))
+
+const formulaMetrics = computed(() => {
+  return (metrics.value || []).filter(m => m.type && m.type !== 'field')
+})
 
 const formulaTemplates = [
   { name: '求和 SUM', func: 'SUM' },
@@ -354,10 +449,180 @@ const formulaTemplates = [
 const isCollapsed = ref(false)
 const activeTab = ref('row')
 
+// ========== 数据源相关 ==========
+const dataSourceList = ref([])
+const selectedDataSourceId = ref('')
+const syncing = ref(false)
+const previewing = ref(false)
+const syncResult = ref(null)
+
+const selectedDataSource = computed(() => {
+  return dataSourceList.value.find(ds => String(ds.id) === selectedDataSourceId.value)
+})
+
+const dataSourceFields = computed(() => {
+  const ds = selectedDataSource.value
+  if (!ds) return []
+  const fields = []
+  if (ds.dimensions) {
+    ds.dimensions.forEach(d => fields.push({ name: d.field, label: d.name, type: 'dimension' }))
+  }
+  if (ds.metrics) {
+    ds.metrics.forEach(m => fields.push({ name: m.field, label: m.name, type: 'metric' }))
+  }
+  return fields
+})
+
+async function loadDataSourceOptions() {
+  try {
+    await loadDataSourceList()
+    dataSourceList.value = dataSourceTree.value || []
+    if (dataSource.value?.sourceId) {
+      selectedDataSourceId.value = String(dataSource.value.sourceId)
+    }
+  } catch (e) {
+    console.warn('加载数据源列表失败:', e)
+  }
+}
+
+watch(() => activeTab.value, async (tab) => {
+  if (tab === 'dataSource') {
+    await loadDataSourceOptions()
+  }
+})
+
+function onDataSourceSelect() {
+  if (selectedDataSourceId.value) {
+    const ds = selectedDataSource.value
+    if (ds) {
+      Object.assign(dataSource, {
+        sourceId: String(ds.id),
+        sourceType: ds.sourceType,
+        sourceName: ds.sourceName,
+        query: ds.queryTemplate || '',
+        fieldMapping: ds.fieldMapping || {},
+        refreshPolicy: ds.refreshPolicy || 'manual',
+      })
+    }
+    syncResult.value = null
+  } else {
+    Object.assign(dataSource, {
+      sourceId: null,
+      sourceType: 'mysql',
+      sourceName: '',
+      query: '',
+      fieldMapping: {},
+      refreshPolicy: 'manual',
+    })
+    syncResult.value = null
+  }
+}
+
+function getDataSourceTypeText(type) {
+  const map = { mysql: 'MySQL', postgresql: 'PostgreSQL', api: 'API接口', elasticsearch: 'Elasticsearch', file: '文件', excel: 'Excel' }
+  return map[type] || type || '-'
+}
+
+function formatConnectionInfo(ds) {
+  const cfg = ds.connectionConfig
+  if (!cfg || typeof cfg !== 'object') return '-'
+  const t = ds.sourceType
+  if (t === 'mysql' || t === 'postgresql') return `${cfg.host || '-'}:${cfg.port || '-'}`
+  if (t === 'api') return cfg.url || '-'
+  if (t === 'elasticsearch') return cfg.hosts || '-'
+  if (t === 'file' || t === 'excel') return cfg.filePath || '-'
+  return '-'
+}
+
+function onFieldMappingChange() {
+  syncResult.value = null
+}
+
+function unbindField(col) {
+  col.dataField = null
+  col.dataSourceField = null
+  syncResult.value = null
+}
+
+async function handleSyncData() {
+  if (!selectedDataSourceId.value) {
+    ElMessage.warning('请先选择数据源')
+    return
+  }
+  const templateId = useDesigner().template?.id
+  if (!templateId) {
+    ElMessage.warning('模板未保存，无法同步数据')
+    return
+  }
+
+  syncing.value = true
+  syncResult.value = null
+  try {
+    const { syncTemplateDataFromSource } = await import('@/api/reportEngine')
+    const params = {}
+    const res = await syncTemplateDataFromSource(templateId, params)
+    const result = res?.data || res
+    if (result && typeof result === 'object' && Object.keys(result).length > 0) {
+      for (const [key, value] of Object.entries(result)) {
+        const [rowId, colId] = key.split(':')
+        if (rowId && colId) {
+          useDesigner().setCellValue(rowId, colId, value)
+        }
+      }
+      syncResult.value = { success: true, message: '数据同步成功', count: Object.keys(result).length }
+      ElMessage.success(`成功同步 ${Object.keys(result).length} 个单元格数据`)
+    } else {
+      syncResult.value = { success: true, message: '数据源查询结果为空', count: 0 }
+      ElMessage.info('数据源查询结果为空')
+    }
+  } catch (e) {
+    syncResult.value = { success: false, message: '同步失败: ' + (e.message || e) }
+    ElMessage.error('数据同步失败: ' + (e.message || e))
+  } finally {
+    syncing.value = false
+  }
+}
+
+async function handlePreviewSource() {
+  if (!selectedDataSourceId.value) {
+    ElMessage.warning('请先选择数据源')
+    return
+  }
+  previewing.value = true
+  try {
+    const { executeDataSourceQuery } = await import('@/api/reportEngine')
+    const res = await executeDataSourceQuery(selectedDataSourceId.value, { limit: 10 })
+    const result = res?.data || res
+    if (result && result.status === 'success' && result.data && result.data.length > 0) {
+      const previewData = result.data.slice(0, 5)
+      const columns = Object.keys(previewData[0])
+      let previewText = '数据预览：\n'
+      previewText += columns.join('\t') + '\n'
+      previewText += '-'.repeat(80) + '\n'
+      previewData.forEach(row => {
+        previewText += columns.map(c => String(row[c] || '-')).join('\t') + '\n'
+      })
+      ElMessage({
+        message: previewText,
+        type: 'info',
+        duration: 5000,
+        showClose: true,
+      })
+    } else {
+      ElMessage.info('数据源暂无数据')
+    }
+  } catch (e) {
+    ElMessage.error('预览失败: ' + (e.message || e))
+  } finally {
+    previewing.value = false
+  }
+}
+
 const tabs = [
   { key: 'row', label: '行维度' },
   { key: 'col', label: '列维度' },
   { key: 'metric', label: '指标' },
+  { key: 'dataSource', label: '数据源' },
   { key: 'advanced', label: '高级' },
 ]
 
@@ -437,7 +702,7 @@ function updateCurrentCol() {
 
 // ========== 指标操作 ==========
 function handleAddMetric() {
-  const m = addMetric({ label: '新指标', expression: '', resultType: 'number', calcTrigger: 'realtime' })
+  const m = addMetric({ label: '新指标', expression: '', resultType: 'number', calcTrigger: 'realtime', type: 'formula' })
   if (m) {
     currentMetric.value = { ...m, targetRowId: '', targetColId: '' }
   }
@@ -631,13 +896,82 @@ function unbindColField() {
 .row-del:hover, .col-del:hover, .metric-del:hover { color: #f5222d; background: #fff1f0; }
 
 .metric-item {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
   padding: 6px 8px; border-radius: 4px;
   background: #fafbfc; border: 1px solid #f0f0f0;
   font-size: 12px;
 }
+.metric-item.disabled {
+  opacity: 0.6;
+  background: #f5f5f5;
+}
+.metric-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
 .metric-label { font-weight: 500; }
-.metric-expr { flex: 1; color: #999; font-family: 'JetBrains Mono', monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metric-expr { color: #999; font-family: 'JetBrains Mono', monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metric-type-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #e6f0ff;
+  color: #1677ff;
+  font-weight: 500;
+}
+.metric-type-tag.summary {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+.metric-type-tag.cell {
+  background: #f6ffed;
+  color: #52c41a;
+}
+.metric-type-tag.metric {
+  background: #e6f0ff;
+  color: #1677ff;
+}
+.metric-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.metric-status {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.metric-status.status-on {
+  background: #e6f7e6;
+  color: #52c41a;
+}
+.metric-status.status-off {
+  background: #fff1f0;
+  color: #f5222d;
+}
+.metric-toggle {
+  width: 20px;
+  height: 20px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #666;
+  padding: 0;
+}
+.metric-toggle:hover {
+  border-color: #1890ff;
+  color: #1890ff;
+}
 
 .empty-tip {
   padding: 12px; text-align: center; color: #bfbfbf;
@@ -728,7 +1062,9 @@ function unbindColField() {
 
 /* 公式模板按钮 */
 .metric-template-list {
-  display: flex; flex-wrap: wrap; gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .template-btn {
   padding: 4px 10px; border: 1px solid #d9d9d9; border-radius: 4px;
@@ -737,5 +1073,74 @@ function unbindColField() {
 }
 .template-btn:hover {
   border-color: #1677ff; color: #1677ff;
+}
+
+/* 数据源相关样式 */
+.data-source-select {
+  margin-bottom: 10px;
+}
+.data-source-select label {
+  display: block; font-size: 11px; color: #999; margin-bottom: 4px;
+}
+
+.data-source-info {
+  background: #fafbfc; border-radius: 6px; padding: 10px; margin-bottom: 10px;
+}
+.info-row {
+  display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.info-row:last-child { border-bottom: none; }
+.info-label { color: #8c8c8c; }
+.info-value { color: #333; font-weight: 500; font-family: 'JetBrains Mono', monospace; }
+
+.data-source-actions {
+  display: flex; gap: 8px; margin-bottom: 10px;
+}
+
+.data-source-tip {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px; background: #fffbe6; border: 1px solid #ffe58f;
+  border-radius: 6px; font-size: 12px; color: #fa8c16;
+}
+.tip-icon { opacity: 0.7; }
+
+.field-mapping-list {
+  background: #fafbfc; border-radius: 6px; overflow: hidden;
+}
+.field-mapping-header {
+  display: flex; padding: 8px 10px; background: #f0f0f0;
+  font-size: 11px; font-weight: 600; color: #8c8c8c;
+}
+.field-mapping-header span { flex: 1; }
+
+.field-mapping-row {
+  display: flex; align-items: center; padding: 8px 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.field-mapping-row:last-child { border-bottom: none; }
+.field-mapping-row .col-name {
+  flex: 1; font-size: 12px; color: #333;
+}
+.field-mapping-row .prop-select {
+  width: 140px; font-size: 11px;
+}
+.field-mapping-row .unbind-btn {
+  width: 18px; height: 18px; border: none; background: transparent;
+  cursor: pointer; color: #bfbfbf; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; line-height: 1; margin-left: 4px;
+}
+.field-mapping-row .unbind-btn:hover { color: #f5222d; background: #fff1f0; }
+
+.sync-result {
+  display: flex; align-items: center; gap: 8px; padding: 10px;
+  border-radius: 6px; font-size: 12px;
+}
+.sync-result.success { background: #f6ffed; border: 1px solid #b7eb8f; color: #52c41a; }
+.sync-result.error { background: #fff2f0; border: 1px solid #ffccc7; color: #f5222d; }
+
+.sync-count {
+  font-size: 11px; color: #8c8c8c; margin-top: 6px;
 }
 </style>

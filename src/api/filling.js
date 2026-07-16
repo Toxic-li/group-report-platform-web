@@ -50,7 +50,22 @@ export function uploadAttachment(submitId, file) {
 }
 
 export function downloadAttachment(attachmentId) {
-  window.location.href = `/api/filling/attachments/${attachmentId}/download`
+  const token = sessionStorage.getItem('rpt_token') || localStorage.getItem('rpt_token') || ''
+  return fetch(`/api/filling/attachments/${attachmentId}/download`, {
+    headers: { Authorization: token }
+  }).then(res => {
+    if (!res.ok) throw new Error('下载失败')
+    return res.blob()
+  }).then(blob => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `attachment_${attachmentId}`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  })
 }
 
 export function deleteAttachment(attachmentId) {
@@ -67,6 +82,64 @@ export function importFromExcel(submitId, file) {
   return upload(`/filling/import/${submitId}`, formData)
 }
 
-export function exportToExcel(submitId) {
-  window.location.href = `/api/filling/export/${submitId}`
+export async function exportToExcel(submitId) {
+  const token = sessionStorage.getItem('rpt_token') || localStorage.getItem('rpt_token') || ''
+  const response = await fetch(`/api/filling/export/${submitId}`, {
+    headers: { Authorization: token }
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.message || err.msg || '导出失败')
+  }
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `report_${submitId}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+export function deleteDraft(submitId) {
+  return del(`/filling/${submitId}`)
+}
+
+export function batchSubmit(submitIds) {
+  return post('/filling/batch-submit', submitIds)
+}
+
+export function batchDeleteDrafts(submitIds) {
+  return post('/filling/batch-delete', submitIds)
+}
+
+// ===== 逐级上报 =====
+
+/** 上报给上级单位 */
+export function reportToSuperior(submitId) {
+  return post(`/filling/report/${submitId}`)
+}
+
+export function cancelReport(submitId) {
+  return post(`/filling/cancel-report/${submitId}`)
+}
+
+/** 批量上报 */
+export function batchReport(submitIds) {
+  return post('/filling/batch-report', submitIds)
+}
+
+/** 查询下级上报给我的数据 */
+export function queryReportedToMe(params) {
+  const query = new URLSearchParams()
+  if (params) {
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') query.append(k, v) })
+  }
+  return get(`/filling/reported-to-me?${query}`)
+}
+
+/** 获取即将截止的填报任务 */
+export function getApproachingDeadlineTasks() {
+  return get('/filling/approaching-deadline')
 }

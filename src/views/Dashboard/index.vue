@@ -92,6 +92,97 @@
       </template>
     </section>
 
+    <!-- ===== 快捷操作入口 ===== -->
+    <section class="db-quick-actions" v-if="!loading">
+      <div class="db-quick-title">快捷操作</div>
+      <div class="db-quick-grid">
+        <div class="db-quick-item" @click="navigateTo('/entry')">
+          <div class="db-quick-icon db-quick-icon--primary">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><polyline points="3 10 21 10"/>
+            </svg>
+          </div>
+          <div class="db-quick-text">
+            <div class="db-quick-name">填报中心</div>
+            <div class="db-quick-desc">开始填报报表</div>
+          </div>
+          <svg class="db-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="db-quick-item" @click="navigateTo('/entry/draft')">
+          <div class="db-quick-icon db-quick-icon--warning">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </div>
+          <div class="db-quick-text">
+            <div class="db-quick-name">草稿箱</div>
+            <div class="db-quick-desc">继续编辑草稿</div>
+          </div>
+          <svg class="db-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="db-quick-item" @click="navigateTo('/audit')">
+          <div class="db-quick-icon db-quick-icon--info">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/><polyline points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </div>
+          <div class="db-quick-text">
+            <div class="db-quick-name">审核中心</div>
+            <div class="db-quick-desc">处理审核任务</div>
+          </div>
+          <svg class="db-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="db-quick-item" @click="navigateTo('/designer/templates')">
+          <div class="db-quick-icon db-quick-icon--success">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+          </div>
+          <div class="db-quick-text">
+            <div class="db-quick-name">新建报表</div>
+            <div class="db-quick-desc">创建新模板</div>
+          </div>
+          <svg class="db-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="db-quick-item" @click="navigateTo('/report-center')">
+          <div class="db-quick-icon db-quick-icon--purple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 21 8"/>
+            </svg>
+          </div>
+          <div class="db-quick-text">
+            <div class="db-quick-name">报表中心</div>
+            <div class="db-quick-desc">浏览所有报表</div>
+          </div>
+          <svg class="db-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+        <div class="db-quick-item" @click="navigateTo('/wordToExcel')">
+          <div class="db-quick-icon db-quick-icon--cyan">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10 3h3v18h-3l-3-3H2a1 1 0 01-1-1V7a1 1 0 011-1h5l3-3z"/>
+            </svg>
+          </div>
+          <div class="db-quick-text">
+            <div class="db-quick-name">Word转Excel</div>
+            <div class="db-quick-desc">一键转换模板</div>
+          </div>
+          <svg class="db-quick-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== 3. KPI Row 2: 业务流程 ===== -->
     <section class="db-flow-section">
       <template v-if="loading">
@@ -216,6 +307,27 @@
               <div class="db-skeleton-icon" style="width:36px;height:36px;border-radius:10px"></div>
               <div class="db-skeleton-line db-skeleton-line--lg" style="width:36px;margin-top:8px"></div>
               <div class="db-skeleton-line db-skeleton-line--xs" style="width:60%;margin-top:6px"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 即将截止 -->
+        <section class="db-section" v-if="!loading && approachingDeadlineTasks.length > 0">
+          <div class="db-section-header">
+            <h2 class="db-section-title" style="color: var(--color-error)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2" class="db-section-icon"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              即将截止
+            </h2>
+            <a href="/entry" class="db-section-link">去填报 &rarr;</a>
+          </div>
+          <div class="db-deadline-list">
+            <div v-for="task in approachingDeadlineTasks" :key="task.id" class="db-deadline-item" :class="{ 'db-deadline-overdue': task.statusText === '已逾期' }" @click="navigateTo('/entry')">
+              <div class="db-deadline-dot" :class="task.statusText === '已逾期' ? 'db-deadline-dot--overdue' : 'db-deadline-dot--warning'"></div>
+              <div class="db-deadline-info">
+                <div class="db-deadline-name">{{ task.name }}</div>
+                <div class="db-deadline-meta" v-if="task.description">{{ task.description }}</div>
+              </div>
+              <span class="db-deadline-tag" :class="task.statusText === '已逾期' ? 'db-deadline-tag--overdue' : ''">{{ task.statusText }}</span>
             </div>
           </div>
         </section>
@@ -360,11 +472,55 @@
       </div>
     </div>
 
+    <!-- ===== 5.5. 下级单位进度汇总 ===== -->
+    <section class="db-section" v-if="!loading && hasSubordinates">
+      <div class="db-section-header">
+        <h2 class="db-section-title">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="db-section-icon"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4 4 4 0 014-4h6"/><circle cx="20" cy="6" r="3"/><path d="M16 6h4"/></svg>
+          下级单位进度汇总
+        </h2>
+        <router-link to="/monitor" class="db-section-link">查看详情 &rarr;</router-link>
+      </div>
+      <div class="db-subordinate-grid">
+        <div v-for="org in (subordinateData?.progressList || []).slice(0, 4)" :key="org.orgId" class="db-subordinate-card">
+          <div class="db-subordinate-header">
+            <span class="db-subordinate-name">{{ org.orgName }}</span>
+            <span :class="['db-subordinate-status', 'db-subordinate-status--' + org.status]">{{ statusText(org.status) }}</span>
+            <span v-if="org.overdueCount > 0" class="db-subordinate-overdue-badge">逾期{{ org.overdueCount }}项</span>
+          </div>
+          <div class="db-subordinate-progress">
+            <div class="db-subordinate-progress-bar">
+              <div class="db-subordinate-progress-fill" :style="{ width: org.completionRate + '%' }" :class="progressClass(org.completionRate)"></div>
+            </div>
+            <span class="db-subordinate-rate">{{ org.completionRate }}%</span>
+          </div>
+          <div class="db-subordinate-stats">
+            <div class="db-subordinate-stat">
+              <span class="db-subordinate-stat-num">{{ org.totalTasks }}</span>
+              <span class="db-subordinate-stat-label">总任务</span>
+            </div>
+            <div class="db-subordinate-stat">
+              <span class="db-subordinate-stat-num">{{ org.approvedCount }}</span>
+              <span class="db-subordinate-stat-label">已完成</span>
+            </div>
+            <div class="db-subordinate-stat db-subordinate-stat--warn">
+              <span class="db-subordinate-stat-num">{{ (org.draftCount || 0) + (org.rejectedCount || 0) }}</span>
+              <span class="db-subordinate-stat-label">待处理</span>
+            </div>
+            <div class="db-subordinate-stat db-subordinate-stat--danger">
+              <span class="db-subordinate-stat-num">{{ org.overdueCount || 0 }}</span>
+              <span class="db-subordinate-stat-label">逾期</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== 6. 趋势分析 ===== -->
     <section class="db-section">
       <div class="db-section-header">
         <h2 class="db-section-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="db-section-icon"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <LineChart :size="16" class="db-section-icon" />
           数据分析趋势
         </h2>
         <div class="db-chart-tabs">
@@ -373,35 +529,21 @@
       </div>
       <div class="db-charts-row">
         <div class="db-chart-card">
-          <div class="db-chart-title">填报与审核趋势</div>
-          <svg class="db-chart-svg" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet">
-            <!-- 网格线 -->
-            <g v-for="i in 4" :key="'gl-' + i" stroke="var(--color-gray-200)" stroke-width="0.5" stroke-dasharray="4 3">
-              <line :x1="48" :y1="30 + (i - 1) * 42" :x2="540" :y2="30 + (i - 1) * 42" />
-            </g>
-            <!-- 填充区域 -->
-            <polygon :points="fillTrendArea" fill="var(--color-primary-500)" opacity="0.08"/>
-            <!-- 折线 -->
-            <polyline :points="fillTrendPoints" fill="none" stroke="var(--color-primary-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <!-- 数据点 -->
-            <circle v-for="(pt, idx) in fillTrendDots" :key="'ftd-' + idx" :cx="pt.x" :cy="pt.y" r="4" fill="#fff" stroke="var(--color-primary-500)" stroke-width="2.5"/>
-            <!-- X轴标签 -->
-            <text v-for="(label, idx) in weekDayLabels" :key="'xl-' + idx" :x="48 + idx * 70.5" y="218" text-anchor="middle" font-size="11" fill="var(--color-gray-600)">{{ label }}</text>
-          </svg>
+          <div class="db-chart-title">报表填报完成状态（近7日）</div>
+          <div ref="trendChartRef" class="db-echart-container"></div>
           <div class="db-chart-legend">
-            <span class="db-chart-legend-item"><span class="db-chart-legend-dot" style="background:var(--color-primary-500)"></span> 填报量</span>
-            <span class="db-chart-legend-item"><span class="db-chart-legend-dot" style="background:var(--color-success)"></span> 审核量</span>
+            <span class="db-chart-legend-item"><span class="db-chart-legend-dot" style="background:#2563EB"></span> 填报量</span>
+            <span class="db-chart-legend-item"><span class="db-chart-legend-dot" style="background:#14B8A6"></span> 审核量</span>
           </div>
         </div>
         <div class="db-chart-card">
-          <div class="db-chart-title">各业务线报表数量</div>
-          <svg class="db-chart-svg" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet">
-            <g v-for="i in 4" :key="'gb2-' + i" stroke="var(--color-gray-200)" stroke-width="0.5" stroke-dasharray="4 3">
-              <line :x1="48" :y1="30 + (i - 1) * 42" :x2="540" :y2="30 + (i - 1) * 42" />
-            </g>
-            <rect v-for="(bar, idx) in bizBars" :key="'bb-' + idx" :x="bar.x" :y="bar.y" :width="bar.w" :height="bar.h" :rx="bar.w / 2" :fill="bar.color" opacity="0.85" />
-            <text v-for="(label, idx) in bizLabels" :key="'bl-' + idx" :x="48 + idx * 70.5" y="218" text-anchor="middle" font-size="11" fill="var(--color-gray-600)">{{ label }}</text>
-          </svg>
+          <div class="db-chart-title">报表状态分布</div>
+          <div ref="statusChartRef" class="db-echart-container"></div>
+          <div class="db-chart-legend" style="margin-top: 16px;">
+            <span v-for="item in reportStatusData" :key="item.name" class="db-chart-legend-item">
+              <span class="db-chart-legend-dot" :style="{ background: item.color }"></span> {{ item.name }} ({{ item.value }})
+            </span>
+          </div>
         </div>
       </div>
     </section>
@@ -420,14 +562,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, markRaw, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, markRaw, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import * as echarts from 'echarts'
 import {
   FileSpreadsheet, FileEdit, FileCheck, Eye, BarChart3,
   PenTool, PlusCircle, TrendingUp, Zap, ShieldAlert,
-  Database, Rocket, Users, Activity, Clock, RefreshCw, Star
+  Database, Rocket, Users, Activity, Clock, RefreshCw, Star,
+  Calendar, ChevronRight, PieChart, LineChart
 } from 'lucide-vue-next'
 import { getDashboardData, getFillTrend, getBizDistribution } from '@/api/dashboard'
+import { getAggregation } from '@/api/monitor'
+import { getApproachingDeadlineTasks } from '@/api/filling'
 
 const router = useRouter()
 
@@ -436,6 +582,10 @@ const userName = ref('Admin')
 const userRole = ref('filler')
 const searchQuery = ref('')
 const dashboardData = ref({})
+
+// 下级单位汇总数据
+const subordinateData = ref(null)
+const hasSubordinates = ref(false)
 
 // ===== 问候语 =====
 const greeting = computed(() => {
@@ -461,6 +611,7 @@ const taskOverview = ref([
 const anomalyCount = ref(0)
 const monthlyReports = ref(0)
 const dataRefreshRate = ref(0)
+const approachingDeadlineTasks = ref<any[]>([])
 
 // ===== KPI Row 1: BI 平台指标 =====
 function generateSparkline(data: number[], h: number = 24): string {
@@ -626,14 +777,27 @@ function shareReport(_r: any) { /* TODO */ }
 function handleSearch() { const q = searchQuery.value.trim(); if (q) router.push('/report-center?search=' + encodeURIComponent(q)) }
 function toggleAIAssistant() { /* TODO: open AI panel */ }
 
+function statusText(s) {
+  const map = { not_started: '未开始', in_progress: '进行中', completed: '已完成' }
+  return map[s] || s
+}
+
+function progressClass(pct) {
+  if (pct >= 80) return 'db-subordinate-progress-fill--high'
+  if (pct >= 40) return 'db-subordinate-progress-fill--mid'
+  return 'db-subordinate-progress-fill--low'
+}
+
 // ===== 数据加载 =====
 async function loadDashboardData() {
   loading.value = true
   try {
-    const [data, _trend, _biz] = await Promise.all([
+    const [data, _trend, _biz, aggData, deadlineTasks] = await Promise.all([
       getDashboardData(),
       loadTrendData(),
       loadBizData(),
+      getAggregation({}).catch(() => null),
+      getApproachingDeadlineTasks().catch(() => []),
     ])
     if (data) {
       dashboardData.value = data
@@ -647,6 +811,18 @@ async function loadDashboardData() {
       recentReports.value = data.myReports || []
       favoriteReports.value = data.favorites || []
       notifications.value = data.notices || []
+      approachingDeadlineTasks.value = data.approachingDeadlineTasks || deadlineTasks || []
+      reportStatusData.value = [
+        { name: '已填报', value: data.completed || 0, color: '#14B8A6' },
+        { name: '未填报', value: (data.totalReports || 0) - (data.completed || 0), color: '#94A3B8' },
+      ]
+    }
+    if (aggData && aggData.subordinateCount > 0) {
+      subordinateData.value = aggData
+      hasSubordinates.value = true
+    } else {
+      subordinateData.value = null
+      hasSubordinates.value = false
     }
   } catch {
     dashboardData.value = {}
@@ -660,6 +836,9 @@ async function loadDashboardData() {
     recentReports.value = []
     favoriteReports.value = []
     notifications.value = []
+    approachingDeadlineTasks.value = []
+    subordinateData.value = null
+    hasSubordinates.value = false
   } finally {
     loading.value = false
   }
@@ -676,7 +855,147 @@ function initUser() {
   }
 }
 
-onMounted(() => { initUser(); loadDashboardData() })
+const trendChartRef = ref<HTMLElement | null>(null)
+const statusChartRef = ref<HTMLElement | null>(null)
+let trendChart: echarts.ECharts | null = null
+let statusChart: echarts.ECharts | null = null
+
+const reportStatusData = ref([
+  { name: '已填报', value: 368, color: '#14B8A6' },
+  { name: '未填报', value: 237, color: '#94A3B8' },
+])
+
+function initCharts() {
+  nextTick(() => {
+    if (trendChartRef.value) {
+      trendChart = echarts.init(trendChartRef.value)
+      updateTrendChart()
+    }
+    if (statusChartRef.value) {
+      statusChart = echarts.init(statusChartRef.value)
+      updateStatusChart()
+    }
+  })
+}
+
+function updateTrendChart() {
+  if (!trendChart || !trendData.value.length) return
+  const option: echarts.EChartsOption = {
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: '#E2E8F0',
+      borderWidth: 1,
+      textStyle: { color: '#334155' },
+      formatter: (params: any) => {
+        const p = params[0]
+        return `<div style="padding: 8px;">
+          <div style="font-weight: 600; margin-bottom: 4px;">${p.name}</div>
+          <div>填报数量: <span style="color: #2563EB; font-weight: 600;">${p.value}</span></div>
+        </div>`
+      }
+    },
+    grid: { top: 20, right: 20, bottom: 30, left: 50 },
+    xAxis: {
+      type: 'category',
+      data: weekDayLabels.value,
+      axisLine: { lineStyle: { color: '#E2E8F0' } },
+      axisTick: { show: false },
+      axisLabel: { color: '#94A3B8', fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: '#94A3B8', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } }
+    },
+    series: [{
+      type: 'line',
+      data: fillTrendData.value,
+      smooth: true,
+      symbol: 'circle',
+      symbolSize: 6,
+      lineStyle: { color: '#2563EB', width: 3 },
+      itemStyle: { color: '#2563EB', borderWidth: 2, borderColor: '#fff' },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: 'rgba(37,99,235,0.25)' },
+          { offset: 1, color: 'rgba(37,99,235,0.02)' }
+        ])
+      }
+    }]
+  }
+  trendChart.setOption(option)
+}
+
+function updateStatusChart() {
+  if (!statusChart) return
+  const completed = reportStatusData.value.find(d => d.name === '已填报')?.value || 0
+  const total = reportStatusData.value.reduce((sum, d) => sum + d.value, 0)
+  const rate = total > 0 ? Math.round((completed / total) * 100) : 0
+  
+  const option: echarts.EChartsOption = {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(255,255,255,0.95)',
+      borderColor: '#E2E8F0',
+      borderWidth: 1,
+      textStyle: { color: '#334155' },
+      formatter: (params: any) => {
+        return `<div style="padding: 8px;">
+          <div style="font-weight: 600; margin-bottom: 4px;">${params.name}</div>
+          <div>数量: <span style="color: ${params.color}; font-weight: 600;">${params.value}</span></div>
+          <div>占比: ${params.percent}%</div>
+        </div>`
+      }
+    },
+    series: [{
+      type: 'pie',
+      radius: ['55%', '75%'],
+      center: ['50%', '50%'],
+      avoidLabelOverlap: false,
+      itemStyle: {
+        borderRadius: 8,
+        borderColor: '#fff',
+        borderWidth: 3
+      },
+      label: { show: false },
+      emphasis: {
+        label: { show: true, fontSize: 14, fontWeight: 'bold' },
+        itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.2)' }
+      },
+      labelLine: { show: false },
+      data: reportStatusData.value.map(d => ({ name: d.name, value: d.value, itemStyle: { color: d.color } }))
+    }]
+  }
+  statusChart.setOption(option)
+}
+
+function handleResize() {
+  trendChart?.resize()
+  statusChart?.resize()
+}
+
+watch(trendData, () => updateTrendChart())
+watch(reportStatusData, () => updateStatusChart())
+
+onMounted(async () => {
+  initUser()
+  initCharts()
+  await loadDashboardData()
+  nextTick(() => {
+    updateTrendChart()
+    updateStatusChart()
+  })
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  trendChart?.dispose()
+  statusChart?.dispose()
+})
 </script>
 
 
@@ -731,14 +1050,18 @@ $radius-sm: 8px;
 
   .db-header-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
   .db-header-search { position: relative; display: flex; align-items: center; }
-  .db-header-search-icon { position: absolute; left: 12px; color: var(--app-text-muted); pointer-events: none; }
+  .db-header-search-icon { position: absolute; left: 12px; color: var(--app-text-muted); pointer-events: none; transition: color 0.2s; z-index: 1; }
+  .db-header-search:focus-within .db-header-search-icon { color: $primary; }
   .db-header-search-input {
     width: 220px; height: 38px; padding: 0 12px 0 36px;
     border: 1px solid var(--app-border); border-radius: 10px; font-size: 13px;
     background: var(--app-bg); color: var(--app-text-primary); outline: none;
-    transition: all 0.2s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     &::placeholder { color: var(--app-text-muted); }
-    &:focus { background: var(--app-surface); border-color: $primary; box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+    &:focus {
+      width: 280px; background: var(--app-surface); border-color: $primary;
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.08);
+    }
   }
   .db-header-btn {
     display: flex; align-items: center; gap: 6px; padding: 9px 20px;
@@ -752,11 +1075,17 @@ $radius-sm: 8px;
   // ==========================================
   .db-kpi-section { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 20px; }
   .db-kpi-card {
-    position: relative; background: var(--app-surface); border: 1px solid var(--app-border);
-    border-radius: $radius-lg; cursor: pointer; transition: all 0.25s ease-out; overflow: hidden;
-    &:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(15,23,42,0.1); border-color: $primary; }
+    position: relative; background: var(--app-surface); border: 1px solid var(--app-border-light);
+    border-radius: $radius-lg; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden;
+    &:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 28px rgba(15,23,42,0.1), 0 0 0 1px var(--app-primary-bg);
+      border-color: $primary;
+      .db-kpi-accent { transform: scaleY(1.1); }
+      .db-kpi-sparkline { opacity: 0.9; }
+    }
   }
-  .db-kpi-accent { position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 2px 2px 0; }
+  .db-kpi-accent { position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 2px 2px 0; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
   .db-kpi-body { padding: 18px 20px 14px; }
   .db-kpi-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   .db-kpi-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
@@ -766,7 +1095,7 @@ $radius-sm: 8px;
   }
   .db-kpi-value { font-size: 30px; font-weight: 700; color: var(--app-text-primary); line-height: 1; margin-bottom: 4px; }
   .db-kpi-label { font-size: 13px; color: var(--app-text-secondary); margin-bottom: 10px; }
-  .db-kpi-sparkline { width: 100%; height: 24px; display: block; }
+  .db-kpi-sparkline { width: 100%; height: 24px; display: block; transition: opacity 0.3s; }
 
   .db-kpi-card.accent-blue  .db-kpi-accent { background: $primary; }
   .db-kpi-card.accent-teal  .db-kpi-accent { background: $teal; }
@@ -777,11 +1106,48 @@ $radius-sm: 8px;
   // 3. Business Flow Cards
   // ==========================================
   .db-flow-section { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+
+/* ===== 快捷操作 ===== */
+.db-quick-actions { margin-bottom: 24px; }
+.db-quick-title { font-size: 16px; font-weight: 600; color: var(--app-text-primary); margin-bottom: 12px; }
+.db-quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.db-quick-item {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+  background: var(--app-surface); border: 1px solid var(--app-border);
+  border-radius: $radius-md; cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  &:hover {
+    transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15,23,42,0.1);
+    border-color: var(--app-primary);
+  }
+}
+.db-quick-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.db-quick-icon--primary { background: var(--app-primary-bg); color: var(--app-primary); }
+.db-quick-icon--warning { background: var(--app-warning-bg); color: var(--app-warning); }
+.db-quick-icon--info { background: var(--app-info-bg); color: var(--app-info); }
+.db-quick-icon--success { background: var(--app-success-bg); color: var(--app-success); }
+.db-quick-icon--purple { background: rgba(168,85,247,0.1); color: #a855f7; }
+.db-quick-icon--cyan { background: rgba(14,165,233,0.1); color: #0ea5e9; }
+.db-quick-text { flex: 1; }
+.db-quick-name { font-size: 14px; font-weight: 500; color: var(--app-text-primary); margin-bottom: 2px; }
+.db-quick-desc { font-size: 12px; color: var(--app-text-muted); }
+.db-quick-arrow { color: var(--app-text-muted); transition: transform 0.25s; }
+.db-quick-item:hover .db-quick-arrow { transform: translateX(4px); }
+
+@media (max-width: 1024px) {
+  .db-quick-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .db-quick-grid { grid-template-columns: 1fr; }
+}
+
   .db-flow-card {
     position: relative; display: flex; align-items: center; gap: 14px; padding: 18px 20px;
-    background: var(--app-surface); border: 1px solid var(--app-border); border-radius: $radius-md;
-    cursor: pointer; transition: all 0.25s;
-    &:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(15,23,42,0.08); }
+    background: var(--app-surface); border: 1px solid var(--app-border-light); border-radius: $radius-md;
+    cursor: pointer; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    &:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(15,23,42,0.1); border-color: $primary; }
   }
   .db-flow-badge {
     position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; padding: 0 6px;
@@ -934,6 +1300,7 @@ $radius-sm: 8px;
   .db-chart-card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: $radius-lg; padding: 20px; }
   .db-chart-title { font-size: 13px; font-weight: 600; color: var(--app-text-secondary); margin-bottom: 12px; }
   .db-chart-svg { width: 100%; height: auto; display: block; }
+  .db-echart-container { width: 100%; height: 220px; }
   .db-chart-legend { display: flex; gap: 20px; justify-content: center; margin-top: 8px; }
   .db-chart-legend-item { font-size: 11px; color: var(--app-text-muted); display: flex; align-items: center; gap: 4px; }
   .db-chart-legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
@@ -1022,6 +1389,67 @@ $radius-sm: 8px;
   }
 
   // ==========================================
+  // 5.5. 下级单位进度汇总
+  // ==========================================
+  .db-subordinate-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 12px; }
+  .db-subordinate-card {
+    background: var(--app-surface); border: 1px solid var(--app-border);
+    border-radius: $radius-md; padding: 18px; transition: all 0.2s;
+    &:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(15,23,42,0.06); }
+  }
+  .db-subordinate-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .db-subordinate-name { font-size: 14px; font-weight: 600; color: var(--app-text-primary); }
+  .db-subordinate-status {
+    padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500;
+    &--not_started { background: rgba(148,163,184,0.1); color: #94a3b8; }
+    &--in_progress { background: var(--app-primary-bg); color: var(--app-primary); }
+    &--completed { background: var(--app-success-bg); color: var(--app-success); }
+  }
+  .db-subordinate-progress { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  .db-subordinate-progress-bar { flex: 1; height: 6px; background: var(--app-border); border-radius: 3px; overflow: hidden; }
+  .db-subordinate-progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .db-subordinate-progress-fill--low { background: var(--app-danger); }
+  .db-subordinate-progress-fill--mid { background: var(--app-warning); }
+  .db-subordinate-progress-fill--high { background: var(--app-success); }
+  .db-subordinate-rate { font-size: 13px; font-weight: 600; color: var(--app-text-primary); }
+  .db-subordinate-stats { display: flex; justify-content: space-between; }
+  .db-subordinate-stat { text-align: center; }
+  .db-subordinate-stat-num { font-size: 18px; font-weight: 700; color: var(--app-text-primary); display: block; }
+  .db-subordinate-stat-label { font-size: 11px; color: var(--app-text-muted); margin-top: 2px; }
+  .db-subordinate-stat--warn .db-subordinate-stat-num { color: var(--app-warning); }
+  .db-subordinate-stat--danger .db-subordinate-stat-num { color: var(--app-danger, #EF4444); }
+
+  .db-subordinate-overdue-badge {
+    padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    background: rgba(239,68,68,0.1); color: #EF4444;
+  }
+
+  // ==========================================
+  // 8. 即将截止
+  // ==========================================
+  .db-deadline-list { padding: 4px 0; }
+  .db-deadline-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    cursor: pointer; border-radius: 8px; transition: all 0.15s;
+    &:hover { background: var(--app-surface-hover); }
+  }
+  .db-deadline-overdue {
+    background: rgba(239,68,68,0.04);
+    &:hover { background: rgba(239,68,68,0.08); }
+  }
+  .db-deadline-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .db-deadline-dot--warning { background: #F59E0B; }
+  .db-deadline-dot--overdue { background: #EF4444; }
+  .db-deadline-info { flex: 1; min-width: 0; }
+  .db-deadline-name { font-size: 13px; font-weight: 500; color: var(--app-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-deadline-meta { font-size: 11px; color: var(--app-text-muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-deadline-tag {
+    padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; flex-shrink: 0;
+    background: rgba(245,158,11,0.1); color: #F59E0B;
+  }
+  .db-deadline-tag--overdue { background: rgba(239,68,68,0.1); color: #EF4444; }
+
+  // ==========================================
   // Responsive
   // ==========================================
   @media (max-width: 1200px) {
@@ -1029,6 +1457,7 @@ $radius-sm: 8px;
     .db-flow-section { grid-template-columns: repeat(2, 1fr); }
     .db-cockpit-grid { grid-template-columns: repeat(2, 1fr); }
     .db-tasks-row { grid-template-columns: repeat(2, 1fr); }
+    .db-subordinate-grid { grid-template-columns: repeat(2, 1fr); }
     .db-main-row { grid-template-columns: 1fr; }
     .db-charts-row { grid-template-columns: 1fr; }
     .db-header { flex-wrap: wrap; }

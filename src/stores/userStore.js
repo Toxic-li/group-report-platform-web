@@ -65,11 +65,11 @@ export const useUserStore = defineStore('user', () => {
    */
   async function login(username, password) {
     const res = await apiLogin({ username, password })
-    
+
     // ✅ 解析后端返回数据（兼容多种格式）
     const data = res?.data || res
     const accessToken = data?.token || res?.token
-    
+
     // ✅ 存储认证信息
     token.value = accessToken
     user.value = {
@@ -83,12 +83,16 @@ export const useUserStore = defineStore('user', () => {
       loginTime: data?.loginTime
     }
     roles.value = data?.roles || res?.roles || []
-    // 后端为纯 RBAC，不返回权限码。根据角色推导权限码
-    const perms = data?.permissions || res?.permissions
-    if (Array.isArray(perms) && perms.length > 0) {
-      permissions.value = perms
+    // 后端返回的真实权限码（来自 sys_role_permission 绑定）
+    const backendPerms = data?.permissions || res?.permissions
+    // 角色推导的兜底权限（防止后端权限绑定不完整导致用户被锁死）
+    const rolePerms = derivePermissionsFromRoles(roles.value)
+    if (Array.isArray(backendPerms) && backendPerms.length > 0) {
+      // 取并集：后端权限 ∪ 角色推导权限
+      const merged = new Set([...backendPerms, ...rolePerms])
+      permissions.value = [...merged]
     } else {
-      permissions.value = derivePermissionsFromRoles(roles.value)
+      permissions.value = rolePerms
     }
 
     // ✅ 持久化存储
@@ -128,13 +132,15 @@ export const useUserStore = defineStore('user', () => {
     try {
       const res = await getCurrentUser()
       user.value = res.data || res
-      // 后端为纯 RBAC，根据角色推导权限码
-      const perms = res.permissions || res.data?.permissions
-      if (Array.isArray(perms) && perms.length > 0) {
-        permissions.value = perms
+      roles.value = res.roles || res.data?.roles || []
+      // 合并后端权限与角色推导权限（取并集）
+      const backendPerms = res.permissions || res.data?.permissions
+      const rolePerms = derivePermissionsFromRoles(roles.value)
+      if (Array.isArray(backendPerms) && backendPerms.length > 0) {
+        const merged = new Set([...backendPerms, ...rolePerms])
+        permissions.value = [...merged]
       } else {
-        roles.value = res.roles || res.data?.roles || []
-        permissions.value = derivePermissionsFromRoles(roles.value)
+        permissions.value = rolePerms
       }
       sessionStorage.setItem('rpt_user', JSON.stringify(user.value))
       sessionStorage.setItem('rpt_roles', JSON.stringify(roles.value))

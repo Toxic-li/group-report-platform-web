@@ -37,3 +37,7 @@ export function getAuditDetail(submitId) {
 export function getAuditHistory(submitId) {
   return get(`/audit/history/${submitId}`)
 }
+
+export function cancelApproval(payload) {
+  return post('/audit/cancel-approval', payload)
+}

@@ -6,7 +6,7 @@
     </div>
 
     <el-table :data="tableData" v-loading="loading" border stripe style="width:100%">
-      <el-table-column prop="userId" label="ID" width="70" />
+      <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="username" label="用户名" width="120" />
       <el-table-column prop="realName" label="真实姓名" width="100" />
       <el-table-column prop="phone" label="手机号" width="130" />
@@ -77,6 +77,12 @@
             collapse-tags-tooltip
           />
         </el-form-item>
+        <el-form-item label="分配角色">
+          <el-checkbox-group v-model="selectedRoleIds">
+            <el-checkbox v-for="role in allRoles" :key="role.id" :value="role.id" :label="role.roleName" />
+          </el-checkbox-group>
+          <span v-if="!allRoles.length" style="color:#999;font-size:12px">暂无角色数据</span>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="formVisible = false">取消</el-button>
@@ -91,6 +97,8 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getUserList, createUser, updateUser, deleteUser, resetUserPassword } from '@/api/auth.js'
 import { getOrgTree } from '@/api/org.js'
+import { getRoleList } from '@/api/role.js'
+import { isMockEnabled } from '@/utils/mockConfig.js'
 
 const search = ref('')
 const loading = ref(false)
@@ -100,19 +108,21 @@ const formVisible = ref(false)
 const editingUser = ref(null)
 const selectedOrgIds = ref([])
 const orgTreeData = ref([])
+const allRoles = ref([])
+const selectedRoleIds = ref([])
 
 const page = reactive({ current: 1, size: 10, total: 0 })
-const form = reactive({ username: '', realName: '', phone: '', email: '', password: '', status: 1, orgIds: [] })
+const form = reactive({ username: '', realName: '', phone: '', email: '', password: '', status: 1, orgIds: [], roleIds: [] })
 
-onMounted(() => { loadData(); loadOrgTree() })
+onMounted(() => { loadData(); loadOrgTree(); loadRoles() })
 
 // ⭐ 开发模式 mock 数据
 const mockUsers = [
-  { userId: 1, username: 'admin', realName: '系统管理员', phone: '13800000001', email: 'admin@example.com', status: 1, lastLoginTime: '2026-06-24 09:00:00' },
-  { userId: 2, username: 'zhangsan', realName: '张三', phone: '13800000002', email: 'zhangsan@example.com', status: 1, lastLoginTime: '2026-06-24 08:30:00' },
-  { userId: 3, username: 'lisi', realName: '李四', phone: '13800000003', email: 'lisi@example.com', status: 1, lastLoginTime: '2026-06-23 17:00:00' },
-  { userId: 4, username: 'wangwu', realName: '王五', phone: '13800000004', email: 'wangwu@example.com', status: 0, lastLoginTime: '2026-06-20 10:00:00' },
-  { userId: 5, username: 'designer01', realName: '报表设计师', phone: '13800000005', email: 'designer@example.com', status: 1, lastLoginTime: '2026-06-24 07:00:00' }
+  { id: 1, username: 'admin', realName: '系统管理员', phone: '13800000001', email: 'admin@example.com', status: 1, lastLoginTime: '2026-06-24 09:00:00' },
+  { id: 2, username: 'zhangsan', realName: '张三', phone: '13800000002', email: 'zhangsan@example.com', status: 1, lastLoginTime: '2026-06-24 08:30:00' },
+  { id: 3, username: 'lisi', realName: '李四', phone: '13800000003', email: 'lisi@example.com', status: 1, lastLoginTime: '2026-06-23 17:00:00' },
+  { id: 4, username: 'wangwu', realName: '王五', phone: '13800000004', email: 'wangwu@example.com', status: 0, lastLoginTime: '2026-06-20 10:00:00' },
+  { id: 5, username: 'designer01', realName: '报表设计师', phone: '13800000005', email: 'designer@example.com', status: 1, lastLoginTime: '2026-06-24 07:00:00' }
 ]
 
 async function loadData() {
@@ -122,30 +132,35 @@ async function loadData() {
     const data = res.data || res
     tableData.value = data.records || data.list || data || []
     page.total = data.total || tableData.value.length
-    if (!tableData.value.length) throw new Error('mock')
+    if (!tableData.value.length && isMockEnabled()) throw new Error('mock')
   } catch (e) {
-    // ⭐ API 不可用时使用 mock 数据
-    const filtered = search.value
-      ? mockUsers.filter(u => u.username.includes(search.value) || u.realName.includes(search.value) || u.phone.includes(search.value))
-      : mockUsers
-    tableData.value = filtered
-    page.total = mockUsers.length
-    if (e.message !== 'mock') console.warn('[UserManage] API不可用，使用mock数据:', e.message)
+    if (isMockEnabled()) {
+      const filtered = search.value
+        ? mockUsers.filter(u => u.username.includes(search.value) || u.realName.includes(search.value) || u.phone.includes(search.value))
+        : mockUsers
+      tableData.value = filtered
+      page.total = mockUsers.length
+      if (e.message !== 'mock') console.warn('[UserManage] API不可用，使用mock数据:', e.message)
+    } else {
+      tableData.value = []
+      page.total = 0
+      ElMessage.error('加载用户数据失败')
+    }
   } finally {
     loading.value = false
   }
 }
 
 const mockOrgTree = [
-  { orgId: 1, orgCode: 'GROUP', orgName: '集团公司', children: [
-    { orgId: 2, orgCode: 'MINE_A', orgName: 'A煤矿', children: [
-      { orgId: 5, orgCode: 'MINE_A_PROD', orgName: '生产部' },
-      { orgId: 6, orgCode: 'MINE_A_SAFE', orgName: '安环部' }
+  { id: 1, orgCode: 'GROUP', orgName: '集团公司', children: [
+    { id: 2, orgCode: 'MINE_A', orgName: 'A煤矿', children: [
+      { id: 5, orgCode: 'MINE_A_PROD', orgName: '生产部' },
+      { id: 6, orgCode: 'MINE_A_SAFE', orgName: '安环部' }
     ]},
-    { orgId: 3, orgCode: 'MINE_B', orgName: 'B煤矿', children: [
-      { orgId: 7, orgCode: 'MINE_B_PROD', orgName: '生产部' }
+    { id: 3, orgCode: 'MINE_B', orgName: 'B煤矿', children: [
+      { id: 7, orgCode: 'MINE_B_PROD', orgName: '生产部' }
     ]},
-    { orgId: 4, orgCode: 'COAL_TRADE', orgName: '煤炭贸易公司' }
+    { id: 4, orgCode: 'COAL_TRADE', orgName: '煤炭贸易公司' }
   ]}
 ]
 
@@ -164,10 +179,24 @@ async function loadOrgTree() {
     const res = await getOrgTree()
     const data = res.data || res
     let raw = Array.isArray(data) ? data : (data.children || data || [])
-    if (!raw.length) throw new Error('mock')
+    if (!raw.length && isMockEnabled()) throw new Error('mock')
     orgTreeData.value = filterValidNodes(raw)
   } catch (e) {
-    orgTreeData.value = mockOrgTree
+    if (isMockEnabled()) {
+      orgTreeData.value = mockOrgTree
+    } else {
+      orgTreeData.value = []
+      console.warn('[UserManage] 加载组织树失败')
+    }
+  }
+}
+
+async function loadRoles() {
+  try {
+    const res = await getRoleList()
+    allRoles.value = (res.data || res || []).filter(r => r.status !== 0)
+  } catch (e) {
+    console.warn('[UserManage] 加载角色列表失败')
   }
 }
 
@@ -175,26 +204,38 @@ function openCreate() {
   editingUser.value = null
   resetForm()
   selectedOrgIds.value = []
+  selectedRoleIds.value = []
   formVisible.value = true
 }
 
 function openEdit(row) {
   editingUser.value = row
   Object.assign(form, row)
-  selectedOrgIds.value = Array.isArray(row.orgIds) ? row.orgIds.filter(Boolean) : []
+  // 后端 UserVO 返回 orgId（单个），转为数组供 el-tree-select 回显
+  selectedOrgIds.value = row.orgId ? [row.orgId] : []
+  // 后端返回的 roles 是角色编码（如 "REPORTER"），需要映射为角色ID
+  const roleCodes = Array.isArray(row.roles) ? row.roles : []
+  selectedRoleIds.value = roleCodes
+    .map(code => {
+      const role = allRoles.value.find(r => r.roleCode === code)
+      return role ? role.id : null
+    })
+    .filter(Boolean)
   formVisible.value = true
 }
 
 function resetForm() {
-  form.username = ''; form.realName = ''; form.phone = ''; form.email = ''; form.password = ''; form.status = 1; form.orgIds = []
+  form.username = ''; form.realName = ''; form.phone = ''; form.email = ''; form.password = ''; form.status = 1; form.orgIds = []; form.roleIds = []
 }
 
 async function handleSave() {
   saving.value = true
   try {
-    const payload = { ...form, orgId: selectedOrgIds.value.filter(Boolean)[0] }
+    const payload = { ...form, orgId: selectedOrgIds.value.filter(Boolean)[0], roleIds: selectedRoleIds.value }
     if (editingUser.value) {
-      await updateUser(editingUser.value.userId, payload)
+      // 编辑时不需要密码
+      delete payload.password
+      await updateUser(editingUser.value.id, payload)
       ElMessage.success('更新成功')
     } else {
       await createUser(payload)
@@ -210,14 +251,14 @@ async function handleSave() {
 }
 
 async function handleDelete(row) {
-  await deleteUser(row.userId)
+  await deleteUser(row.id)
   ElMessage.success('已删除')
   loadData()
 }
 
 function openResetPwd(row) {
   ElMessageBox.prompt('请输入新密码', '重置密码', { inputType: 'password' }).then(async ({ value }) => {
-    await resetUserPassword(row.userId, value)
+    await resetUserPassword(row.id, value)
     ElMessage.success('密码已重置')
   }).catch(() => {})
 }

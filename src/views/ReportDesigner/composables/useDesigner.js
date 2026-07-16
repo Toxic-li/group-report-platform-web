@@ -38,6 +38,7 @@ export function useDesignerProvider() {
     name: '未命名报表',
     version: 1,
     status: 'draft',
+    templateType: 2,
     description: '',
     periodType: 'month',
     auditRequired: false,
@@ -688,6 +689,7 @@ export function useDesignerProvider() {
           targetCell,
           calcTrigger: 'realtime',
           priority: summaryNode.summaryType === 'grandTotal' ? 5 : 10,
+          type: 'summary',
         })
       }
     }
@@ -765,6 +767,9 @@ export function useDesignerProvider() {
       priority: metric.priority || 0,
       formatPattern: metric.formatPattern || '',
       description: metric.description || '',
+      status: metric.status ?? 1,
+      type: metric.type || 'field',
+      category: metric.category || '',
     }
     metrics.value.push(newMetric)
     autoSaveStatus.value = 'unsaved'
@@ -781,6 +786,15 @@ export function useDesignerProvider() {
     const idx = metrics.value.findIndex(m => m.field === field)
     if (idx >= 0) metrics.value.splice(idx, 1)
     autoSaveStatus.value = 'unsaved'
+  }
+
+  function toggleMetricStatus(field) {
+    const idx = metrics.value.findIndex(m => m.field === field)
+    if (idx >= 0) {
+      const current = metrics.value[idx].status
+      metrics.value[idx].status = (current === 0 || current === '0') ? 1 : 0
+      autoSaveStatus.value = 'unsaved'
+    }
   }
 
   // ========== 数据加载与序列化 ==========
@@ -840,6 +854,7 @@ export function useDesignerProvider() {
     template.name = vo.name
     template.version = vo.version
     template.status = vo.status
+    template.templateType = vo.templateType ?? 2
     template.description = vo.description
     template.periodType = vo.periodType
     template.auditRequired = vo.auditRequired
@@ -878,6 +893,7 @@ export function useDesignerProvider() {
       name: template.name,
       version: template.version,
       status: template.status,
+      templateType: template.templateType,
       description: template.description,
       periodType: template.periodType,
       auditRequired: template.auditRequired,
@@ -1047,6 +1063,7 @@ export function useDesignerProvider() {
       aggregation: field.aggregation || 'SUM',
       calcTrigger: 'save',
       formatPattern: '',
+      type: 'field',
     }
     // 避免重复添加
     const existing = metrics.value.find(m => m.field === newMetric.field)
@@ -1092,7 +1109,7 @@ export function useDesignerProvider() {
     addRowNode, addColNode, deleteRowNode, deleteColNode, updateRowNode, updateColNode,
     getCellValue, setCellValue, getCellKey, selectRegion, startEdit, commitEdit,
     getCellRawValue, hasFormula, getCellFormula, evaluateFormula,
-    addMetric, updateMetric, deleteMetric,
+    addMetric, updateMetric, deleteMetric, toggleMetricStatus,
     // 小计/合计行
     addSummaryRow, addGrandTotalRow, updateSummaryRow, computeSummaryValue,
     // 数据源字段绑定

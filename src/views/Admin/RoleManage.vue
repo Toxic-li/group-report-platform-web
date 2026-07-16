@@ -9,7 +9,7 @@
       </template>
 
       <el-table :data="tableData" v-loading="loading" border stripe>
-        <el-table-column prop="roleId" label="ID" width="70" />
+        <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="roleCode" label="角色编码" width="130" />
         <el-table-column prop="roleName" label="角色名称" width="120" />
         <el-table-column prop="description" label="描述" min-width="180" />
@@ -65,7 +65,7 @@
         ref="permTreeRef"
         :data="permTree"
         show-checkbox
-        node-key="permId"
+        node-key="id"
         default-expand-all
         :props="{ label: 'permName', children: 'children' }"
       />
@@ -82,6 +82,7 @@ import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getRoleList, createRole, updateRole, deleteRole, bindRolePermissions } from '@/api/role.js'
 import { getPermissionTree } from '@/api/role.js'
+import { isMockEnabled } from '@/utils/mockConfig.js'
 
 const loading = ref(false)
 const tableData = ref([])
@@ -100,12 +101,11 @@ const permTreeRef = ref(null)
 onMounted(() => { loadData(); loadPermTree() })
 
 const mockRoles = [
-  { roleId: 1, roleCode: 'admin', roleName: '系统管理员', description: '拥有全部权限', dataScope: 1 },
-  { roleId: 2, roleCode: 'tpl_admin', roleName: '模板管理员', description: '管理所有模板的发布与停用', dataScope: 2 },
-  { roleId: 3, roleCode: 'designer', roleName: '报表设计师', description: '创建和编辑报表模板', dataScope: 3 },
-  { roleId: 4, roleCode: 'filler', roleName: '填报用户', description: '填报报表数据', dataScope: 3 },
-  { roleId: 5, roleCode: 'auditor', roleName: '审核人员', description: '审核报表数据', dataScope: 2 },
-  { roleId: 6, roleCode: 'viewer', roleName: '只读用户', description: '查看报表和导出', dataScope: 4 }
+  { id: 1, roleCode: 'SUPER_ADMIN', roleName: '超级管理员', description: '拥有全部权限', dataScope: 1 },
+  { id: 2, roleCode: 'ADMIN', roleName: '管理员', description: '拥有管理权限', dataScope: 2 },
+  { id: 3, roleCode: 'AUDITOR', roleName: '审核员', description: '负责报表审核', dataScope: 3 },
+  { id: 4, roleCode: 'REPORTER', roleName: '填报员', description: '负责数据填报', dataScope: 3 },
+  { id: 5, roleCode: 'VIEWER', roleName: '查看者', description: '只读权限', dataScope: 4 }
 ]
 
 const mockPermTree = [
@@ -132,10 +132,15 @@ async function loadData() {
   try {
     const res = await getRoleList()
     tableData.value = res.data || res || []
-    if (!tableData.value.length) throw new Error('mock')
+    if (!tableData.value.length && isMockEnabled()) throw new Error('mock')
   } catch (e) {
-    tableData.value = mockRoles
-    if (e.message !== 'mock') console.warn('[RoleManage] API不可用，使用mock数据')
+    if (isMockEnabled()) {
+      tableData.value = mockRoles
+      if (e.message !== 'mock') console.warn('[RoleManage] API不可用，使用mock数据')
+    } else {
+      tableData.value = []
+      ElMessage.error('加载角色列表失败')
+    }
   } finally { loading.value = false }
 }
 
@@ -143,9 +148,13 @@ async function loadPermTree() {
   try {
     const res = await getPermissionTree()
     permTree.value = res.data || res || []
-    if (!permTree.value.length) throw new Error('mock')
+    if (!permTree.value.length && isMockEnabled()) throw new Error('mock')
   } catch (e) {
-    permTree.value = mockPermTree
+    if (isMockEnabled()) {
+      permTree.value = mockPermTree
+    } else {
+      permTree.value = []
+    }
   }
 }
 
@@ -154,29 +163,33 @@ function openEdit(row) { editingRole.value = row; Object.assign(form, row); form
 
 async function handleSave() {
   try {
-    if (editingRole.value) { await updateRole(editingRole.value.roleId, form) } else { await createRole(form) }
+    if (editingRole.value) { await updateRole(editingRole.value.id, form) } else { await createRole(form) }
     ElMessage.success('保存成功'); formVisible.value = false; loadData()
   } catch (e) { ElMessage.error('保存失败: ' + e.message) }
 }
 
 async function handleDelete(row) {
-  await deleteRole(row.roleId); ElMessage.success('已删除'); loadData()
+  await deleteRole(row.id); ElMessage.success('已删除'); loadData()
 }
 
 async function openPerm(row) {
   currentRole.value = row; permVisible.value = true
-  // 回显已有权限
+  // 回显已有权限（后端 RoleVO 返回 permissionIds 字段）
   nextTick(() => {
-    if (row.permissions?.length) {
-      permTreeRef.value?.setCheckedKeys(row.permissions.map(p => p.permId))
+    if (row.permissionIds?.length) {
+      permTreeRef.value?.setCheckedKeys(row.permissionIds)
+    } else {
+      permTreeRef.value?.setCheckedKeys([])
     }
   })
 }
 
 async function handleSavePerm() {
   const checkedIds = permTreeRef.value?.getCheckedKeys() || []
-  await bindRolePermissions(currentRole.value.roleId, checkedIds)
-  ElMessage.success('权限已保存'); permVisible.value = false
+  await bindRolePermissions(currentRole.value.id, checkedIds)
+  ElMessage.success('权限已保存，关联用户需重新登录后生效')
+  permVisible.value = false
+  loadData()
 }
 </script>
 

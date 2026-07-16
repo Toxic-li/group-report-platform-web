@@ -80,6 +80,23 @@
               <span>应用到整行（所有数据列）</span>
             </label>
 
+            <!-- 公式类型选择 -->
+            <div class="fe-formula-type">
+              <span class="fe-formula-type-label">公式类型</span>
+              <div class="fe-formula-type-options">
+                <label class="fe-type-option">
+                  <input type="radio" v-model="formulaType" value="metric" checked />
+                  <span>指标公式</span>
+                  <span class="fe-type-desc">会添加到指标列表，支持启用/停用</span>
+                </label>
+                <label class="fe-type-option">
+                  <input type="radio" v-model="formulaType" value="cell" />
+                  <span>单元格公式</span>
+                  <span class="fe-type-desc">仅作用于当前单元格，支持启用/停用</span>
+                </label>
+              </div>
+            </div>
+
             <!-- 公式预览 -->
             <div class="fe-preview">
               <div class="fe-preview-label">公式预览</div>
@@ -295,6 +312,7 @@ function syncParamValue(paramIdx) {
 const applyToRow = ref(false)
 const formulaName = ref('')
 const resultType = ref('number')
+const formulaType = ref('metric')
 
 const generatedFormula = computed(() => {
   if (!selectedFn.value || !currentFn.value) return ''
@@ -359,6 +377,7 @@ function handleSave() {
     resultType: resultType.value,
     dependencies: [...new Set(deps)],
     applyToRow: applyToRow.value,
+    formulaType: formulaType.value,
     createdAt: new Date().toISOString()
   }
 
@@ -693,6 +712,63 @@ function splitArgs(str) {
     accent-color: #2563EB;
     cursor: pointer;
   }
+}
+
+/* 公式类型选择 */
+.fe-formula-type {
+  padding: 8px 16px;
+  border-top: 1px solid #E5E7EB;
+}
+
+.fe-formula-type-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7280;
+  margin-bottom: 8px;
+}
+
+.fe-formula-type-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fe-type-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    background: #F3F4F6;
+    border-color: #D1D5DB;
+  }
+
+  input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #2563EB;
+    cursor: pointer;
+  }
+
+  span:first-of-type {
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+    margin-right: auto;
+  }
+}
+
+.fe-type-desc {
+  font-size: 11px;
+  color: #9CA3AF !important;
+  font-weight: normal !important;
 }
 
 /* 公式预览 */

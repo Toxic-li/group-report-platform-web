@@ -29,6 +29,16 @@ export function publishTemplate(templateId) {
   return post(`${BASE}/template/${encodeURIComponent(templateId)}/publish`)
 }
 
+/** 停用模板 */
+export function disableTemplate(templateId) {
+  return post(`${BASE}/template/${encodeURIComponent(templateId)}/disable`)
+}
+
+/** 启用模板 */
+export function enableTemplate(templateId) {
+  return post(`${BASE}/template/${encodeURIComponent(templateId)}/enable`)
+}
+
 /** 复制模板 */
 export function copyTemplate(templateId, newName) {
   const params = new URLSearchParams()
@@ -68,12 +78,7 @@ export function getTemplateById(templateId) {
 
 /** 提交报表审核 */
 export function submitForReview(data) {
-  const params = new URLSearchParams()
-  if (data.templateId) params.append('templateId', data.templateId)
-  if (data.orgId) params.append('orgId', data.orgId)
-  if (data.period) params.append('period', data.period)
-  if (data.remark) params.append('remark', data.remark)
-  return post(`${BASE}/submit?${params}`)
+  return post(`${BASE}/submit`, data)
 }
 
 /** 导出报表为Excel */
@@ -122,3 +127,35 @@ export { login, logout, getCurrentUser } from './auth.js'
 // ==================== 兼容旧引用 ====================
 export { saveReportData } from './reportData.js'
 export { getOrgTree } from './org.js'
+
+// ==================== 模板下发 ====================
+
+/** 下发模板到下级组织 */
+export function assignTemplate(data) {
+  return post('/template-assign', data)
+}
+
+/** 取消下发 */
+export function cancelAssign(assignId) {
+  return del(`/template-assign/${assignId}`)
+}
+
+/** 查询模板下发记录 */
+export function getAssignRecords(templateId) {
+  return get(`/template-assign/records/${templateId}`)
+}
+
+/** 获取可下发的下级组织列表 */
+export function getSubordinateOrgsForAssign() {
+  return get('/template-assign/orgs')
+}
+
+/** 获取下级组织树（高级下发-跨级选择） */
+export function getSubordinateOrgTree() {
+  return get('/template-assign/org-tree')
+}
+
+/** 获取已下发到指定组织的模板ID */
+export function getAssignedTemplateIds(orgId) {
+  return get(`/template-assign/assigned/${orgId}`)
+}

@@ -207,13 +207,37 @@
             <kbd>Ctrl+K</kbd>
           </button>
           <span class="bl-time">{{ currentTime }}</span>
-          <button class="bl-icon-btn" title="消息通知" @click="toggleMessage">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-              <path d="M13.73 21a2 2 0 01-3.46 0"/>
+          <div class="bl-notification-bell" @click="showNotifications = !showNotifications" ref="bellRef">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
-            <span v-if="unreadCount > 0" class="bl-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
-          </button>
+            <span v-if="unreadCount > 0" class="bl-notification-badge">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+          </div>
+
+          <!-- Notification Dropdown -->
+          <transition name="dropdown-fade">
+            <div v-if="showNotifications" class="bl-notification-dropdown" @click.stop>
+              <div class="bl-notification-header">
+                <span>消息通知</span>
+                <button v-if="unreadCount > 0" class="bl-notification-read-all" @click="handleMarkAllRead">全部已读</button>
+              </div>
+              <div class="bl-notification-list" v-if="notifications.length > 0">
+                <div v-for="n in notifications" :key="n.id"
+                     class="bl-notification-item"
+                     :class="{ unread: n.isRead === 0 }"
+                     @click="handleNotificationClick(n)">
+                  <div class="bl-notification-item-dot" v-if="n.isRead === 0"></div>
+                  <div class="bl-notification-item-content">
+                    <div class="bl-notification-item-title">{{ n.title }}</div>
+                    <div class="bl-notification-item-text">{{ n.content }}</div>
+                    <div class="bl-notification-item-time">{{ formatTime(n.createTime) }}</div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="bl-notification-empty">暂无通知</div>
+            </div>
+          </transition>
           <button class="bl-icon-btn" :title="isDark ? '切换浅色' : '切换深色'" @click="toggleTheme">
             <svg v-if="isDark" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
@@ -297,7 +321,7 @@
       <!-- ==================== 消息抽屉 ==================== -->
       <el-drawer v-model="messageVisible" title="消息通知" direction="rtl" size="380px" :z-index="2001">
         <div class="bl-message-list">
-          <div v-for="msg in notifications" :key="msg.id" class="bl-message-item" :class="{ unread: !msg.read }">
+          <div v-for="msg in notifications" :key="msg.id" class="bl-message-item" :class="{ unread: msg.isRead === 0 }">
             <div class="bl-message-icon" :class="msg.type">
               <svg v-if="msg.type === 'audit'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <svg v-else-if="msg.type === 'system'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -305,8 +329,8 @@
             </div>
             <div class="bl-message-body">
               <div class="bl-message-title">{{ msg.title }}</div>
-              <div class="bl-message-desc">{{ msg.desc }}</div>
-              <div class="bl-message-time">{{ msg.time }}</div>
+              <div class="bl-message-desc">{{ msg.content }}</div>
+              <div class="bl-message-time">{{ formatTime(msg.createTime) }}</div>
             </div>
           </div>
           <div v-if="notifications.length === 0" class="bl-message-empty">暂无消息</div>
@@ -337,11 +361,7 @@
 
       <!-- 内容区域 -->
       <main class="bl-content">
-        <router-view v-slot="{ Component }">
-          <transition name="route" mode="out-in">
-            <component :is="Component" :key="route.fullPath + refreshKey" />
-          </transition>
-        </router-view>
+        <router-view :key="route.fullPath + refreshKey" />
       </main>
     </div>
   </div>
@@ -354,6 +374,7 @@ import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/userStore.js'
 import { usePermission } from '@/composables/usePermission.js'
 import { useNavigation } from '@/composables/useNavigation.js'
+import { getNotifications, getUnreadCount, markAsRead, markAllAsRead } from '@/api/notification'
 
 const router = useRouter()
 const route = useRoute()
@@ -387,21 +408,76 @@ function toggleTheme() {
 
 // ==================== 消息通知 ====================
 const messageVisible = ref(false)
-const notifications = ref([
-  { id: 1, type: 'audit', title: '待审核任务', desc: '销售月报(2026年7月) 等待您审核', time: '10分钟前', read: false },
-  { id: 2, type: 'system', title: '系统维护通知', desc: '系统将于本周日 02:00-04:00 进行维护', time: '2小时前', read: false },
-  { id: 3, type: 'business', title: '填报截止提醒', desc: '财务季报将于明日 18:00 截止填报', time: '5小时前', read: false },
-  { id: 4, type: 'business', title: '报表已发布', desc: '采购月报 V2.0 已发布', time: '昨天', read: true }
-])
+const showNotifications = ref(false)
+const bellRef = ref(null)
+const notifications = ref([])
+const unreadCount = ref(0)
 
-const unreadCount = computed(() => notifications.value.filter(n => !n.read).length)
+async function loadUnreadCount() {
+  try {
+    const res = await getUnreadCount()
+    unreadCount.value = res?.data?.unread || res?.unread || 0
+  } catch { /* ignore */ }
+}
+
+async function loadNotifications() {
+  try {
+    const res = await getNotifications(1, 10)
+    notifications.value = res?.data?.records || res?.records || []
+  } catch { /* ignore */ }
+}
+
+async function handleMarkAllRead() {
+  try {
+    await markAllAsRead()
+    unreadCount.value = 0
+    notifications.value = notifications.value.map(n => ({ ...n, isRead: 1 }))
+  } catch { /* ignore */ }
+}
+
+async function handleNotificationClick(n) {
+  if (n.isRead === 0) {
+    try {
+      await markAsRead(n.id)
+      n.isRead = 1
+      unreadCount.value = Math.max(0, unreadCount.value - 1)
+    } catch { /* ignore */ }
+  }
+  if (n.relatedId && n.type === 'reject') {
+    router.push('/entry')
+  } else if (n.relatedId && n.type === 'report') {
+    router.push('/audit/reported')
+  }
+  showNotifications.value = false
+}
+
+function formatTime(time) {
+  if (!time) return ''
+  const d = new Date(time)
+  const now = new Date()
+  const diff = now - d
+  if (diff < 60000) return '刚刚'
+  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前'
+  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前'
+  return d.toLocaleDateString()
+}
+
+function handleClickOutside(e) {
+  if (bellRef.value && !bellRef.value.contains(e.target)) {
+    showNotifications.value = false
+  }
+}
 
 function toggleMessage() {
   messageVisible.value = !messageVisible.value
+  if (messageVisible.value) {
+    loadNotifications()
+  }
 }
 
 function markAllRead() {
-  notifications.value.forEach(n => { n.read = true })
+  notifications.value.forEach(n => { n.isRead = 1 })
+  handleMarkAllRead()
 }
 
 // ==================== 全局搜索 Ctrl+K ====================
@@ -524,13 +600,15 @@ const allFlatMenuItems = computed(() => {
       group: '报表',
       children: [
         { path: '/designer/templates', label: '模板管理', perm: 'template:manage' },
+        { path: '/designer/plan-assign', label: '📤 计划下发', perm: 'menu:planAssign' },
         { path: '/designer', label: '新建模板', perm: 'template:create' },
         { path: '/designer/excel', label: 'Excel设计器', perm: 'template:excelDesigner' },
         { path: '/designer/datasets', label: '数据集', perm: 'template:datasets' },
         { path: '/designer/dictionary', label: '数据字典', perm: 'template:dictionary' },
         { path: '/designer/params', label: '参数管理', perm: 'template:params' },
         { path: '/designer/publish', label: '发布记录', perm: 'template:publish' },
-        { path: '/designer/versions', label: '模板版本', perm: 'template:versions' }
+        { path: '/designer/versions', label: '模板版本', perm: 'template:versions' },
+        { path: '/designer/validation-rules', label: '校验规则', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>', perm: 'template:manage' },
       ]
     },
     {
@@ -540,12 +618,25 @@ const allFlatMenuItems = computed(() => {
       perm: 'menu:entryCenter',
       group: '业务',
       children: [
-        { path: '/entry', label: '我的填报', perm: 'menu:myEntry' },
+        { path: '/entry', label: '我的填报', perm: 'menu:entryCenter' },
         { path: '/entry/draft', label: '草稿箱', perm: 'menu:draft' },
         { path: '/entry/pending', label: '待提交', perm: 'menu:pending' },
         { path: '/entry/submitted', label: '已提交', perm: 'menu:submitted' },
         { path: '/entry/rejected', label: '已退回', perm: 'menu:rejected' },
-        { path: '/entry/completed', label: '已完成', perm: 'menu:completed' }
+        { path: '/entry/completed', label: '已完成', perm: 'menu:completed' },
+        { path: '/entry/reported', label: '已上报', perm: 'menu:reported' },
+        { path: '/entry/plan-report', label: '📋 计划上报', perm: 'menu:planReport' }
+      ]
+    },
+    {
+      path: '/monitor',
+      label: '填报监控',
+      icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>',
+      perm: 'menu:monitor',
+      group: '业务',
+      children: [
+        { path: '/monitor', label: '下级进度监控', perm: 'menu:monitor' },
+        { path: '/report-status', label: '填报状态管理', perm: 'menu:reportStatus' },
       ]
     },
     {
@@ -556,6 +647,7 @@ const allFlatMenuItems = computed(() => {
       group: '业务',
       children: [
         { path: '/audit', label: '待审核', perm: 'menu:pendingAudit' },
+        { path: '/audit/reported', label: '下级上报', perm: 'menu:reported' },
         { path: '/audit/approved', label: '已审核', perm: 'menu:approved' },
         { path: '/audit/rejected', label: '已退回', perm: 'menu:auditRejected' },
         { path: '/audit/initiated', label: '我发起的', perm: 'menu:initiated' },
@@ -564,17 +656,44 @@ const allFlatMenuItems = computed(() => {
     },
     {
       path: '/analytics',
-      label: '数据分析',
+      label: '统计汇总',
       icon: ICONS.chart,
       perm: 'menu:analytics',
-      group: '分析',
+      group: '汇总',
       children: [
-        { path: '/analytics', label: '汇总分析', perm: 'menu:summary' },
-        { path: '/analytics/trend', label: '趋势分析', perm: 'menu:trend' },
-        { path: '/analytics/chart', label: '图表分析', perm: 'menu:chart' },
-        { path: '/analytics/export', label: '数据导出', perm: 'menu:export' },
-        { path: '/analytics/print', label: '数据打印', perm: 'menu:print' }
+        { path: '/analytics/production', label: '生产类汇总', perm: 'menu:production' },
+        { path: '/analytics/finance', label: '财务类汇总', perm: 'menu:finance' },
+        { path: '/analytics/safety', label: '安全类汇总', perm: 'menu:safety' },
+        { path: '/analytics/energy', label: '能源类汇总', perm: 'menu:energy' },
+        { path: '/analytics/cost', label: '成本类汇总', perm: 'menu:cost' }
       ]
+    },
+    {
+      path: '/plan',
+      label: '计划汇总',
+      icon: ICONS.chart,
+      perm: 'menu:plan',
+      group: '汇总',
+      children: [
+        { path: '/plan/annual', label: '年度计划汇总', perm: 'menu:annualPlan' },
+        { path: '/plan/batch', label: '批次计划汇总', perm: 'menu:batchPlan' },
+        { path: '/plan/ledger', label: '计划台账', perm: 'menu:planLedger' },
+        { path: '/plan/completion', label: '集团计划完成情况', perm: 'menu:planCompletion' }
+      ]
+    },
+    {
+      path: '/data-analysis',
+      label: '数据分析',
+      icon: ICONS.chart,
+      perm: 'menu:dataAnalysis',
+      group: '分析'
+    },
+    {
+      path: '/dashboard',
+      label: '数据大屏',
+      icon: ICONS.chart,
+      perm: 'menu:dashboard',
+      group: '分析'
     },
     {
       path: '/admin',
@@ -585,8 +704,8 @@ const allFlatMenuItems = computed(() => {
       children: [
         { path: '/admin/users', label: '用户管理', perm: 'menu:userManage' },
         { path: '/admin/depts', label: '部门管理', perm: 'menu:deptManage' },
-        { path: '/admin/positions', label: '岗位管理', perm: 'menu:positionManage' },
         { path: '/admin/roles', label: '角色管理', perm: 'menu:roleManage' },
+        { path: '/admin/positions', label: '岗位管理', perm: 'menu:positionManage' },
         { path: '/admin/perms', label: '权限管理', perm: 'menu:permManage' },
         { path: '/admin/datasource', label: '数据源', perm: 'menu:datasource' },
         { path: '/admin/params', label: '参数配置', perm: 'menu:paramConfig' },
@@ -726,15 +845,16 @@ const pageTitle = computed(() => {
   if (path.startsWith('/report-center')) return '报表中心'
   if (path.startsWith('/admin/users')) return '用户管理'
   if (path.startsWith('/admin/depts')) return '部门管理'
-  if (path.startsWith('/admin/positions')) return '岗位管理'
   if (path.startsWith('/admin/roles')) return '角色管理'
+  if (path.startsWith('/admin/positions')) return '岗位管理'
   if (path.startsWith('/admin/perms')) return '权限管理'
   if (path.startsWith('/admin/workflows')) return '工作流管理'
   if (path.startsWith('/admin/logs')) return '日志中心'
   if (path.startsWith('/admin/datasource')) return '数据源'
   if (path.startsWith('/admin/params')) return '参数配置'
   if (path.startsWith('/audit')) return '审核中心'
-  if (path.startsWith('/analytics')) return '数据分析'
+  if (path.startsWith('/monitor')) return '填报监控'
+  if (path.startsWith('/analytics')) return '数据汇总'
   if (path.startsWith('/profile')) return '个人中心'
   if (path.startsWith('/wordToExcel')) return 'Word转Excel'
   if (path.startsWith('/designer')) return '表样设计'
@@ -768,28 +888,45 @@ const breadcrumbItems = computed(() => {
     items.push({ label: '系统管理', path: '/admin/users' })
     if (path.startsWith('/admin/users')) items.push({ label: '用户管理', path: '/admin/users' })
     if (path.startsWith('/admin/depts')) items.push({ label: '部门管理', path: '/admin/depts' })
-    if (path.startsWith('/admin/positions')) items.push({ label: '岗位管理', path: '/admin/positions' })
     if (path.startsWith('/admin/roles')) items.push({ label: '角色管理', path: '/admin/roles' })
+    if (path.startsWith('/admin/positions')) items.push({ label: '岗位管理', path: '/admin/positions' })
     if (path.startsWith('/admin/perms')) items.push({ label: '权限管理', path: '/admin/perms' })
     if (path.startsWith('/admin/datasource')) items.push({ label: '数据源', path: '/admin/datasource' })
     if (path.startsWith('/admin/params')) items.push({ label: '参数配置', path: '/admin/params' })
     if (path.startsWith('/admin/workflows')) items.push({ label: '工作流管理', path: '/admin/workflows' })
     if (path.startsWith('/admin/logs')) items.push({ label: '日志中心', path: '/admin/logs' })
+  } else if (path.startsWith('/monitor')) {
+    items.push({ label: '工作台', path: '/' })
+    items.push({ label: '填报监控', path: '/monitor' })
   } else if (path.startsWith('/audit')) {
     items.push({ label: '工作台', path: '/' })
     items.push({ label: '审核中心', path: '/audit' })
   } else if (path.startsWith('/analytics')) {
     items.push({ label: '工作台', path: '/' })
-    items.push({ label: '数据分析', path: '/analytics' })
+    items.push({ label: '数据汇总', path: '/analytics' })
   } else if (path.startsWith('/profile')) {
     items.push({ label: '工作台', path: '/' })
     items.push({ label: '个人中心', path: '/profile' })
+  } else if (path.startsWith('/entry')) {
+    items.push({ label: '工作台', path: '/' })
+    items.push({ label: '填报中心', path: '/entry' })
+    if (path === '/entry/draft') items.push({ label: '草稿箱', path: '/entry/draft' })
+    if (path === '/entry/pending') items.push({ label: '待填报', path: '/entry/pending' })
+    if (path === '/entry/submitted') items.push({ label: '已提交', path: '/entry/submitted' })
+    if (path === '/entry/rejected') items.push({ label: '已退回', path: '/entry/rejected' })
+    if (path === '/entry/completed') items.push({ label: '已完成', path: '/entry/completed' })
   } else if (path.startsWith('/designer')) {
     items.push({ label: '工作台', path: '/' })
     items.push({ label: '表样设计', path: '/designer' })
+    if (path === '/designer/templates') items.push({ label: '模板管理', path: '/designer/templates' })
   } else if (path.startsWith('/report/')) {
     items.push({ label: '工作台', path: '/' })
-    items.push({ label: '报表填报', path: path })
+    if (path.includes('/fill/')) {
+      items.push({ label: '填报中心', path: '/entry' })
+      items.push({ label: '数据填报', path: path })
+    } else {
+      items.push({ label: '报表填报', path: path })
+    }
   } else if (path.startsWith('/wordToExcel')) {
     items.push({ label: '工作台', path: '/' })
     items.push({ label: 'Word转Excel', path: '/wordToExcel' })
@@ -918,14 +1055,19 @@ onMounted(() => {
   }
 
   window.addEventListener('keydown', onGlobalKeydown)
+  document.addEventListener('click', handleClickOutside)
   // 异步加载远程收藏/最近访问
   loadRemoteFavorites()
   loadRemoteRecents()
-})
-
-onUnmounted(() => {
-  if (timeTimer) clearInterval(timeTimer)
-  window.removeEventListener('keydown', onGlobalKeydown)
+  // 加载通知
+  loadUnreadCount()
+  const notificationTimer = setInterval(loadUnreadCount, 30000)
+  onUnmounted(() => {
+    if (timeTimer) clearInterval(timeTimer)
+    clearInterval(notificationTimer)
+    window.removeEventListener('keydown', onGlobalKeydown)
+    document.removeEventListener('click', handleClickOutside)
+  })
 })
 </script>
 
@@ -1540,14 +1682,6 @@ $nav-l2-size: 13px;
     text-align: center;
   }
 
-  // ==================== 内容动画 ====================
-  .route-enter-active,
-  .route-leave-active {
-    transition: opacity 0.15s ease, transform 0.15s ease;
-  }
-  .route-enter-from { opacity: 0; transform: translateY(4px); }
-  .route-leave-to { opacity: 0; transform: translateY(-4px); }
-
   // ==================== 全局搜索 ====================
   .bl-search-modal {
     position: fixed;
@@ -1733,6 +1867,51 @@ $nav-l2-size: 13px;
   .bl-message-desc { font-size: 12px; color: var(--app-text-secondary); margin-top: 4px; }
   .bl-message-time { font-size: 11px; color: var(--app-text-muted); margin-top: 6px; }
   .bl-message-empty { padding: 60px; text-align: center; color: var(--app-text-muted); }
+
+  // ==================== 通知铃铛下拉 ====================
+  .bl-notification-bell {
+    position: relative; cursor: pointer; padding: 8px; border-radius: 8px;
+    color: var(--app-text-secondary); transition: all 0.2s;
+    display: flex; align-items: center;
+  }
+  .bl-notification-bell:hover { background: var(--app-surface-hover); color: var(--app-primary); }
+  .bl-notification-badge {
+    position: absolute; top: 2px; right: 2px; min-width: 18px; height: 18px;
+    padding: 0 5px; border-radius: 9px; background: #EF4444; color: #fff;
+    font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .bl-notification-dropdown {
+    position: absolute; top: 56px; right: 20px; width: 360px; max-height: 480px;
+    background: var(--app-surface); border: 1px solid var(--app-border);
+    border-radius: 12px; box-shadow: 0 8px 32px rgba(15,23,42,0.12);
+    overflow: hidden; z-index: 1000;
+  }
+  .bl-notification-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; border-bottom: 1px solid var(--app-border-light);
+    font-size: 14px; font-weight: 600; color: var(--app-text-primary);
+  }
+  .bl-notification-read-all {
+    font-size: 12px; color: var(--app-primary); background: none; border: none; cursor: pointer;
+  }
+  .bl-notification-list { max-height: 400px; overflow-y: auto; }
+  .bl-notification-item {
+    display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px;
+    cursor: pointer; transition: background 0.15s; border-bottom: 1px solid var(--app-border-light);
+  }
+  .bl-notification-item:hover { background: var(--app-surface-hover); }
+  .bl-notification-item.unread { background: var(--color-primary-50, rgba(37,99,235,0.04)); }
+  .bl-notification-item-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--app-primary);
+    flex-shrink: 0; margin-top: 6px;
+  }
+  .bl-notification-item-content { flex: 1; min-width: 0; }
+  .bl-notification-item-title { font-size: 13px; font-weight: 500; color: var(--app-text-primary); }
+  .bl-notification-item-text { font-size: 12px; color: var(--app-text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bl-notification-item-time { font-size: 11px; color: var(--app-text-muted); margin-top: 4px; }
+  .bl-notification-empty { padding: 40px; text-align: center; color: var(--app-text-muted); font-size: 13px; }
+  .dropdown-fade-enter-active, .dropdown-fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
+  .dropdown-fade-enter-from, .dropdown-fade-leave-to { opacity: 0; transform: translateY(-8px); }
 
   // ==================== 沉浸模式 ====================
   &.immersive {

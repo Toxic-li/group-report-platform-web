@@ -692,7 +692,12 @@ function getOperationText(type) {
 }
 
 function handleBack() {
-  navigateBack('/entry')
+  const backUrl = route.query.backUrl
+  if (backUrl && backUrl !== 'undefined') {
+    router.push(decodeURIComponent(backUrl))
+  } else {
+    navigateBack('/entry')
+  }
 }
 
 function startAutoSave() {

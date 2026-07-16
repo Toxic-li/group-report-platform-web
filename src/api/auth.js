@@ -62,8 +62,8 @@ export function deleteUser(userId) {
 }
 
 /** 重置用户密码 */
-export function resetUserPassword(userId) {
-  return put(`/user/${userId}/reset-password`)
+export function resetUserPassword(userId, password) {
+  return put(`/user/${userId}/reset-password`, { password })
 }
 
 /** 更新用户状态 */
